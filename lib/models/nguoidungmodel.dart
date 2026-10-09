@@ -1,4 +1,6 @@
-class NguoiDungModel {
+import 'package:cuhokhancap/models/basemodel.dart';
+
+class NguoiDungModel implements BaseModel {
   final String? maNguoiDung;
   final String hoTen;
   final String email;
@@ -22,8 +24,10 @@ class NguoiDungModel {
     required this.ngayTao,
     required this.matKhau,
   });
-
+  @override
+  String? get id => maNguoiDung;
   // Chuyển đối tượng Model thành Map để đẩy lên Firestore
+  @override
   Map<String, dynamic> toMap() {
     return {
       'maNguoiDung': maNguoiDung,

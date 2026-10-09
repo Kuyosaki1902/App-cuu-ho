@@ -24,9 +24,22 @@ final List<NguoiDungModel> NguoiDungList = [
     diaChi: '123 Đường ABC, Quận 1',
     queQuan: 'TP. Hồ Chí Minh',
     maGioiTinh: 'gioitinh1',
-    maVaiTro: 'vaitro2',
+    maVaiTro: 'vaitro2', // Cứu hộ có chứng chỉ hành nghề (CCHN)
     matKhau: '123456',
     ngaySinh: DateTime(1998, 5, 12),
+    ngayTao: DateTime.now(),
+  ),
+  // Người dùng thứ 3: Cứu hộ không có chứng chỉ (vaitro3)
+  NguoiDungModel(
+    maNguoiDung: 'nguoidung3',
+    hoTen: 'Trần Văn B',
+    email: 'tranvanb@gmail.com',
+    diaChi: '456 Đường Lê Văn Việt, TP. Thủ Đức',
+    queQuan: 'Đồng Nai',
+    maGioiTinh: 'gioitinh1',
+    maVaiTro: 'vaitro3', // Cứu hộ KHÔNG có chứng chỉ hành nghề
+    matKhau: '123456',
+    ngaySinh: DateTime(1995, 8, 20),
     ngayTao: DateTime.now(),
   ),
 ];
