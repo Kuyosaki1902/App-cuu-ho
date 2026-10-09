@@ -1,4 +1,6 @@
-import 'package:cuhokhancap/NguoiCuuHo/NguoiCuuHo_MHC.dart';
+import 'package:cuhokhancap/NguoiCuuHo/NguoiCuuHo_CoCCHN.dart';
+import 'package:cuhokhancap/NguoiCuuHo/NguoiCuuHo_KhongCCHN.dart';
+import 'package:cuhokhancap/NguoiCuuHo/TrangChu_NCH.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -31,7 +33,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const DoctorHomeScreen(),
+      home: const Trangchunguoicuuho(),
     );
   }
 }
