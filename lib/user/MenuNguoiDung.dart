@@ -9,7 +9,7 @@ class MenuNguoiDung extends StatefulWidget {
 
 class _MenuNguoiDungState extends State<MenuNguoiDung> {
   // Biến trạng thái để kiểm soát việc đóng/mở thẻ "Đăng ký người cứu hộ"
-  bool _isExpanded = true; 
+  bool _isExpanded = false; 
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +226,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.settings, color: Colors.white, size: 20),
@@ -244,7 +244,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                             Switch(
                               value: true,
                               onChanged: (val) {},
-                              activeColor: Colors.white,
+                              activeThumbColor: Colors.white,
                               activeTrackColor: const Color(0xFF00C853),
                             ),
                           ],
@@ -287,10 +287,10 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryColor.withOpacity(0.4)),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.4)),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withOpacity(0.15),
+            color: primaryColor.withValues(alpha: 0.15),
             blurRadius: 6,
             offset: const Offset(0, 3), // Hiệu ứng đổ bóng giúp giống nút bấm
           ),
@@ -331,7 +331,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: primaryColor.withOpacity(0.5)),
+                    border: Border.all(color: primaryColor.withValues(alpha: 0.5)),
                   ),
                   child: Text(tag, style: TextStyle(color: primaryColor, fontSize: 10, fontWeight: FontWeight.w900)),
                 ),
