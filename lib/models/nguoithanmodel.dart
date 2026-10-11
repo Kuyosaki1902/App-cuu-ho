@@ -1,22 +1,25 @@
 import 'package:cuhokhancap/models/basemodel.dart';
 
-class NguoiThan implements BaseModel {
+class NguoiThanModel implements BaseModel {
   final String maNguoiDung;
   final String maNguoiThan;
   final String? moiQuanHe;
+  final String trangThai;
 
-  NguoiThan({
+  NguoiThanModel({
     required this.maNguoiDung,
     required this.maNguoiThan,
     this.moiQuanHe,
+    required this.trangThai,
   });
 
   // Chuyển từ Map / JSON sang Model
-  factory NguoiThan.fromMap(Map<String, dynamic> map) {
-    return NguoiThan(
+  factory NguoiThanModel.fromMap(Map<String, dynamic> map) {
+    return NguoiThanModel(
       maNguoiDung: map['maNguoiDung'] as String? ?? '',
       maNguoiThan: map['maNguoiThan'] as String? ?? '',
       moiQuanHe: map['moiQuanHe'] as String?,
+      trangThai: map['trangThai'],
     );
   }
   @override
@@ -28,19 +31,7 @@ class NguoiThan implements BaseModel {
       'maNguoiDung': maNguoiDung,
       'maNguoiThan': maNguoiThan,
       'moiQuanHe': moiQuanHe,
+      'trangThai': trangThai,
     };
-  }
-
-  // Phương thức copyWith để dễ dàng cập nhật dữ liệu
-  NguoiThan copyWith({
-    String? maNguoiDung,
-    String? maNguoiThan,
-    String? moiQuanHe,
-  }) {
-    return NguoiThan(
-      maNguoiDung: maNguoiDung ?? this.maNguoiDung,
-      maNguoiThan: maNguoiThan ?? this.maNguoiThan,
-      moiQuanHe: moiQuanHe ?? this.moiQuanHe,
-    );
   }
 }

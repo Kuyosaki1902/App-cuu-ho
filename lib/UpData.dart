@@ -2,16 +2,16 @@
 
 import 'package:cuhokhancap/data/data.dart';
 import 'package:flutter/material.dart';
-import 'package:/cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class AddDataScreen extends StatefulWidget {
-  const AddDataScreen({super.key});
+class UpData extends StatefulWidget {
+  const UpData({super.key});
 
   @override
-  State<AddDataScreen> createState() => _AddDataScreenState();
+  State<UpData> createState() => _UpDataState();
 }
 
-class _AddDataScreenState extends State<AddDataScreen> {
+class _UpDataState extends State<UpData> {
   bool _isLoading = false;
 
   Future<void> _uploadBatchData() async {
@@ -21,12 +21,14 @@ class _AddDataScreenState extends State<AddDataScreen> {
       final firestore = FirebaseFirestore.instance;
       final batch = firestore.batch();
       int addedCount = 0; // Đếm số lượng record mới được thêm
-      var collectionRef = firestore.collection('');
       for (var item in ListAll) {
         if (item.isEmpty) continue;
-        collectionRef = firestore.collection(item.first.runtimeType.toString());
+        var collectionName = item.first.runtimeType.toString();
+        var collectionRef = firestore.collection(
+          collectionName.substring(0, collectionName.length - 5),
+        );
         for (var data in item) {
-          final docId = data.maNguoiDung ?? collectionRef.doc().id;
+          final docId = data.id ?? collectionRef.doc().id;
           final docRef = collectionRef.doc(docId);
           final docSnap = await docRef.get();
 

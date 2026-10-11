@@ -14,7 +14,7 @@ class VaiTroModel implements BaseModel {
   }
 
   // Tùy chọn: Chuyển dữ liệu từ Firestore về lại Model khi đọc dữ liệu
-  factory VaiTroModel.fromMap(Map<String, dynamic> map, String id) {
-    return VaiTroModel(maVaiTro: id, vaiTro: map['vaiTro'] ?? '');
+  factory VaiTroModel.fromMap(Map<String, dynamic> map) {
+    return VaiTroModel(maVaiTro: map['maVaiTro'], vaiTro: map['vaiTro'] ?? '');
   }
 }

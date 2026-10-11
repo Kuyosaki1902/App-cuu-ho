@@ -1,34 +1,16 @@
+import 'package:cuhokhancap/models/nguoidungmodel.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class NguoiThanCuaBan extends StatefulWidget {
+  final String userId;
+  const NguoiThanCuaBan({super.key, required this.userId});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Người Thân Của Bạn',
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFF7F8FA),
-        primaryColor: const Color(0xFF006D5B),
-      ),
-      home: const RelativeScreen(),
-    );
-  }
+  State<NguoiThanCuaBan> createState() => _NguoiThanCuaBanState();
 }
 
-class RelativeScreen extends StatefulWidget {
-  const RelativeScreen({super.key});
-
-  @override
-  State<RelativeScreen> createState() => _RelativeScreenState();
-}
-
-class _RelativeScreenState extends State<RelativeScreen> {
+class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
   // 0: Tab Người thân của bạn, 1: Tab Tìm kiếm người thân
   int _selectedTab = 0;
 
@@ -40,6 +22,54 @@ class _RelativeScreenState extends State<RelativeScreen> {
 
   final Color primaryColor = const Color(0xFF006A55);
 
+  // Hàm theo dõi danh sách người thân của người dùng
+  Stream<List<Map<String, dynamic>>> _getRelativesStream() {
+    final String currentUserID = widget.userId;
+    if (currentUserID.isEmpty) {
+      return Stream.value([]);
+    }
+    return FirebaseFirestore.instance
+        .collection('NguoiThan')
+        .where('maNguoiDung', isEqualTo: currentUserID)
+        .snapshots()
+        .asyncMap((nguoiThanSnapshot) async {
+          List<Map<String, dynamic>> relativeList = [];
+          for (var doc in nguoiThanSnapshot.docs) {
+            final nguoiThanData = doc.data();
+            final String? maNguoiThan = nguoiThanData['maNguoiThan'];
+            final String moiQuanHe =
+                nguoiThanData['moiQuanHe'] ?? 'Chưa Xác Định';
+            if (maNguoiThan != null && maNguoiThan.isNotEmpty) {
+              final userDoc = await FirebaseFirestore.instance
+                  .collection('NguoiDung')
+                  .doc(maNguoiThan)
+                  .get();
+              if (userDoc.exists) {
+                final userData = NguoiDungModel.fromMap(userDoc.data()!);
+                final now = DateTime.now();
+                int age = (now.year - userData.ngaySinh.year).toInt();
+
+                if (now.month < userData.ngaySinh.month ||
+                    (now.month == userData.ngaySinh.month &&
+                        now.day < userData.ngaySinh.day)) {
+                  age--;
+                }
+                relativeList.add({
+                  'relation': moiQuanHe,
+                  'id': userData.maNguoiDung,
+                  'name': userData.hoTen,
+                  'age': age,
+                  'phone': userData.soDienThoai,
+                  'email': userData.email,
+                  'avatarUrl': 'https://i.pravatar.cc/150',
+                });
+              }
+            }
+          }
+          return relativeList;
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -48,7 +78,7 @@ class _RelativeScreenState extends State<RelativeScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {},
+          onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Người Thân Của Bạn',
@@ -102,12 +132,16 @@ class _RelativeScreenState extends State<RelativeScreen> {
                   // Search Bar
                   TextField(
                     controller: _searchController,
+                    onChanged: (value) {
+                      // 🟢 CẬP NHẬT TRẠNG THÁI TÌM KIẾM TỨC THÌ KHI GÕ CHỮ
+                      setState(() {
+                        _isSearching = value.trim().isNotEmpty;
+                      });
+                    },
                     onSubmitted: (value) {
-                      if (value.isNotEmpty) {
-                        setState(() {
-                          _isSearching = true;
-                        });
-                      }
+                      setState(() {
+                        _isSearching = value.trim().isNotEmpty;
+                      });
                     },
                     decoration: InputDecoration(
                       hintText: 'Tìm theo số điện thoại, email hoặc...',
@@ -117,7 +151,7 @@ class _RelativeScreenState extends State<RelativeScreen> {
                       ),
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       suffixIcon:
-                          _searchController.text.isNotEmpty || _isSearching
+                          _isSearching || _searchController.text.isNotEmpty
                           ? IconButton(
                               icon: const Icon(
                                 Icons.cancel,
@@ -126,7 +160,8 @@ class _RelativeScreenState extends State<RelativeScreen> {
                               onPressed: () {
                                 setState(() {
                                   _searchController.clear();
-                                  _isSearching = false;
+                                  _isSearching =
+                                      false; // 🟢 TẮT TRẠNG THÁI TÌM KIẾM KHI BẤM X
                                 });
                               },
                             )
@@ -144,11 +179,11 @@ class _RelativeScreenState extends State<RelativeScreen> {
                     ),
                   ),
 
-                  // THANH PHÂN LOẠI KÉO SANG TRÁI PHẢI (TO HƠN)
+                  // THANH PHÂN LOẠI KÉO SANG TRÁI PHẢI (ẨN KHI ĐANG TÌM KIẾM)
                   if (!_isSearching) ...[
                     const SizedBox(height: 12),
                     SizedBox(
-                      height: 42, // Làm to kích thước chiều cao
+                      height: 42,
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
@@ -258,36 +293,68 @@ class _RelativeScreenState extends State<RelativeScreen> {
     );
   }
 
-  // 1. TAB 1: DANH SÁCH NGƯỜI THÂN CỦA BẠN (HÌNH 1)
+  // 1. TAB 1: DANH SÁCH NGƯỜI THÂN CỦA BẠN
   Widget _buildMyRelativesList() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildRelativeCard(
-          name: 'Trần Văn Hùng',
-          age: 58,
-          phone: '0912 345 678',
-          email: 'hung.tran58@gmail.com',
-          relation: 'Bố (Cha)',
-          avatarUrl: 'https://i.pravatar.cc/150?img=11',
-        ),
-        _buildRelativeCard(
-          name: 'Nguyễn Thị Mai',
-          age: 55,
-          phone: '0903 888 999',
-          email: 'mai.nguyen@gmail.com',
-          relation: 'Mẹ',
-          avatarUrl: 'https://i.pravatar.cc/150?img=5',
-        ),
-        _buildRelativeCard(
-          name: 'Nguyễn Văn Hùng',
-          age: 34,
-          phone: '0903 123 456',
-          email: 'hung.nguyen89@gmail.com',
-          relation: 'Chồng',
-          avatarUrl: 'https://i.pravatar.cc/150?img=12',
-        ),
-      ],
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _getRelativesStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF006A55)),
+          );
+        }
+
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.people_outline_rounded,
+                  size: 64,
+                  color: Colors.grey.shade400,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Bạn chưa thêm người thân của mình',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'Chuyển sang tab "Tìm Kiếm Người Thân" để gửi yêu cầu kết nối.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final relativesList = snapshot.data!;
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: relativesList.length,
+          itemBuilder: (context, index) {
+            final item = relativesList[index];
+            return _buildRelativeCard(
+              name: item['name'],
+              age: item['age'],
+              phone: item['phone'],
+              email: item['email'],
+              relation: item['relation'],
+              avatarUrl: item['avatarUrl'],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -430,7 +497,7 @@ class _RelativeScreenState extends State<RelativeScreen> {
     );
   }
 
-  // 2. TAB 2 (CHƯA TÌM KIẾM): DANH SÁCH YÊU CẦU ĐÃ NHẬN VÀ ĐÃ GỬI (HÌNH 2)
+  // 2. TAB 2: YÊU CẦU ĐÃ NHẬN VÀ ĐÃ GỬI
   Widget _buildSearchTabList() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -683,7 +750,7 @@ class _RelativeScreenState extends State<RelativeScreen> {
     );
   }
 
-  // 3. TRẠNG THÁI TÌM KIẾM: KẾT QUẢ TÌM KIẾM DUY NHẤT (HÌNH 3)
+  // 3. TRẠNG THÁI TÌM KIẾM: KẾT QUẢ TÌM KIẾM DUY NHẤT
   Widget _buildSearchResultView() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -742,7 +809,6 @@ class _RelativeScreenState extends State<RelativeScreen> {
                     ],
                   ),
                 ),
-                // NÚT DẤU CỘNG TRÒN
                 GestureDetector(
                   onTap: () {
                     _showAddRelationBottomSheet(context);
@@ -765,7 +831,7 @@ class _RelativeScreenState extends State<RelativeScreen> {
     );
   }
 
-  // 4. BOTTOM SHEET THIẾT LẬP MỐI QUAN HỆ (HÌNH 4)
+  // 4. BOTTOM SHEET THIẾT LẬP MỐI QUAN HỆ
   void _showAddRelationBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -781,7 +847,6 @@ class _RelativeScreenState extends State<RelativeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Thanh kéo nhỏ trên đầu
               Container(
                 width: 40,
                 height: 4,
@@ -806,7 +871,6 @@ class _RelativeScreenState extends State<RelativeScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Card thông tin ngắn gọn
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(

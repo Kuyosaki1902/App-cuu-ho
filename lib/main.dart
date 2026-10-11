@@ -1,3 +1,4 @@
+import 'package:cuhokhancap/NguoiThanCuaBan.dart';
 import 'package:cuhokhancap/UpData.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,7 +45,9 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const AddDataScreen(),
+      home: const ChonBacSiTiepNhan(
+        dsNguoiCuuHo: {'nguoidung2': 900, 'nguoidung3': 1500},
+      ),
     );
   }
 }

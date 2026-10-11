@@ -7,6 +7,7 @@ class NguoiDungModel implements BaseModel {
   final String diaChi;
   final String queQuan;
   final String matKhau;
+  final String soDienThoai;
   final String maGioiTinh;
   final String maVaiTro;
   final DateTime ngaySinh;
@@ -18,6 +19,7 @@ class NguoiDungModel implements BaseModel {
     required this.email,
     required this.diaChi,
     required this.queQuan,
+    required this.soDienThoai,
     required this.maGioiTinh,
     required this.maVaiTro,
     required this.ngaySinh,
@@ -35,6 +37,7 @@ class NguoiDungModel implements BaseModel {
       'email': email,
       'diaChi': diaChi,
       'queQuan': queQuan,
+      'soDienThoai': soDienThoai,
       'maGioiTinh': maGioiTinh,
       'maVaiTro': maVaiTro,
       'ngaySinh':
@@ -45,13 +48,14 @@ class NguoiDungModel implements BaseModel {
   }
 
   // Tùy chọn: Chuyển dữ liệu từ Firestore về lại Model khi đọc dữ liệu
-  factory NguoiDungModel.fromMap(Map<String, dynamic> map, String id) {
+  factory NguoiDungModel.fromMap(Map<String, dynamic> map) {
     return NguoiDungModel(
-      maNguoiDung: id,
+      maNguoiDung: map['maNguoiDung'],
       hoTen: map['hoTen'] ?? '',
       email: map['email'] ?? '',
       diaChi: map['diaChi'] ?? '',
       queQuan: map['queQuan'] ?? '',
+      soDienThoai: map['soDienThoai'] ?? "",
       maGioiTinh: map['maGioiTinh'] ?? '',
       maVaiTro: map['maVaiTro'] ?? '',
       ngaySinh: map['ngaySinh'] != null
