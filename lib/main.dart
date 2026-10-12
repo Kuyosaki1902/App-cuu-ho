@@ -1,9 +1,15 @@
 import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVCoCCHN/NguoiCuuHo_CoCCHN.dart';
 import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVKhongCCHN/NguoiCuuHo_KhongCCHN.dart';
 import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/TrangChu_NCH.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const MyApp());
 }
 

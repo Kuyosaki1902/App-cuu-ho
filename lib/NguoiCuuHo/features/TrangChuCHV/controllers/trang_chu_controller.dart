@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TrangChuController extends ChangeNotifier {
   GoogleMapController? mapController;
@@ -28,7 +29,9 @@ class TrangChuController extends ChangeNotifier {
 
   TrangChuController() {
     initLocationService();
-    _startTimer(); // 🟢 Đã sửa lại đúng tên hàm _startTimer
+    _startTimer();
+    // Gọi hàm lấy dữ liệu ngay khi khởi tạo Controller
+    fetchFullUserData('nguoidung3');
   }
 
   @override
@@ -150,7 +153,7 @@ class TrangChuController extends ChangeNotifier {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _currentTime = DateTime.now();
 
-      // 🟢 Chỉ đếm thời gian khi Bác sĩ đang ở trạng thái Online
+      // Chỉ đếm thời gian khi Bác sĩ đang ở trạng thái Online
       if (_isOnline) {
         _onlineSeconds++;
         notifyListeners(); // Thông báo cập nhật thời gian từng giây
@@ -167,5 +170,53 @@ class TrangChuController extends ChangeNotifier {
     return '${hours.toString().padLeft(2, '0')}h '
         '${minutes.toString().padLeft(2, '0')}m '
         '${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  //================= FireBase =================
+  Future<void> fetchFullUserData(String userId) async {
+    try {
+      _isLoadingLocation = true;
+      notifyListeners();
+
+      // 1. Lấy thông tin cá nhân (Họ tên, Ảnh,...) từ bảng 'NguoiDung'
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('NguoiDung')
+          .doc(userId)
+          .get();
+
+      if (userDoc.exists && userDoc.data() != null) {
+        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+        // Lấy hoTen (chú ý chính xác tên field trên Firestore)
+        name = userData['hoTen'] ?? 'Chưa cập nhật';
+        //image = userData['hinhAnh'] ?? userData['avatar'];
+      } else {
+        debugPrint('Không tìm thấy Document "$userId" trong bảng NguoiDung');
+      }
+
+      // 2. Lấy thông tin chuyên môn (Chuyên ngành, Chức danh,...) từ bảng 'HoSoCuuHoCoCCHN'
+      DocumentSnapshot profileDoc = await FirebaseFirestore.instance
+          .collection('HoSoCuuHoCoCCHN')
+          .doc(userId)
+          .get();
+
+      if (profileDoc.exists && profileDoc.data() != null) {
+        Map<String, dynamic> profileData =
+            profileDoc.data() as Map<String, dynamic>;
+        // Lấy chuyên ngành/vai trò
+        role =
+            profileData['tenChuyenNganh'] ??
+            profileData['chuyenNganh'] ??
+            'Chưa cập nhật';
+      } else {
+        debugPrint(
+          'Không tìm thấy Document "$userId" trong bảng HoSoCuuHoCoCCHN',
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Lỗi đọc dữ liệu Firestore: $e');
+    } finally {
+      _isLoadingLocation = false;
+      notifyListeners(); // 🟢 Báo cho Header cập nhật UI
+    }
   }
 }
