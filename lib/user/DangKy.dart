@@ -1,29 +1,35 @@
+// File: lib/screens/DangKy.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'DangNhap.dart';
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Kiểm tra lại đường dẫn
+import 'package:cuhokhancap/firebase/firebase_service.dart'; // Kiểm tra lại đường dẫn
 
-// --- MODEL DỮ LIỆU ---
+// --- MODEL TỈNH/THÀNH ---
 class Province {
   final int code;
   final String name;
   final List<District> districts;
-
   Province({required this.code, required this.name, required this.districts});
-
   factory Province.fromJson(Map<String, dynamic> json) {
     var list = json['districts'] as List? ?? [];
-    List<District> districtList = list.map((i) => District.fromJson(i)).toList();
-    return Province(code: json['code'], name: json['name'], districts: districtList);
+    List<District> districtList = list
+        .map((i) => District.fromJson(i))
+        .toList();
+    return Province(
+      code: json['code'],
+      name: json['name'],
+      districts: districtList,
+    );
   }
 }
 
 class District {
   final int code;
   final String name;
-
   District({required this.code, required this.name});
-
   factory District.fromJson(Map<String, dynamic> json) {
     return District(code: json['code'], name: json['name']);
   }
@@ -38,19 +44,32 @@ class DangKy extends StatefulWidget {
 }
 
 class _DangKyState extends State<DangKy> {
-  bool _obscurePassword = true;
-  final bool _obscureConfirmPassword = true;
-  bool _agreedToTerms = false;
+  final FirebaseService _firebaseService = FirebaseService();
 
-  // Biến lưu trữ dữ liệu API
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+  bool _agreedToTerms = false;
+  bool _isLoadingSubmit = false;
+
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
+  DateTime? _selectedDate;
+  String? _selectedGender;
+  final List<String> _genders = ['Nam', 'Nữ'];
+
   List<Province> _provinces = [];
   bool _isLoadingProvinces = true;
 
-  // Trạng thái được chọn
   Province? _selectedProvince;
   District? _selectedDistrict;
 
-  // Controllers để hiển thị text trên UI
   final TextEditingController _provinceController = TextEditingController();
   final TextEditingController _districtController = TextEditingController();
 
@@ -60,38 +79,40 @@ class _DangKyState extends State<DangKy> {
     _fetchProvinces();
   }
 
-  // Hàm gọi API lấy danh sách tỉnh thành, quận huyện
   Future<void> _fetchProvinces() async {
     try {
-      final response = await http.get(Uri.parse('https://provinces.open-api.vn/api/?depth=2'));
+      final response = await http.get(
+        Uri.parse('https://provinces.open-api.vn/api/?depth=2'),
+      );
       if (response.statusCode == 200) {
-        // Cần utf8.decode để không bị lỗi font tiếng Việt
         final List<dynamic> data = json.decode(utf8.decode(response.bodyBytes));
-        setState(() {
-          _provinces = data.map((item) => Province.fromJson(item)).toList();
-          _isLoadingProvinces = false;
-        });
+        if (mounted) {
+          setState(() {
+            _provinces = data.map((item) => Province.fromJson(item)).toList();
+            _isLoadingProvinces = false;
+          });
+        }
       }
     } catch (e) {
-      setState(() {
-        _isLoadingProvinces = false;
-      });
-      debugPrint('Lỗi tải dữ liệu tỉnh thành: $e');
+      if (mounted) setState(() => _isLoadingProvinces = false);
     }
   }
 
-  // Hàm loại bỏ dấu tiếng Việt để tìm kiếm dễ dàng hơn
   String removeDiacritics(String str) {
-    var withDia = 'áàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ';
-    var withoutDia = 'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
+    var withDia =
+        'áàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ';
+    var withoutDia =
+        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd';
     for (int i = 0; i < withDia.length; i++) {
       str = str.replaceAll(withDia[i], withoutDia[i]);
-      str = str.replaceAll(withDia[i].toUpperCase(), withoutDia[i].toUpperCase());
+      str = str.replaceAll(
+        withDia[i].toUpperCase(),
+        withoutDia[i].toUpperCase(),
+      );
     }
     return str;
   }
 
-  // Bảng xổ xuống có chức năng tìm kiếm
   void _showSearchableBottomSheet({
     required BuildContext context,
     required String title,
@@ -103,7 +124,7 @@ class _DangKyState extends State<DangKy> {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Cho phép kéo bảng lên cao
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -112,7 +133,7 @@ class _DangKyState extends State<DangKy> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return DraggableScrollableSheet(
-              initialChildSize: 0.6, // Mở lên chiếm 60% màn hình
+              initialChildSize: 0.6,
               minChildSize: 0.4,
               maxChildSize: 0.9,
               expand: false,
@@ -120,30 +141,50 @@ class _DangKyState extends State<DangKy> {
                 return Column(
                   children: [
                     const SizedBox(height: 12),
-                    // Thanh gạt nhỏ ở trên cùng
-                    Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    // Ô Tìm kiếm
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: TextField(
                         controller: searchController,
                         decoration: InputDecoration(
                           hintText: 'Nhập để tìm kiếm...',
-                          prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                            color: Colors.grey,
+                          ),
                           filled: true,
                           fillColor: const Color(0xFFF5F6F8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                         onChanged: (value) {
                           setModalState(() {
                             filteredItems = items.where((item) {
-                              final itemName = removeDiacritics(item.name.toLowerCase());
-                              final query = removeDiacritics(value.toLowerCase());
+                              final itemName = removeDiacritics(
+                                item.name.toLowerCase(),
+                              );
+                              final query = removeDiacritics(
+                                value.toLowerCase(),
+                              );
                               return itemName.contains(query);
                             }).toList();
                           });
@@ -151,10 +192,14 @@ class _DangKyState extends State<DangKy> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Danh sách kết quả
                     Expanded(
                       child: filteredItems.isEmpty
-                          ? const Center(child: Text('Không tìm thấy kết quả', style: TextStyle(color: Colors.grey)))
+                          ? const Center(
+                              child: Text(
+                                'Không tìm thấy kết quả',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
                           : ListView.builder(
                               controller: scrollController,
                               itemCount: filteredItems.length,
@@ -180,6 +225,93 @@ class _DangKyState extends State<DangKy> {
     );
   }
 
+  // --- HÀM XỬ LÝ ĐĂNG KÝ VÀ PUSH FIREBASE ĐÃ ĐƯỢC FIX LỖI XOAY VÒNG ---
+  Future<void> _handleRegister() async {
+    if (_fullNameController.text.trim().isEmpty ||
+        _phoneController.text.trim().isEmpty ||
+        _selectedDate == null ||
+        _selectedGender == null ||
+        _selectedProvince == null ||
+        _selectedDistrict == null ||
+        _passwordController.text.isEmpty ||
+        _confirmPasswordController.text.isEmpty) {
+      _showSnackBar('Vui lòng nhập đủ thông tin ở các ô bắt buộc.', Colors.red);
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      _showSnackBar('Mật khẩu và Xác nhận mật khẩu không khớp!', Colors.red);
+      return;
+    }
+
+    if (!_agreedToTerms) {
+      _showSnackBar('Bạn cần đồng ý với Điều khoản sử dụng.', Colors.red);
+      return;
+    }
+
+    // Bật hiệu ứng loading
+    setState(() => _isLoadingSubmit = true);
+
+    try {
+      String maGioiTinh = _selectedGender == 'Nam' ? 'gioitinh1' : 'gioitinh2';
+      String specificAddress = _addressController.text.trim();
+      String finalAddress = specificAddress.isEmpty
+          ? '${_selectedDistrict!.name}, ${_selectedProvince!.name}'
+          : '$specificAddress, ${_selectedDistrict!.name}, ${_selectedProvince!.name}';
+
+      NguoiDungModel newUser = NguoiDungModel(
+        hoTen: _fullNameController.text.trim(),
+        email: _emailController.text.trim(),
+        diaChi: finalAddress,
+        queQuan: '${_selectedProvince!.name}',
+        soDienThoai: _phoneController.text.trim(),
+        maGioiTinh: maGioiTinh,
+        maVaiTro: 'vaitro1',
+        ngaySinh: _selectedDate!,
+        ngayTao: DateTime.now(),
+        matKhau: _passwordController.text,
+      );
+
+      bool isSuccess = await _firebaseService.taoTaiKhoan(newUser);
+
+      if (isSuccess) {
+        _showSnackBar('Đăng ký tài khoản thành công!', Colors.green);
+        // Chuyển thẳng về trang đăng nhập và xóa toàn bộ trang trước đó
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const DangNhap()),
+            (route) => false,
+          );
+        }
+      } else {
+        _showSnackBar(
+          'Có lỗi xảy ra khi tạo tài khoản. Vui lòng thử lại!',
+          Colors.red,
+        );
+      }
+    } catch (e) {
+      // Bắt lỗi nếu Firebase bị crash ngầm
+      _showSnackBar('Hệ thống đang bận hoặc lỗi mạng: $e', Colors.red);
+    } finally {
+      // LUÔN LUÔN TẮT hiệu ứng loading bất kể thành công hay thất bại
+      if (mounted) {
+        setState(() => _isLoadingSubmit = false);
+      }
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -187,34 +319,27 @@ class _DangKyState extends State<DangKy> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black), onPressed: () {}),
-        title: const Text('Đăng ký tài khoản', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: const Color(0xFFB71C1C), borderRadius: BorderRadius.circular(20)),
-            child: const Row(
-              children: [
-                Icon(Icons.emergency, color: Colors.white, size: 16),
-                SizedBox(width: 4),
-                Text('115', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Đăng ký tài khoản',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildHeaderBanner(),
-            const SizedBox(height: 16),
-            _buildRegistrationForm(),
-            const SizedBox(height: 16),
-            _buildTermsAndSubmit(),
-          ],
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              _buildHeaderBanner(),
+              const SizedBox(height: 16),
+              _buildRegistrationForm(context),
+              const SizedBox(height: 16),
+              _buildTermsAndSubmit(),
+            ],
+          ),
         ),
       ),
     );
@@ -222,134 +347,240 @@ class _DangKyState extends State<DangKy> {
 
   Widget _buildHeaderBanner() {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF0D47A1), borderRadius: BorderRadius.circular(16)),
-      child: Column(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D47A1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.location_on, color: Colors.white, size: 14),
-                SizedBox(width: 4),
-                Text('HỆ THỐNG CẤP CỨU 115', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-              ],
+          Text(
+            'HỆ THỐNG CẤP CỨU 115',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          const Text('Tạo tài khoản Cứu hộ & Ứng cứu khẩn cấp', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.3)),
-          const SizedBox(height: 8),
-          const Text('Kết nối nhanh chóng khi cần trợ giúp y tế hoặc tham gia tương trợ cộng đồng xung quanh bạn.', style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+          SizedBox(height: 12),
+          Text(
+            'Tạo tài khoản Cứu hộ',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildRegistrationForm() {
+  Widget _buildRegistrationForm(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.person_outline, color: Color(0xFF1565C0)),
-                  SizedBox(width: 8),
-                  Text('Thông tin đăng ký', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              Text('Bảo mật & An toàn', style: TextStyle(fontSize: 12, color: Colors.black54)),
-            ],
+          _buildInputField(
+            label: 'Họ và tên đầy đủ',
+            hintText: 'Nhập họ và tên',
+            icon: Icons.person,
+            controller: _fullNameController,
           ),
-          const SizedBox(height: 20),
-          _buildInputField(label: 'Họ và tên đầy đủ', hintText: 'Nhập họ và tên', prefixIcon: Icons.person_outline),
-          const SizedBox(height: 16),
-          const Text('Số điện thoại', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          TextField(
-            keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
-              hintText: 'Số điện thoại',
-              prefixIcon: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                child: Text('+84', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold, fontSize: 14)),
-              ),
-              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-              suffixIcon: const Icon(Icons.phone_outlined, color: Color(0xFF1565C0)),
-              filled: true,
-              fillColor: const Color(0xFFF5F6F8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildInputField(label: 'Địa chỉ Email (Tùy chọn)', hintText: 'example@domain.com', prefixIcon: Icons.mail_outline),
           const SizedBox(height: 16),
 
-          // --- VÙNG CHỌN TỈNH THÀNH QUẬN HUYỆN ---
-          const Text('Tỉnh / Thành phố và Quận / Huyện', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          // Đã fix lỗi tràn layout bằng isExpanded: true
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Ngày sinh',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _dobController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        hintText: 'dd/mm/yyyy',
+                        prefixIcon: const Icon(
+                          Icons.cake,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: const Icon(
+                            Icons.calendar_month,
+                            color: Color(0xFF1565C0),
+                            size: 20,
+                          ),
+                          onPressed: () async {
+                            // DÙNG context ĐƯỢC TRUYỀN TỪ HÀM build XUỐNG
+                            DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedDate = picked;
+                                _dobController.text = DateFormat(
+                                  'dd/MM/yyyy',
+                                ).format(picked);
+                              });
+                            }
+                          },
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F6F8),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 14,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Giới tính',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      isExpanded:
+                          true, // Ngăn chặn lỗi tràn chữ trên màn hình nhỏ
+                      value: _selectedGender,
+                      items: _genders
+                          .map(
+                            (String gender) => DropdownMenuItem(
+                              value: gender,
+                              child: Text(
+                                gender,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) => setState(() => _selectedGender = val),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFFF5F6F8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 14,
+                        ),
+                      ),
+                      hint: const Text('Chọn', style: TextStyle(fontSize: 14)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          _buildInputField(
+            label: 'Số điện thoại',
+            hintText: 'Nhập số điện thoại',
+            icon: Icons.phone,
+            controller: _phoneController,
+            isPhone: true,
+          ),
+          const SizedBox(height: 16),
+          _buildInputField(
+            label: 'Email (Tùy chọn)',
+            hintText: 'Nhập email',
+            icon: Icons.email,
+            controller: _emailController,
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Tỉnh/Thành & Quận/Huyện',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
-              // Chọn Tỉnh Thành
               Expanded(
-                child: _isLoadingProvinces
-                    ? const Center(child: CircularProgressIndicator())
-                    : TextField(
-                        controller: _provinceController,
-                        readOnly: true, // Không cho bàn phím mặc định bật lên
-                        onTap: () {
-                          _showSearchableBottomSheet(
-                            context: context,
-                            title: 'Chọn Tỉnh / Thành phố',
-                            items: _provinces,
-                            onSelected: (selected) {
-                              setState(() {
-                                _selectedProvince = selected as Province;
-                                _provinceController.text = _selectedProvince!.name;
-                                // Đổi tỉnh thành -> Xóa quận huyện đã chọn cũ
-                                _selectedDistrict = null;
-                                _districtController.clear();
-                              });
-                            },
-                          );
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'Tỉnh/Thành phố',
-                          hintStyle: const TextStyle(fontSize: 13),
-                          suffixIcon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                          filled: true,
-                          fillColor: const Color(0xFFF5F6F8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                        ),
-                      ),
+                child: TextField(
+                  controller: _provinceController,
+                  readOnly: true,
+                  onTap: () {
+                    _showSearchableBottomSheet(
+                      context: context,
+                      title: 'Chọn Tỉnh',
+                      items: _provinces,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedProvince = selected as Province;
+                          _provinceController.text = _selectedProvince!.name;
+                          _selectedDistrict = null;
+                          _districtController.clear();
+                        });
+                      },
+                    );
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Tỉnh/Thành',
+                    hintStyle: const TextStyle(fontSize: 14),
+                    filled: true,
+                    fillColor: const Color(0xFFF5F6F8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 14,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
-              // Chọn Quận Huyện
               Expanded(
                 child: TextField(
                   controller: _districtController,
                   readOnly: true,
                   onTap: () {
-                    if (_selectedProvince == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng chọn Tỉnh/Thành phố trước!')));
-                      return;
-                    }
+                    if (_selectedProvince == null) return;
                     _showSearchableBottomSheet(
                       context: context,
-                      title: 'Chọn Quận / Huyện',
+                      title: 'Chọn Huyện',
                       items: _selectedProvince!.districts,
                       onSelected: (selected) {
                         setState(() {
@@ -361,52 +592,45 @@ class _DangKyState extends State<DangKy> {
                   },
                   decoration: InputDecoration(
                     hintText: 'Quận/Huyện',
-                    hintStyle: const TextStyle(fontSize: 13),
-                    suffixIcon: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                    hintStyle: const TextStyle(fontSize: 14),
                     filled: true,
-                    fillColor: _selectedProvince == null ? Colors.grey[200] : const Color(0xFFF5F6F8), // Xám nếu chưa chọn tỉnh
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                    fillColor: const Color(0xFFF5F6F8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          const Text('Hỗ trợ định vị vùng cứu hộ và kết nối nhanh trạm y tế gần nhất.', style: TextStyle(fontSize: 11, color: Colors.black54)),
           const SizedBox(height: 16),
-          // ----------------------------------------
 
-          const Text('Mật khẩu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          TextField(
-            obscureText: _obscurePassword,
-            decoration: InputDecoration(
-              hintText: 'Emergency115!',
-              prefixIcon: const Icon(Icons.lock_outline),
-              suffixIcon: IconButton(
-                icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-              ),
-              filled: true,
-              fillColor: const Color(0xFFF5F6F8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            ),
+          _buildInputField(
+            label: 'Địa chỉ cụ thể (Tùy chọn)',
+            hintText: 'Số nhà, tên đường...',
+            icon: Icons.home,
+            controller: _addressController,
           ),
           const SizedBox(height: 16),
-          const Text('Xác nhận mật khẩu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          const SizedBox(height: 8),
-          TextField(
-            obscureText: _obscureConfirmPassword,
-            decoration: InputDecoration(
-              hintText: 'Emergency115!',
-              prefixIcon: const Icon(Icons.history),
-              suffixIcon: const Icon(Icons.check_circle_outline, color: Color(0xFF1565C0)),
-              filled: true,
-              fillColor: const Color(0xFFF5F6F8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+
+          _buildPasswordField(
+            label: 'Mật khẩu',
+            controller: _passwordController,
+            isObscure: _obscurePassword,
+            toggle: () => setState(() => _obscurePassword = !_obscurePassword),
+          ),
+          const SizedBox(height: 16),
+          _buildPasswordField(
+            label: 'Xác nhận mật khẩu',
+            controller: _confirmPasswordController,
+            isObscure: _obscureConfirmPassword,
+            toggle: () => setState(
+              () => _obscureConfirmPassword = !_obscureConfirmPassword,
             ),
           ),
         ],
@@ -414,21 +638,82 @@ class _DangKyState extends State<DangKy> {
     );
   }
 
-  Widget _buildInputField({required String label, required String hintText, required IconData prefixIcon}) {
+  Widget _buildInputField({
+    required String label,
+    required String hintText,
+    required IconData icon,
+    required TextEditingController controller,
+    bool isPhone = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
         const SizedBox(height: 8),
         TextField(
+          controller: controller,
+          keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
           decoration: InputDecoration(
             hintText: hintText,
-            hintStyle: const TextStyle(color: Colors.black87),
-            prefixIcon: Icon(prefixIcon),
+            hintStyle: const TextStyle(fontSize: 14, color: Colors.black54),
+            prefixIcon: Icon(icon, color: Colors.grey, size: 20),
             filled: true,
             fillColor: const Color(0xFFF5F6F8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPasswordField({
+    required String label,
+    required TextEditingController controller,
+    required bool isObscure,
+    required VoidCallback toggle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: isObscure,
+          decoration: InputDecoration(
+            hintText: '••••••••',
+            hintStyle: const TextStyle(fontSize: 14, color: Colors.black54),
+            prefixIcon: const Icon(Icons.lock, color: Colors.grey, size: 20),
+            suffixIcon: IconButton(
+              icon: Icon(
+                isObscure ? Icons.visibility_off : Icons.visibility,
+                size: 20,
+              ),
+              onPressed: toggle,
+            ),
+            filled: true,
+            fillColor: const Color(0xFFF5F6F8),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
           ),
         ),
       ],
@@ -438,74 +723,52 @@ class _DangKyState extends State<DangKy> {
   Widget _buildTermsAndSubmit() {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: const Color(0xFFEFF1F5), borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 24,
-                width: 24,
-                child: Checkbox(
-                  value: _agreedToTerms,
-                  activeColor: const Color(0xFF0D47A1),
-                  onChanged: (value) => setState(() => _agreedToTerms = value ?? false),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: RichText(
-                  text: const TextSpan(
-                    text: 'Tôi đồng ý với ',
-                    style: TextStyle(color: Colors.black87, fontSize: 12, height: 1.4),
-                    children: [
-                      TextSpan(text: 'Điều khoản sử dụng', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold)),
-                      TextSpan(text: ' và '),
-                      TextSpan(text: 'Chính sách bảo mật', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold)),
-                      TextSpan(text: ' của Hệ thống Cứu hộ 115.'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const DangNhap()));
-            },
-
-            
-
-            icon: const Icon(Icons.person_add_alt_1, color: Colors.white),
-            label: const Text('ĐĂNG KÝ TÀI KHOẢN', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D47A1),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-
-            
-          ),
-        ),
-        const SizedBox(height: 20),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Đã có tài khoản? ', style: TextStyle(color: Colors.black54, fontSize: 14)),
-            InkWell(
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const DangNhap()));
-              },
-              child: const Text('Đăng nhập', style: TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold, fontSize: 14)),
+            Checkbox(
+              value: _agreedToTerms,
+              onChanged: (val) => setState(() => _agreedToTerms = val ?? false),
+            ),
+            const Expanded(
+              child: Text(
+                "Tôi đồng ý với Điều khoản sử dụng và Chính sách bảo mật.",
+                style: TextStyle(fontSize: 12),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          height: 52, // Đã fix chiều cao nút bấm để UI cân đối hơn
+          child: ElevatedButton(
+            onPressed: _isLoadingSubmit ? null : _handleRegister,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D47A1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: _isLoadingSubmit
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    'ĐĂNG KÝ TÀI KHOẢN',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 30),
       ],
     );
   }
