@@ -73,6 +73,7 @@ final List<HoSoCuuHoCoCCHNModel> HoSoCuuHoCoCCHNList = [
     ngayCapCCHN: DateTime(2023, 6, 10),
     coQuanCapCCHN: 'Sở Y tế TP. Hồ Chí Minh',
     maTheChuyenNganh: 'TCN-CH-001',
+    tenChuyenNganh: 'Tim Mạch',
     chucDanh: 'Bác sĩ Cấp cứu ngoài bệnh viện',
     donViCongTac: 'Trung tâm Cấp cứu 115 TP.HCM',
     diemDanhGia: 4.9,

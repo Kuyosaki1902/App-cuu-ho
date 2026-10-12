@@ -23,7 +23,7 @@ class NguoiThanModel implements BaseModel {
     );
   }
   @override
-  String? get id => maNguoiDung;
+  String? get id => maNguoiThan;
   // Chuyển từ Model sang Map / JSON để lưu Database
   @override
   Map<String, dynamic> toMap() {

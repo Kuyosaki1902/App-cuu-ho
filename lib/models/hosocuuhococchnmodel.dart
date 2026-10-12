@@ -12,6 +12,7 @@ class HoSoCuuHoCoCCHNModel implements BaseModel {
   final DateTime ngayCapCCHN;
   final String coQuanCapCCHN;
   final String maTheChuyenNganh;
+  final String tenChuyenNganh;
   final String chucDanh;
   final String donViCongTac;
   final double diemDanhGia;
@@ -28,6 +29,7 @@ class HoSoCuuHoCoCCHNModel implements BaseModel {
     required this.ngayCapCCHN,
     required this.coQuanCapCCHN,
     required this.maTheChuyenNganh,
+    required this.tenChuyenNganh,
     required this.chucDanh,
     required this.donViCongTac,
     this.diemDanhGia = 0.0,
@@ -49,6 +51,7 @@ class HoSoCuuHoCoCCHNModel implements BaseModel {
       'ngayCapCCHN': ngayCapCCHN,
       'coQuanCapCCHN': coQuanCapCCHN,
       'maTheChuyenNganh': maTheChuyenNganh,
+      'tenChuyenNganh': tenChuyenNganh,
       'chucDanh': chucDanh,
       'donViCongTac': donViCongTac,
       'diemDanhGia': diemDanhGia,
@@ -75,6 +78,7 @@ class HoSoCuuHoCoCCHNModel implements BaseModel {
           : DateTime.now(),
       coQuanCapCCHN: map['coQuanCapCCHN'] ?? '',
       maTheChuyenNganh: map['maTheChuyenNganh'] ?? '',
+      tenChuyenNganh: map['tenChuyenNganh'] ?? '',
       chucDanh: map['chucDanh'] ?? '',
       donViCongTac: map['donViCongTac'] ?? '',
       diemDanhGia: (map['diemDanhGia'] ?? 0.0).toDouble(),
