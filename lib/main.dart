@@ -1,6 +1,6 @@
-import 'package:cuhokhancap/NguoiCuuHo/NguoiCuuHo_CoCCHN.dart';
-import 'package:cuhokhancap/NguoiCuuHo/NguoiCuuHo_KhongCCHN.dart';
-import 'package:cuhokhancap/NguoiCuuHo/TrangChu_NCH.dart';
+import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVCoCCHN/NguoiCuuHo_CoCCHN.dart';
+import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVKhongCCHN/NguoiCuuHo_KhongCCHN.dart';
+import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/TrangChu_NCH.dart';
 import 'package:flutter/material.dart';
 
 void main() {
