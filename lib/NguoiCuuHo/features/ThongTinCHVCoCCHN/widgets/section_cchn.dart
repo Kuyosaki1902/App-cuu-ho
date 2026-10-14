@@ -1,9 +1,243 @@
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThongTinCHVCoCCHN/controllers/chv_coCCHN_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../controllers/chv_coCCHN_controller.dart';
+
 class SectionCchn extends StatelessWidget {
   const SectionCchn({super.key});
+
+  /// Hàm dùng chung hiển thị Dialog chọn dữ liệu có ô tìm kiếm
+  void _showSelectionDialog({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    required List<String> items,
+    required String? currentValue,
+    required ValueChanged<String> onSelected,
+  }) {
+    List<String> filteredItems = List.from(items);
+    final searchController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFEBEE),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: Colors.redAccent, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Chọn $title',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    // Ô tìm kiếm
+                    TextField(
+                      controller: searchController,
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Tìm kiếm $title...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 13,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          size: 20,
+                          color: Colors.redAccent,
+                        ),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.clear,
+                                  size: 18,
+                                  color: Colors.grey,
+                                ),
+                                onPressed: () {
+                                  searchController.clear();
+                                  setStateDialog(() {
+                                    filteredItems = List.from(items);
+                                  });
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Colors.redAccent,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                      onChanged: (query) {
+                        setStateDialog(() {
+                          filteredItems = items
+                              .where(
+                                (item) => item.toLowerCase().contains(
+                                  query.toLowerCase(),
+                                ),
+                              )
+                              .toList();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    // Danh sách lựa chọn
+                    Flexible(
+                      child: filteredItems.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 40,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Không tìm thấy kết quả phù hợp',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filteredItems.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final item = filteredItems[index];
+                                final isSelected = currentValue == item;
+
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () {
+                                    onSelected(item);
+                                    Navigator.pop(context);
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? const Color(0xFFFFEBEE)
+                                          : const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? Colors.redAccent
+                                            : Colors.grey.shade200,
+                                        width: isSelected ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          icon,
+                                          size: 18,
+                                          color: isSelected
+                                              ? Colors.redAccent
+                                              : Colors.grey.shade600,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            item,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w500,
+                                              color: isSelected
+                                                  ? Colors.red.shade900
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSelected) ...[
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                            Icons.check_circle,
+                                            size: 18,
+                                            color: Colors.redAccent,
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Đóng',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,66 +347,64 @@ class SectionCchn extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _buildFieldLabel('Phạm vi hoạt động chuyên môn', isRequired: true),
-          const SizedBox(height: 6),
-          Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEF2FF),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: controller.selectedScope,
-                isExpanded: true,
-                style: const TextStyle(fontSize: 13, color: Colors.black),
-                items: controller.scopeList
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) controller.setScope(val);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
+
+          // 🟢 Chuyên ngành & Chức vụ (Mở Dialog chọn)
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildFieldLabel('Cơ quan cấp', isRequired: true),
-                    const SizedBox(height: 4),
-                    Container(
-                      height: 38,
-                      padding: const EdgeInsets.only(left: 8, right: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: controller.selectedCchnIssuer,
-                          isExpanded: true,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.black,
-                          ),
-                          items: controller.cchnIssuerList
-                              .map(
-                                (e) =>
-                                    DropdownMenuItem(value: e, child: Text(e)),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) controller.setCchnIssuer(val);
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
+                child: _buildSelectField(
+                  label: 'Chuyên ngành',
+                  isRequired: true,
+                  value: controller.selectedScope,
+                  placeholder: 'Chọn chuyên ngành',
+                  onTap: () => _showSelectionDialog(
+                    context: context,
+                    title: 'chuyên ngành',
+                    icon: Icons.medical_services_outlined,
+                    items: controller.scopeList,
+                    currentValue: controller.selectedScope,
+                    onSelected: (val) => controller.setScope(val),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildSelectField(
+                  label: 'Chức vụ',
+                  isRequired: true,
+                  value: controller.selectedPosition,
+                  placeholder: 'Chọn chức vụ',
+                  onTap: () => _showSelectionDialog(
+                    context: context,
+                    title: 'chức vụ',
+                    icon: Icons.work_outline,
+                    items: controller.positionList,
+                    currentValue: controller.selectedPosition,
+                    onSelected: (val) => controller.setPosition(val),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 🟢 Cơ quan cấp (Mở Dialog chọn) & Ngày cấp
+          Row(
+            children: [
+              Expanded(
+                child: _buildSelectField(
+                  label: 'Cơ quan cấp',
+                  isRequired: true,
+                  value: controller.selectedCchnIssuer,
+                  placeholder: 'Chọn cơ quan cấp',
+                  onTap: () => _showSelectionDialog(
+                    context: context,
+                    title: 'cơ quan cấp',
+                    icon: Icons.account_balance_outlined,
+                    items: controller.cchnIssuerList,
+                    currentValue: controller.selectedCchnIssuer,
+                    onSelected: (val) => controller.setCchnIssuer(val),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -197,6 +429,56 @@ class SectionCchn extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// Widget tùy chỉnh cho các ô chọn kích hoạt Dialog
+  Widget _buildSelectField({
+    required String label,
+    required bool isRequired,
+    required String? value,
+    required String placeholder,
+    required VoidCallback onTap,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildFieldLabel(label, isRequired: isRequired),
+        const SizedBox(height: 4),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value ?? placeholder,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: value != null
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      color: value != null
+                          ? Colors.black87
+                          : Colors.grey.shade500,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down, color: Colors.grey),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
