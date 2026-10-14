@@ -1,9 +1,8 @@
 import 'dart:async';
-
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/controllers/trang_chu_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 
 class TrangChuBottomPanel extends StatelessWidget {
   final String selectedRadius;

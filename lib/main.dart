@@ -1,6 +1,4 @@
-import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVCoCCHN/NguoiCuuHo_CoCCHN.dart';
-import 'package:cuhokhancap/NguoiCuuHo/features/ThongTinCHVKhongCCHN/NguoiCuuHo_KhongCCHN.dart';
-import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/TrangChu_NCH.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThongTinCHVKhongCCHN/CuuHoVien_KhongCCHN.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'firebase_options.dart';
@@ -39,7 +37,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const Trangchunguoicuuho(),
+      home: const NguoicuuhoKhongcchn(),
     );
   }
 }

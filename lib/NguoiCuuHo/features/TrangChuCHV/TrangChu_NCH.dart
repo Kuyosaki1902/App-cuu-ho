@@ -1,6 +1,6 @@
-import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/controllers/trang_chu_controller.dart';
-import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/widgets/header.dart';
-import 'package:cuhokhancap/NguoiCuuHo/features/TrangChuCHV/widgets/bottom.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/header.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/bottom.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'widgets/map_section.dart';
