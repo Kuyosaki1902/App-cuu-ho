@@ -5,7 +5,10 @@ import 'package:cuhokhancap/user/MoTaTinhTrang.dart';
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
 
 class TrangChuNguoiDung extends StatefulWidget {
-  const TrangChuNguoiDung({super.key});
+  final String maNguoiDung;
+  const TrangChuNguoiDung({super.key, required this.maNguoiDung});
+
+  
 
   @override
   State<TrangChuNguoiDung> createState() => _TrangChuNguoiDungState();
@@ -41,7 +44,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey, // 1. Khai báo key cho Scaffold
-      drawer: const MenuNguoiDung(), // 2. Nạp giao diện MenuNguoiDung
+      drawer: MenuNguoiDung(maNguoiDung: widget.maNguoiDung), // 2. Nạp giao diện MenuNguoiDung
       body: Stack(
         children: [
           GoogleMap(

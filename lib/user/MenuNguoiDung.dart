@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'ThongTinTaiKhoan.dart';
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Kiểm tra đường dẫn
+import 'package:cuhokhancap/firebase/firebase_service.dart';  // Kiểm tra đường dẫn
+import 'ThongTinTaiKhoan.dart'; 
 
 class MenuNguoiDung extends StatefulWidget {
-  const MenuNguoiDung({super.key});
+  final String maNguoiDung; 
+  
+  const MenuNguoiDung({super.key, required this.maNguoiDung});
 
   @override
   State<MenuNguoiDung> createState() => _MenuNguoiDungState();
@@ -11,6 +15,33 @@ class MenuNguoiDung extends StatefulWidget {
 class _MenuNguoiDungState extends State<MenuNguoiDung> {
   // Biến trạng thái để kiểm soát việc đóng/mở thẻ "Đăng ký người cứu hộ"
   bool _isExpanded = false;
+  
+  // Khai báo Firebase service và Future cho dữ liệu người dùng
+  final FirebaseService _firebaseService = FirebaseService();
+  late Future<NguoiDungModel?> _userFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Gọi hàm lấy thông tin người dùng dựa trên mã được truyền vào
+    _userFuture = _firebaseService.layThongTinNguoiDung(widget.maNguoiDung);
+  }
+
+  // Hàm tạo ký tự viết tắt đại diện cho Avatar (Ví dụ: "Nguyễn Văn An" -> "NA")
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return "ND";
+    List<String> parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) {
+      return parts[0][0].toUpperCase();
+    }
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  // Hàm định dạng che ẩn số điện thoại (Ví dụ: 0912345789 -> 0912 ••• 789)
+  String _maskPhoneNumber(String phone) {
+    if (phone.length < 6) return phone;
+    return '${phone.substring(0, 4)} ••• ${phone.substring(phone.length - 3)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,93 +114,120 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Profile User
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5F7FA),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade100),
-                      ),
-                      child: Material(
-                        color: Colors
-                            .transparent, // Bắt buộc để hiện màu nền của Container
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(
-                            16,
-                          ), // Bo góc hiệu ứng chạm khớp với viền
-                          onTap: () {
+                    // Profile User - Load động từ Firebase
+                    FutureBuilder<NguoiDungModel?>(
+                      future: _userFuture,
+                      builder: (context, snapshot) {
+                        // Hiển thị trạng thái tải
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F7FA),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Color(0xFF00695C),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
 
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const ThongTinTaiKhoan())); // Đóng Drawer trước khi chuyển màn hình
-                            
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(
-                              12,
-                            ), // Đưa padding vào bên trong InkWell
-                            child: Row(
-                              children: [
-                                Stack(
-                                  alignment: Alignment.bottomRight,
+                        // Lấy dữ liệu
+                        NguoiDungModel? user = snapshot.data;
+                        String tenHienThi = user?.hoTen.isNotEmpty == true ? user!.hoTen : "Người dùng";
+                        String sdtHienThi = user?.soDienThoai.isNotEmpty == true ? _maskPhoneNumber(user!.soDienThoai) : "Chưa cập nhật SĐT";
+                        String avatarInitials = _getInitials(tenHienThi);
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5F7FA),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade100),
+                          ),
+                          child: Material(
+                            color: Colors.transparent, // Bắt buộc để hiện màu nền của Container
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16), // Bo góc hiệu ứng chạm khớp với viền
+                              onTap: () {
+                                Navigator.push(
+                                  context, 
+                                  MaterialPageRoute(builder: (context) => ThongTinTaiKhoan(nguoiDung: user!)), // Truyền dữ liệu người dùng nếu cần
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(12), // Đưa padding vào bên trong InkWell
+                                child: Row(
                                   children: [
-                                    const CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Color(0xFF00695C),
-                                      child: Text(
-                                        "NA",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18,
+                                    Stack(
+                                      alignment: Alignment.bottomRight,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 24,
+                                          backgroundColor: const Color(0xFF00695C),
+                                          child: Text(
+                                            avatarInitials,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 18,
+                                            ),
+                                          ),
                                         ),
+                                        Container(
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          padding: const EdgeInsets.all(2),
+                                          child: const Icon(
+                                            Icons.check_circle,
+                                            color: Color(0xFF00C853),
+                                            size: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            tenHienThi,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          Text(
+                                            sdtHienThi,
+                                            style: const TextStyle(
+                                              color: Colors.grey,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    Container(
-                                      decoration: const BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      padding: const EdgeInsets.all(2),
-                                      child: const Icon(
-                                        Icons.check_circle,
-                                        color: Color(0xFF00C853),
-                                        size: 14,
-                                      ),
+                                    const Icon(
+                                      Icons.arrow_forward_ios,
+                                      color: Colors.grey,
+                                      size: 14,
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 12),
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "Nguyễn Văn An",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      Text(
-                                        "0912 ••• 789",
-                                        style: TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(
-                                  Icons.arrow_forward_ios,
-                                  color: Colors.grey,
-                                  size: 14,
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
 

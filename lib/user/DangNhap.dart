@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/DangKy.dart';
+// TODO: Đổi đường dẫn các file dưới đây cho phù hợp với dự án của bạn
+import 'package:cuhokhancap/user/TrangChuNguoiDung.dart'; 
+import 'package:cuhokhancap/firebase/firebase_service.dart'; 
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 
 class DangNhap extends StatefulWidget {
   const DangNhap({super.key});
@@ -9,8 +13,65 @@ class DangNhap extends StatefulWidget {
 }
 
 class _DangNhapState extends State<DangNhap> {
+  // --- Khai báo các biến trạng thái và Controllers ---
+  final FirebaseService _firebaseService = FirebaseService();
+  final TextEditingController _taiKhoanController = TextEditingController();
+  final TextEditingController _matKhauController = TextEditingController();
+  
   bool _obscurePassword = true;
   bool _rememberMe = false;
+  bool _isLoading = false; // Trạng thái loading khi đang xử lý đăng nhập
+
+  // --- Hàm xử lý Đăng Nhập ---
+  Future<void> _handleLogin() async {
+    String taiKhoan = _taiKhoanController.text.trim();
+    String matKhau = _matKhauController.text.trim();
+
+    // 1. Kiểm tra dữ liệu rỗng
+    if (taiKhoan.isEmpty || matKhau.isEmpty) {
+      _showSnackBar('Vui lòng nhập tài khoản và mật khẩu!', Colors.red);
+      return;
+    }
+
+    // 2. Bật trạng thái loading
+    setState(() => _isLoading = true);
+
+    // 3. Gọi hàm đăng nhập từ Firebase Service (Kiểm tra sđt hoặc email)
+    NguoiDungModel? user = await _firebaseService.dangNhap(taiKhoan, matKhau);
+
+    // 4. Tắt trạng thái loading
+    if (mounted) setState(() => _isLoading = false);
+
+    // 5. Xử lý kết quả trả về
+    if (user != null && user.maNguoiDung != null) {
+      // ĐĂNG NHẬP THÀNH CÔNG
+      _showSnackBar('Đăng nhập thành công!', Colors.green);
+      
+      // Chuyển hướng sang Trang Chủ và truyền maNguoiDung đi
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TrangChuNguoiDung(maNguoiDung: user.maNguoiDung!),
+          ),
+        );
+      }
+    } else {
+      // ĐĂNG NHẬP THẤT BẠI
+      _showSnackBar('Sai tài khoản hoặc mật khẩu. Vui lòng thử lại!', Colors.red);
+    }
+  }
+
+  // --- Hàm hiển thị thông báo ---
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,25 +103,26 @@ class _DangNhapState extends State<DangNhap> {
           const SizedBox(width: 24),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildSystemBanner(),
-            const SizedBox(height: 16),
-            _buildLoginCard(),
-            const SizedBox(height: 16),
-            _buildRegisterCard(),
-            const SizedBox(height: 16),
-            _buildSecurityNotice(),
-          ],
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              _buildSystemBanner(),
+              const SizedBox(height: 16),
+              _buildLoginCard(),
+              const SizedBox(height: 16),
+              _buildRegisterCard(),
+              const SizedBox(height: 16),
+              _buildSecurityNotice(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-
-  //Label: HỆ THỐNG ĐIỀU PHỐI CẤP CỨU QUỐC GIA 115
+  // Label: HỆ THỐNG ĐIỀU PHỐI CẤP CỨU QUỐC GIA 115
   Widget _buildSystemBanner() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -103,11 +165,7 @@ class _DangNhapState extends State<DangNhap> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-
-            
-
-            color: Colors.black.withValues(alpha: 0.05),
-
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -155,6 +213,7 @@ class _DangNhapState extends State<DangNhap> {
           const Text('Số điện thoại hoặc Email', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           const SizedBox(height: 8),
           TextField(
+            controller: _taiKhoanController, // THÊM CONTROLLER
             decoration: InputDecoration(
               hintText: 'Nhập số điện thoại hoặc email của bạn',
               hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
@@ -183,6 +242,7 @@ class _DangNhapState extends State<DangNhap> {
           ),
           const SizedBox(height: 8),
           TextField(
+            controller: _matKhauController, // THÊM CONTROLLER
             obscureText: _obscurePassword,
             decoration: InputDecoration(
               hintText: '••••••••••••',
@@ -228,16 +288,25 @@ class _DangNhapState extends State<DangNhap> {
           ),
           const SizedBox(height: 16),
 
-          // Nút Đăng nhập
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.login, color: Colors.white),
-            label: const Text('ĐĂNG NHẬP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFB71C1C), // Đỏ
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          // Nút Đăng nhập có trạng thái loading
+          SizedBox(
+            height: 50, // Cố định chiều cao nút để tránh bị giật khi loading
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _handleLogin, // KẾT NỐI HÀM ĐĂNG NHẬP
+              icon: _isLoading 
+                  ? const SizedBox.shrink() 
+                  : const Icon(Icons.login, color: Colors.white),
+              label: _isLoading
+                  ? const SizedBox(
+                      width: 24, height: 24,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Text('ĐĂNG NHẬP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB71C1C), // Đỏ
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -276,7 +345,6 @@ class _DangNhapState extends State<DangNhap> {
           ElevatedButton(
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const DangKy()));
-
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1565C0), // Xanh dương

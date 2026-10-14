@@ -1,13 +1,30 @@
 import 'package:flutter/material.dart';
 import 'DangNhap.dart';
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Sửa lại đường dẫn nếu cần
 
 class ThongTinTaiKhoan extends StatelessWidget {
-  const ThongTinTaiKhoan({super.key});
+  final NguoiDungModel nguoiDung; // 1. Nhận dữ liệu người dùng được truyền sang
+
+  const ThongTinTaiKhoan({super.key, required this.nguoiDung});
+
+  // Hàm tạo avatar viết tắt
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return "ND";
+    List<String> parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  // Hàm định dạng số điện thoại ẩn
+  String _maskPhoneNumber(String phone) {
+    if (phone.length < 6) return phone;
+    return '${phone.substring(0, 4)} ••• ${phone.substring(phone.length - 3)}';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB), // Màu nền tổng thể sáng (hơi xanh tím)
+      backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -20,7 +37,7 @@ class ThongTinTaiKhoan extends StatelessWidget {
               const SizedBox(height: 16),
               _buildProfileCard(),
               const SizedBox(height: 24),
-              
+
               // Địa chỉ đón bác sĩ
               _buildSectionTitle(
                 icon: Icons.location_on_outlined,
@@ -34,7 +51,7 @@ class ThongTinTaiKhoan extends StatelessWidget {
 
               // Người thân khẩn cấp (SOS)
               _buildSectionTitle(
-                icon: Icons.error, // Có thể dùng icon hình thoi nếu có file SVG
+                icon: Icons.error,
                 iconColor: const Color(0xFFD32F2F),
                 title: "Người thân khẩn cấp (SOS)",
                 actionText: "+ Thêm",
@@ -63,12 +80,10 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 1. Thanh Top Bar
   Widget _buildTopBar(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Nút Back
         InkWell(
           onTap: () => Navigator.pop(context),
           borderRadius: BorderRadius.circular(30),
@@ -85,7 +100,6 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 2. Phần Header (Tiêu đề + Nút chỉnh sửa)
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -95,7 +109,7 @@ class ThongTinTaiKhoan extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: const BoxDecoration(
-                color: Color(0xFF69F0AE), // Xanh lá mạ
+                color: Color(0xFF69F0AE),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.contact_mail_outlined, color: Color(0xFF004D40), size: 20),
@@ -113,7 +127,7 @@ class ThongTinTaiKhoan extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8EAF6), // Xanh nhạt
+            color: const Color(0xFFE8EAF6),
             borderRadius: BorderRadius.circular(20),
           ),
           child: const Row(
@@ -128,8 +142,10 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 3. Khối Thông tin cá nhân
   Widget _buildProfileCard() {
+    String tenHienThi = nguoiDung.hoTen.isNotEmpty ? nguoiDung.hoTen : "Người dùng";
+    String avatarInitials = _getInitials(tenHienThi);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -141,13 +157,16 @@ class ThongTinTaiKhoan extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 30,
-                    backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=32'), // Thay bằng ảnh thật
+                    backgroundColor: const Color(0xFF00695C),
+                    child: Text(
+                      avatarInitials,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                    ),
                   ),
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -157,7 +176,6 @@ class ThongTinTaiKhoan extends StatelessWidget {
                 ],
               ),
               const SizedBox(width: 16),
-              // Thông tin
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,19 +183,25 @@ class ThongTinTaiKhoan extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("Trần Mai Anh", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        Text(
+                          tenHienThi,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Text("#CT-88921", style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: const Text("Xác minh", style: TextStyle(color: Colors.grey, fontSize: 10)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text("0918 245 889", style: TextStyle(color: Colors.black54, fontSize: 13)),
+                    Text(
+                      _maskPhoneNumber(nguoiDung.soDienThoai),
+                      style: const TextStyle(color: Colors.black54, fontSize: 13),
+                    ),
                     const SizedBox(height: 4),
                     const Row(
                       children: [
@@ -191,29 +215,11 @@ class ThongTinTaiKhoan extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Tag sức khỏe
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFEBEE), // Đỏ nhạt
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.medical_services, color: Color(0xFFD32F2F), size: 14),
-                SizedBox(width: 6),
-                Text("Nhóm máu A+ • Dị ứng Penicillin", style: TextStyle(color: Color(0xFFD32F2F), fontSize: 12, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
         ],
       ),
     );
   }
 
-  // Widget hỗ trợ: Tiêu đề các mục
   Widget _buildSectionTitle({required IconData icon, required Color iconColor, required String title, String? actionText}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -231,7 +237,6 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 4. Khối Địa chỉ
   Widget _buildAddressCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -243,17 +248,18 @@ class ThongTinTaiKhoan extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(color: Color(0xFFE0F2F1), shape: BoxShape.circle), // Xanh lợt
+            decoration: const BoxDecoration(color: Color(0xFFE0F2F1), shape: BoxShape.circle),
             child: const Icon(Icons.location_on_outlined, color: Color(0xFF00695C), size: 20),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("124 Pasteur, P. Bến Nghé, Q.1", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                SizedBox(height: 4),
-                Text("Chung cư lầu 4, thang máy số 2", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  nguoiDung.diaChi.isNotEmpty ? nguoiDung.diaChi : "Chưa cập nhật địa chỉ",
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                ),
               ],
             ),
           ),
@@ -262,12 +268,11 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 5. Khối Người thân SOS
   Widget _buildEmergencyContactCard() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF), // Tím cực nhạt
+        color: const Color(0xFFF5F3FF),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -299,17 +304,11 @@ class ThongTinTaiKhoan extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(color: Color(0xFF69F0AE), shape: BoxShape.circle),
-            child: const Icon(Icons.phone, color: Color(0xFF004D40), size: 18),
-          ),
         ],
       ),
     );
   }
 
-  // 6. Khối Bảo mật & Đăng nhập
   Widget _buildSecurityCard() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -319,9 +318,17 @@ class ThongTinTaiKhoan extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _buildSecurityRow(icon: Icons.phone_android, title: "Số điện thoại đăng nhập", value: "0918 245 889"),
+          _buildSecurityRow(
+            icon: Icons.phone_android,
+            title: "Số điện thoại đăng nhập",
+            value: nguoiDung.soDienThoai,
+          ),
           const Divider(height: 1, color: Color(0xFFF0F0F0)),
-          _buildSecurityRow(icon: Icons.history, title: "Đổi mật khẩu", value: ""),
+          _buildSecurityRow(
+            icon: Icons.history,
+            title: "Đổi mật khẩu",
+            value: "",
+          ),
         ],
       ),
     );
@@ -343,19 +350,22 @@ class ThongTinTaiKhoan extends StatelessWidget {
     );
   }
 
-  // 7. Nút Đăng xuất
   Widget _buildLogoutButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
         onPressed: () {
-          // Chuyển sang màn hình Đăng nhập
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const DangNhap()));
+          // XÓA TOÀN BỘ MÀN HÌNH CHỒNG VÀ QUAY VỀ TRANG ĐĂNG NHẬP
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const DangNhap()),
+            (Route<dynamic> route) => false,
+          );
         },
         icon: const Icon(Icons.logout, color: Color(0xFFD32F2F), size: 18),
         label: const Text("Đăng xuất", style: TextStyle(color: Color(0xFFD32F2F), fontSize: 14, fontWeight: FontWeight.bold)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFF5F3FF), // Tím lợt
+          backgroundColor: const Color(0xFFF5F3FF),
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
