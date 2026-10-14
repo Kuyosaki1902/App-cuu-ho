@@ -1,11 +1,13 @@
 // lib/NguoiThanCuaBan.dart
 
+import 'dart:async'; // Cần import để dùng Timer debounce
+import 'package:flutter/material.dart';
+import 'package:cuhokhancap/models/nguoidungmodel.dart';
+import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
+import 'package:cuhokhancap/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/views/danh_sach_yeu_cau.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/views/ket_qua_tim_kiem.dart';
-import 'package:cuhokhancap/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/views/thanh_tim_kiem.dart';
-import 'package:flutter/material.dart';
-import 'controllers/nguoi_than_controller.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/views/bottom_sheet_gui_yeu_cau.dart';
 
 class NguoiThanCuaBan extends StatefulWidget {
@@ -20,11 +22,52 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
   final NguoiThanController _controller = NguoiThanController();
   final TextEditingController _searchController = TextEditingController();
 
-  int _selectedTab = 0; // 0: Tab Người thân, 1: Tab Tìm kiếm
+  int _selectedTab = 0;
   bool _isSearching = false;
-  int _selectedFilterIndex = 0; // 0: Tất cả, 1: Đã nhận, 2: Đã gửi
+  bool _isLoadingSearch = false; // Trạng thái đang query Firestore
+  int _selectedFilterIndex = 0;
+  NguoiDungModel? _searchedUser;
+  Timer? _debounce; // Chống nháy / mất kết quả khi gõ
 
   final Color primaryColor = const Color(0xFF006A55);
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    final query = value.trim();
+
+    if (query.isEmpty) {
+      setState(() {
+        _isSearching = false;
+        _isLoadingSearch = false;
+        _searchedUser = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+      _isLoadingSearch = true; // Bật loading
+    });
+
+    // Chờ người dùng ngừng gõ 500ms mới tiến hành tìm kiếm trên Firestore
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      final result = await _controller.searchUserByPhoneOrEmail(query);
+      if (mounted) {
+        setState(() {
+          _searchedUser = result;
+          _isLoadingSearch = false; // Tắt loading
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +90,6 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
       ),
       body: Column(
         children: [
-          // 1. CỐ ĐỊNH PHÍA TRÊN: TAB VÀ THANH TÌM KIẾM
           Container(
             color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -78,12 +120,14 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                     isSearching: _isSearching,
                     selectedFilterIndex: _selectedFilterIndex,
                     primaryColor: primaryColor,
-                    onChanged: (value) =>
-                        setState(() => _isSearching = value.trim().isNotEmpty),
+                    onChanged: _onSearchChanged,
                     onClear: () {
+                      _debounce?.cancel();
                       setState(() {
                         _searchController.clear();
                         _isSearching = false;
+                        _isLoadingSearch = false;
+                        _searchedUser = null;
                       });
                     },
                     onFilterSelected: (index) =>
@@ -94,7 +138,6 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
 
-          // 2. PHẦN HIỂN THỊ THAY ĐỔI
           Expanded(
             child: _selectedTab == 0
                 ? NguoiThanCuaBanTab(
@@ -103,12 +146,46 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                     primaryColor: primaryColor,
                   )
                 : (_isSearching
-                      ? KetQuaTimKiemWidget(
-                          primaryColor: primaryColor,
-                          onAddPressed: () =>
-                              BottomSheetGuiYeuCau.show(context, primaryColor),
-                        )
+                      ? (_isLoadingSearch
+                            ? Center(
+                                child: CircularProgressIndicator(
+                                  color: primaryColor,
+                                ),
+                              )
+                            : KetQuaTimKiemWidget(
+                                primaryColor: primaryColor,
+                                foundUser: _searchedUser,
+                                onAddPressed: (user) {
+                                  BottomSheetGuiYeuCau.show(
+                                    context,
+                                    primaryColor,
+                                    name: user.hoTen,
+                                    phone: user.soDienThoai,
+                                    onConfirm: (myRel, targetRel) async {
+                                      await _controller.sendRelationRequest(
+                                        currentUserId: widget.userId,
+                                        targetUserId: user.maNguoiDung!,
+                                        myRelation: myRel,
+                                        targetRelation: targetRel,
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Đã gửi yêu cầu kết nối thành công!',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  );
+                                },
+                              ))
                       : DanhSachYeuCauWidget(
+                          currentUserId: widget.userId,
+                          controller: NguoiThanController(),
                           selectedFilterIndex: _selectedFilterIndex,
                           primaryColor: primaryColor,
                         )),

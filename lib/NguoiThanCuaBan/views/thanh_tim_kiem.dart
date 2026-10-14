@@ -1,4 +1,4 @@
-// lib/views/nguoi_than/thanh_tim_kiem.dart
+// lib/NguoiThanCuaBan/views/thanh_tim_kiem.dart
 
 import 'package:flutter/material.dart';
 
@@ -10,6 +10,8 @@ class ThanhTimKiemWidget extends StatelessWidget {
   final Function(String) onChanged;
   final VoidCallback onClear;
   final Function(int) onFilterSelected;
+  final int receivedCount; // Số lượng yêu cầu đã nhận
+  final int sentCount; // Số lượng yêu cầu đã gửi
 
   const ThanhTimKiemWidget({
     super.key,
@@ -20,6 +22,8 @@ class ThanhTimKiemWidget extends StatelessWidget {
     required this.onChanged,
     required this.onClear,
     required this.onFilterSelected,
+    this.receivedCount = 0,
+    this.sentCount = 0,
   });
 
   @override
@@ -31,7 +35,7 @@ class ThanhTimKiemWidget extends StatelessWidget {
           controller: searchController,
           onChanged: onChanged,
           decoration: InputDecoration(
-            hintText: 'Tìm theo số điện thoại, email hoặc...',
+            hintText: 'Tìm theo số điện thoại, email...',
             hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
             prefixIcon: const Icon(Icons.search, color: Colors.grey),
             suffixIcon: isSearching || searchController.text.isNotEmpty
@@ -59,11 +63,11 @@ class ThanhTimKiemWidget extends StatelessWidget {
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                _buildFilterChip(0, 'Tất cả', count: 4),
+                _buildFilterChip(0, 'Tất cả', count: receivedCount + sentCount),
                 const SizedBox(width: 8),
-                _buildFilterChip(1, 'Yêu cầu đã nhận', count: 2),
+                _buildFilterChip(1, 'Yêu cầu đã nhận', count: receivedCount),
                 const SizedBox(width: 8),
-                _buildFilterChip(2, 'Yêu cầu đã gửi', count: 2),
+                _buildFilterChip(2, 'Yêu cầu đã gửi', count: sentCount),
               ],
             ),
           ),
@@ -77,10 +81,10 @@ class ThanhTimKiemWidget extends StatelessWidget {
     return GestureDetector(
       onTap: () => onFilterSelected(index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected ? primaryColor : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [

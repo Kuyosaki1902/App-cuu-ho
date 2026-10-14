@@ -1,7 +1,8 @@
-// lib/views/nguoi_than/nguoi_than_cua_ban.dart
+// lib/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart
 
-import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 import 'package:flutter/material.dart';
+// 🛠 Import đúng đường dẫn controller theo cấu trúc thư mục NguoiThanCuaBan
+import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 
 class NguoiThanCuaBanTab extends StatelessWidget {
   final String userId;

@@ -2,19 +2,48 @@
 
 import 'package:flutter/material.dart';
 
-class BottomSheetGuiYeuCau extends StatelessWidget {
+class BottomSheetGuiYeuCau extends StatefulWidget {
   final Color primaryColor;
+  final String targetName;
+  final String targetPhone;
+  final Function(String myRelation, String targetRelation) onConfirm;
 
-  const BottomSheetGuiYeuCau({super.key, required this.primaryColor});
+  const BottomSheetGuiYeuCau({
+    super.key,
+    required this.primaryColor,
+    required this.targetName,
+    required this.targetPhone,
+    required this.onConfirm,
+  });
 
-  static void show(BuildContext context, Color primaryColor) {
+  static void show(
+    BuildContext context,
+    Color primaryColor, {
+    required String name,
+    required String phone,
+    required Function(String myRelation, String targetRelation) onConfirm,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => BottomSheetGuiYeuCau(primaryColor: primaryColor),
+      builder: (context) => BottomSheetGuiYeuCau(
+        primaryColor: primaryColor,
+        targetName: name,
+        targetPhone: phone,
+        onConfirm: onConfirm,
+      ),
     );
   }
+
+  @override
+  State<BottomSheetGuiYeuCau> createState() => _BottomSheetGuiYeuCauState();
+}
+
+class _BottomSheetGuiYeuCauState extends State<BottomSheetGuiYeuCau> {
+  // Hardcode danh sách mối quan hệ
+  String _myRelation = 'Con trai';
+  String _targetRelation = 'Bố (Ba)';
 
   @override
   Widget build(BuildContext context) {
@@ -36,58 +65,11 @@ class BottomSheetGuiYeuCau extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const SizedBox(width: 24),
-              const Text(
-                'Thiết lập mối quan hệ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.grey),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7F8FA),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=60',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Nguyễn Văn An',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text('0123 456 789', style: TextStyle(color: primaryColor)),
-                  ],
-                ),
-              ],
-            ),
+          const Text(
+            'Thiết lập mối quan hệ',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const SizedBox(height: 16),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Mối quan hệ hai chiều',
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ),
-          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -100,75 +82,54 @@ class BottomSheetGuiYeuCau extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
-                      value: 'Con trai',
+                      value: _myRelation,
                       items: const [
                         DropdownMenuItem(
                           value: 'Con trai',
-                          child: Text(
-                            'Con trai',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                          child: Text('Con trai'),
                         ),
                         DropdownMenuItem(
                           value: 'Con gái',
-                          child: Text(
-                            'Con gái',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                          child: Text('Con gái'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Anh/Em',
+                          child: Text('Anh/Em'),
                         ),
                       ],
-                      onChanged: (val) {},
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
+                      onChanged: (val) => setState(() => _myRelation = val!),
                     ),
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Icon(Icons.swap_horiz, color: primaryColor),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Icon(Icons.swap_horiz),
               ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Nguyễn Văn An là',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    Text(
+                      '${widget.targetName} là',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
-                      value: 'Bố (Ba)',
+                      value: _targetRelation,
                       items: const [
                         DropdownMenuItem(
                           value: 'Bố (Ba)',
-                          child: Text(
-                            'Bố (Ba)',
-                            style: TextStyle(fontSize: 13),
-                          ),
+                          child: Text('Bố (Ba)'),
                         ),
+                        DropdownMenuItem(value: 'Mẹ', child: Text('Mẹ')),
                         DropdownMenuItem(
-                          value: 'Mẹ',
-                          child: Text('Mẹ', style: TextStyle(fontSize: 13)),
+                          value: 'Bạn bè',
+                          child: Text('Bạn bè'),
                         ),
                       ],
-                      onChanged: (val) {},
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
+                      onChanged: (val) =>
+                          setState(() => _targetRelation = val!),
                     ),
                   ],
                 ),
@@ -176,49 +137,20 @@ class BottomSheetGuiYeuCau extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.grey.shade100,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Hủy',
-                    style: TextStyle(color: Colors.black),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Gửi yêu cầu thiết lập',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.primaryColor,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            onPressed: () {
+              widget.onConfirm(_myRelation, _targetRelation);
+              Navigator.pop(context);
+            },
+            child: const Text(
+              'Gửi yêu cầu thiết lập',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );

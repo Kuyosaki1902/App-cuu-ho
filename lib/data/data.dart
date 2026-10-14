@@ -8,6 +8,7 @@ import 'package:cuhokhancap/models/loaiyeucaumodel.dart';
 import 'package:cuhokhancap/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/models/nguoithanmodel.dart';
 import 'package:cuhokhancap/models/tinhtrangyeucaumodel.dart';
+import 'package:cuhokhancap/models/trangthaimodel.dart';
 import 'package:cuhokhancap/models/vaitromodel.dart';
 import 'package:cuhokhancap/models/yeucaucuuhomodel.dart';
 
@@ -103,14 +104,16 @@ final List<NguoiThanModel> NguoiThanList = [
     maNguoiDung: 'nguoidung1',
     maNguoiThan: 'nguoidung2',
     moiQuanHe: 'Bố (Ba)',
-    trangThai: 'Đồng ý',
+    trangThai: 'trangthai2',
+    ngayTao: DateTime.now(),
   ),
   // Người dùng 1 xem Người dùng 3 (Trần Văn B) là Mẹ
   NguoiThanModel(
     maNguoiDung: 'nguoidung1',
     maNguoiThan: 'nguoidung3',
     moiQuanHe: 'Mẹ',
-    trangThai: 'Đồng ý',
+    trangThai: 'trangthai2',
+    ngayTao: DateTime.now(),
   ),
 
   // Người dùng 2 (Cha) xem Người dùng 1 là Con (hoặc Con gái)
@@ -118,14 +121,16 @@ final List<NguoiThanModel> NguoiThanList = [
     maNguoiDung: 'nguoidung2',
     maNguoiThan: 'nguoidung1',
     moiQuanHe: 'Con gái',
-    trangThai: 'Đồng ý',
+    trangThai: 'trangthai2',
+    ngayTao: DateTime.now(),
   ),
   // Người dùng 3 (Mẹ) xem Người dùng 1 là Con (hoặc Con gái)
   NguoiThanModel(
     maNguoiDung: 'nguoidung3',
     maNguoiThan: 'nguoidung1',
     moiQuanHe: 'Con gái',
-    trangThai: 'Đồng ý',
+    trangThai: 'trangthai2',
+    ngayTao: DateTime.now(),
   ),
 ];
 final List<YeuCauCuuHoModel> listYeuCauCuuHo = [
@@ -197,6 +202,11 @@ final List<TinhTrangYeuCauModel> listTinhTrangYeuCau = [
   ),
   TinhTrangYeuCauModel(maTinhTrangYeuCau: 'tinhtrang6', tinhTrang: 'Đã Hủy'),
 ];
+final List<TrangThaiModel> listTrangThai = [
+  TrangThaiModel(maTrangThai: "trangthai1", trangThai: "Chờ Xem Xét"),
+  TrangThaiModel(maTrangThai: "trangthai2", trangThai: "Đồng ý"),
+  TrangThaiModel(maTrangThai: "trangthai3", trangThai: "Từ Chối"),
+];
 final List<List> ListAll = [
   NguoiDungList,
   GioiTinhList,
@@ -208,4 +218,5 @@ final List<List> ListAll = [
   listChiTietPhanCong,
   listLoaiYeuCau,
   listTinhTrangYeuCau,
+  listTrangThai,
 ];
