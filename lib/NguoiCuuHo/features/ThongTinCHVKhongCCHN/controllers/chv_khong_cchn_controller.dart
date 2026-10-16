@@ -1,102 +1,126 @@
+import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cuhokhancap/NguoiCuuHo/LuuAnh/luu_anh_service.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+
+import '../models/ho_so_cuu_ho_khong_cchn_model.dart';
 
 class CuuHoVienKhongCCHNController extends ChangeNotifier {
   final formKey = GlobalKey<FormState>();
 
-  // Controllers cho các ô nhập
-  final cccdController = TextEditingController(text: '079092004581');
-  final fullNameController = TextEditingController(text: 'BS. NGUYỄN VĂN A');
-  final cccdCardNoController = TextEditingController(text: '079092004581');
+  final fullNameController = TextEditingController();
+  final cccdCardNoController = TextEditingController();
   final dobController = TextEditingController(
     text: DateFormat('dd/MM/yyyy').format(DateTime.now()),
   );
   final cccdIssueDateController = TextEditingController(
     text: DateFormat('dd/MM/yyyy').format(DateTime.now()),
   );
-  final cccdIssuerController = TextEditingController(text: 'Bộ Y Tế');
-  final addressController = TextEditingController(
-    text: 'Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh',
-  );
-  final streetController = TextEditingController(text: 'Phường Bến Nghé');
-  String gender = 'Nam';
+  final cccdIssuerController = TextEditingController();
+  final addressController = TextEditingController();
 
-  // Address Selection
-  String selectedCity = 'TP. Hồ Chí Minh';
-  String selectedDistrict = 'Quận 1';
-
-  final List<String> cityList = [
-    'TP. Hồ Chí Minh',
-    'Hà Nội',
-    'Đà Nẵng',
-    'Cần Thơ',
-    'Hải Phòng',
-  ];
-
-  final Map<String, List<String>> districtMap = {
-    'TP. Hồ Chí Minh': [
-      'Quận 1',
-      'Quận 3',
-      'Quận 7',
-      'Quận Tân Bình',
-      'TP. Thủ Đức',
-    ],
-    'Hà Nội': [
-      'Quận Hoàn Kiếm',
-      'Quận Ba Đình',
-      'Quận Cầu Giấy',
-      'Quận Đống Đa',
-    ],
-    'Đà Nẵng': ['Quận Hải Châu', 'Quận Thanh Khê', 'Quận Sơn Trà'],
-    'Cần Thơ': ['Quận Ninh Kiều', 'Quận Bình Thủy'],
-    'Hải Phòng': ['Quận Hồng Bàng', 'Quận Lê Chân'],
-  };
-
-  // Section 2 Controllers
   final organizationController = TextEditingController();
   final summaryController = TextEditingController();
   final noteController = TextEditingController();
 
-  String selectedExperience = 'Khoảng 3  5 năm';
-  final List<String> experienceOptions = [
+  String gender = 'Nam';
+  bool isAgreed = false;
+
+  bool isSubmitting = false;
+  final LuuAnhService _luuAnhService = LuuAnhService();
+
+  String selectedExperience = '1 - 3 năm';
+  List<String> experienceOptions = [
     'Dưới 1 năm',
-    'Khoảng 1  3 năm',
-    'Khoảng 3  5 năm',
+    '1 - 3 năm',
+    '3 - 5 năm',
     'Trên 5 năm',
   ];
 
-  final List<String> availableSkills = [
-    'CPR & AED',
-    'Băng bó & Nẹp xương',
-    'Nghiệm pháp Heimlich',
-    'Sơ cứu bỏng',
+  List<String> availableSkills = [
+    'Ép tim CPR',
+    'Băng bó vết thương',
+    'Cố định gãy xương',
+    'Sơ cứu đuối nước',
+    'Xử lý bỏng ban đầu',
   ];
-  final Set<String> selectedSkills = {
-    'CPR & AED',
-    'Băng bó & Nẹp xương',
-    'Nghiệm pháp Heimlich',
-    'Sơ cứu bỏng',
-  };
+  List<String> selectedSkills = ['Ép tim CPR'];
 
-  bool isAgreed = false;
+  // Quản lý tối đa 3 ảnh thực tế
+  List<File> selectedPhotos = [];
+  final ImagePicker _picker = ImagePicker();
 
-  @override
-  void dispose() {
-    cccdController.dispose();
-    fullNameController.dispose();
-    cccdCardNoController.dispose();
-    dobController.dispose();
-    cccdIssueDateController.dispose();
-    cccdIssuerController.dispose();
-    addressController.dispose();
-    streetController.dispose();
-    organizationController.dispose();
-    summaryController.dispose();
-    noteController.dispose();
-    super.dispose();
+  // 🟢 Bổ sung tham số existingFullName vào constructor để tự điền Họ và tên
+  CuuHoVienKhongCCHNController({String? existingFullName}) {
+    fullNameController.text =
+        existingFullName ??
+        'Nguyễn Văn A'; // Tên mặc định hoặc lấy từ Auth/Profile
+    _initDefaultData();
+
+    // Lắng nghe sự thay đổi ô nhập liệu để cập nhật trạng thái Bật/Tắt nút bấm
+    cccdCardNoController.addListener(notifyListeners);
+    cccdIssuerController.addListener(notifyListeners);
+    organizationController.addListener(notifyListeners);
   }
 
-  // --- LOGIC METHOD ---
+  void _initDefaultData() {
+    cccdIssuerController.text =
+        'Cục Cảnh sát quản lý hành chính về trật tự xã hội';
+  }
+
+  /// Kiểm tra Form đã nhập ĐỦ THÔNG TIN BẮT BUỘC chưa
+  bool get isFormValid {
+    bool hasFullName = fullNameController.text.trim().isNotEmpty;
+    bool hasCccd = cccdCardNoController.text.trim().isNotEmpty;
+    bool hasIssuer = cccdIssuerController.text.trim().isNotEmpty;
+    bool hasOrg = organizationController.text.trim().isNotEmpty;
+    bool hasPhotos = selectedPhotos.isNotEmpty;
+
+    return isAgreed &&
+        hasFullName &&
+        hasCccd &&
+        hasIssuer &&
+        hasOrg &&
+        hasPhotos;
+  }
+
+  int _parseExperienceYears(String text) {
+    if (text.contains('Dưới 1 năm')) return 0;
+    if (text.contains('1 - 3 năm')) return 2;
+    if (text.contains('3 - 5 năm')) return 4;
+    if (text.contains('Trên 5 năm')) return 5;
+    return 0;
+  }
+
+  Future<void> pickPhoto(ImageSource source) async {
+    if (selectedPhotos.length >= 3) return;
+
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        selectedPhotos.add(File(pickedFile.path));
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Lỗi chọn ảnh: $e');
+    }
+  }
+
+  void removePhoto(int index) {
+    if (index >= 0 && index < selectedPhotos.length) {
+      selectedPhotos.removeAt(index);
+      notifyListeners();
+    }
+  }
+
   void setGender(String val) {
     gender = val;
     notifyListeners();
@@ -121,13 +145,69 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateFullAddress(String city, String district, String street) {
-    selectedCity = city;
-    selectedDistrict = district;
-    streetController.text = street;
-    addressController.text =
-        '${street.trim()}, $selectedDistrict, $selectedCity';
+  /// 🚀 Hàm xử lý lưu danh sách ảnh vào bảng LuuAnh & đẩy hồ sơ lên HoSoCuuHoKhongCCHN
+  Future<bool> submitHoSoToFirebase(String currentUserId) async {
+    if (!isFormValid) return false;
+
+    isSubmitting = true;
     notifyListeners();
+
+    try {
+      // 1. Lưu ảnh vào collection LuuAnh
+      if (selectedPhotos.isNotEmpty) {
+        for (int i = 0; i < selectedPhotos.length; i++) {
+          File photoFile = selectedPhotos[i];
+
+          String? base64String = await _luuAnhService.convertFileToBase64(
+            photoFile,
+          );
+
+          if (base64String != null) {
+            await _luuAnhService.saveLuuAnh(
+              maNguoiDung: currentUserId,
+              base64Image: base64String,
+              maPhanLoaiAnh: 'ANH_THUC_TE_KHONG_CCHN',
+              maMoTa: 'Ảnh minh chứng hoạt động cứu hộ thực tế ${i + 1}',
+            );
+          }
+        }
+      }
+
+      // 2. Tạo Model ánh xạ cấu trúc bảng HoSoCuuHoKhongCCHN
+      final hoSo = HoSoCuuHoKhongCCHNModel(
+        maNguoiDung: currentUserId,
+        soCanCuoc: cccdCardNoController.text.trim(),
+        ngayCapCanCuoc: dobController.text.trim(),
+        ngayHetHanCanCuoc: cccdIssueDateController.text.trim(),
+        coQuanCapCanCuoc: cccdIssuerController.text.trim(),
+        doiNhom: organizationController.text.trim(),
+        soNamHoatDongCuuHo: _parseExperienceYears(selectedExperience),
+        soLanThamGiaCuuHo: 0,
+        diemDanhGia: 0.0,
+        tongLuotDanhGia: 0,
+        ghiChu: noteController.text.trim(),
+        thoiGianOnline: DateTime.now().toIso8601String(),
+        soLuongCaDuocPhat: 0,
+        soluongCaDaNhan: 0,
+        soLuongDaKhongNhan: 0,
+        soLuongCaHoanThanh: 0,
+        maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
+      );
+
+      // 3. Đẩy dữ liệu lên Firestore
+      await FirebaseFirestore.instance
+          .collection('HoSoCuuHoKhongCCHN')
+          .doc(currentUserId)
+          .set(hoSo.toMap());
+
+      return true;
+    } catch (e) {
+      debugPrint('🔴 Lỗi gửi hồ sơ không CCHN: $e');
+      return false;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
   }
 
   Future<void> selectDate(
@@ -144,16 +224,8 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: DateTime(1940),
-      lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFFC80815)),
-          ),
-          child: child!,
-        );
-      },
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
     );
 
     if (picked != null) {
@@ -162,165 +234,19 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     }
   }
 
-  // Dialog Chọn Địa Chỉ
-  void showAddressDialog(BuildContext context) {
-    String tempCity = selectedCity;
-    String tempDistrict = selectedDistrict;
+  void showAddressDialog(BuildContext context) {}
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            List<String> currentDistricts = districtMap[tempCity] ?? [];
-            if (!currentDistricts.contains(tempDistrict)) {
-              tempDistrict = currentDistricts.first;
-            }
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Text(
-                'Chọn địa bàn thường trú',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Thành phố / Tỉnh',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: tempCity,
-                          isExpanded: true,
-                          items: cityList
-                              .map(
-                                (e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text(
-                                    e,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setDialogState(() {
-                                tempCity = val;
-                                tempDistrict = districtMap[val]!.first;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Quận / Huyện',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEEF2FF),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: tempDistrict,
-                          isExpanded: true,
-                          items: currentDistricts
-                              .map(
-                                (e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text(
-                                    e,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setDialogState(() {
-                                tempDistrict = val;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Số nhà / Tên đường / Phường',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 4),
-                    TextFormField(
-                      controller: streetController,
-                      style: const TextStyle(fontSize: 13),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: 'Nhập phường, tên đường...',
-                        filled: true,
-                        fillColor: const Color(0xFFEEF2FF),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.all(10),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Hủy',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00897B),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () {
-                    updateFullAddress(
-                      tempCity,
-                      tempDistrict,
-                      streetController.text,
-                    );
-                    Navigator.pop(context);
-                  },
-                  child: const Text(
-                    'Xác nhận',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  @override
+  void dispose() {
+    fullNameController.dispose();
+    cccdCardNoController.dispose();
+    dobController.dispose();
+    cccdIssueDateController.dispose();
+    cccdIssuerController.dispose();
+    addressController.dispose();
+    organizationController.dispose();
+    summaryController.dispose();
+    noteController.dispose();
+    super.dispose();
   }
 }

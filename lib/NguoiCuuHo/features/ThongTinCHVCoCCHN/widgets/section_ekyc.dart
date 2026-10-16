@@ -6,15 +6,21 @@ import '../controllers/chv_coCCHN_controller.dart';
 class SectionEkyc extends StatelessWidget {
   const SectionEkyc({super.key});
 
-  /// Hàm hiển thị Dialog chọn Cơ quan cấp đẹp & hiện đại hơn
+  /// Danh sách các cơ quan cấp chuẩn
+  static const List<String> issuers = [
+    'Cục Cảnh sát quản lý hành chính về trật tự xã hội',
+    'Bộ Công an',
+  ];
+
+  /// Hàm hiển thị Dialog chọn Cơ quan cấp
   void _showIssuerSelectionDialog(
     BuildContext context,
     TextEditingController controller,
   ) {
-    final List<String> issuers = [
-      'Cục Cảnh sát quản lý hành chính về trật tự xã hội',
-      'Bộ Công an',
-    ];
+    // Nếu controller chưa có dữ liệu, mặc định chọn phần tử đầu tiên
+    if (controller.text.isEmpty && issuers.isNotEmpty) {
+      controller.text = issuers.first;
+    }
 
     List<String> filteredIssuers = List.from(issuers);
     final searchController = TextEditingController();
@@ -62,7 +68,7 @@ class SectionEkyc extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 8),
-                    // Ô tìm kiếm được thiết kế lại gọn gàng
+                    // Ô tìm kiếm
                     TextField(
                       controller: searchController,
                       style: const TextStyle(fontSize: 13),
@@ -124,7 +130,7 @@ class SectionEkyc extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 12),
-                    // Danh sách hiển thị dạng card mượt mà
+                    // Danh sách hiển thị dạng card
                     Flexible(
                       child: filteredIssuers.isEmpty
                           ? Padding(
@@ -246,6 +252,11 @@ class SectionEkyc extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<CuuHoVienCoCCHNController>();
 
+    // 🟢 Đảm bảo vị trí đầu tiên luôn được chọn làm giá trị mặc định ban đầu
+    if (controller.cccdIssuerController.text.isEmpty && issuers.isNotEmpty) {
+      controller.cccdIssuerController.text = issuers.first;
+    }
+
     return _buildCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,8 +302,9 @@ class SectionEkyc extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _buildFormGroup(
-                  label: 'Số thẻ CCCD gắn chip',
+                  label: 'Số CCCD hoặc Căn Cước',
                   controller: controller.cccdCardNoController,
+                  hintText: 'xxxxxxxxxxxx',
                 ),
               ),
             ],
@@ -304,7 +316,6 @@ class SectionEkyc extends StatelessWidget {
                 child: _buildFormGroup(
                   label: 'Ngày cấp CCCD',
                   controller: controller.dobController,
-                  readOnly: true,
                   onTap: () =>
                       controller.selectDate(context, controller.dobController),
                   suffixIcon: const Icon(
@@ -319,7 +330,6 @@ class SectionEkyc extends StatelessWidget {
                 child: _buildFormGroup(
                   label: 'Ngày hết hạn CCCD',
                   controller: controller.cccdIssueDateController,
-                  readOnly: true,
                   onTap: () => controller.selectDate(
                     context,
                     controller.cccdIssueDateController,
@@ -337,7 +347,6 @@ class SectionEkyc extends StatelessWidget {
           _buildFormGroup(
             label: 'Cơ quan cấp',
             controller: controller.cccdIssuerController,
-            readOnly: true,
             onTap: () => _showIssuerSelectionDialog(
               context,
               controller.cccdIssuerController,
@@ -380,6 +389,7 @@ class SectionEkyc extends StatelessWidget {
     bool readOnly = false,
     VoidCallback? onTap,
     Widget? suffixIcon,
+    String? hintText,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,6 +407,12 @@ class SectionEkyc extends StatelessWidget {
           ),
           decoration: InputDecoration(
             isDense: true,
+            hintText: hintText,
+            hintStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.normal,
+              color: Colors.grey.shade400,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 10,

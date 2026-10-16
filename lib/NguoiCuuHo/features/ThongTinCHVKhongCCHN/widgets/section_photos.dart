@@ -1,9 +1,57 @@
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThongTinCHVKhongCCHN/controllers/chv_khong_cchn_controller.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../controllers/chv_khong_cchn_controller.dart';
 
 class SectionPhotos extends StatelessWidget {
   const SectionPhotos({super.key});
+
+  void _showImagePickerModal(
+    BuildContext context,
+    CuuHoVienKhongCCHNController controller,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Thêm ảnh thực tế (Tối đa 3 ảnh)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: Colors.teal),
+                  title: const Text('Chọn từ thư viện ảnh'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    controller.pickPhoto(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                  title: const Text('Chụp ảnh mới từ Camera'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    controller.pickPhoto(ImageSource.camera);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,18 +91,20 @@ class SectionPhotos extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Ảnh hoạt động thiện nguyện thực tế',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),
               Text(
-                'Đã chọn 2/4 ảnh',
+                'Đã chọn ${controller.selectedPhotos.length}/3 ảnh',
                 style: TextStyle(
                   fontSize: 10,
-                  color: Color(0xFF00897B),
+                  color: controller.selectedPhotos.length == 3
+                      ? Colors.orange.shade800
+                      : const Color(0xFF00897B),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -62,7 +112,7 @@ class SectionPhotos extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           const Text(
-            'Hình ảnh minh chứng tham gia sơ cứu, diễn tập hoặc hỗ trợ cộng đồng (Tối đa 4 ảnh, định dạng JPG/PNG)',
+            'Hình ảnh minh chứng tham gia sơ cứu, diễn tập hoặc hỗ trợ cộng đồng (Tối đa 3 ảnh)',
             style: TextStyle(fontSize: 10, color: Colors.black45),
           ),
           const SizedBox(height: 8),
@@ -70,17 +120,22 @@ class SectionPhotos extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildPhotoThumbnail(
-                  'Ảnh sơ cứu tai nạn',
-                  'https://picsum.photos/200/200?random=1',
-                ),
-                const SizedBox(width: 8),
-                _buildPhotoThumbnail(
-                  'Tập huấn Red Cross',
-                  'https://picsum.photos/200/200?random=2',
-                ),
-                const SizedBox(width: 8),
-                _buildAddPhotoButton(),
+                ...controller.selectedPhotos.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  File file = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: _buildPhotoThumbnail(
+                      file,
+                      onDelete: () => controller.removePhoto(index),
+                    ),
+                  );
+                }),
+                if (controller.selectedPhotos.length < 3)
+                  InkWell(
+                    onTap: () => _showImagePickerModal(context, controller),
+                    child: _buildAddPhotoButton(),
+                  ),
               ],
             ),
           ),
@@ -95,8 +150,7 @@ class SectionPhotos extends StatelessWidget {
             maxLines: 3,
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
-              hintText:
-                  '............................\n............................',
+              hintText: 'Nhập ghi chú hoặc thông tin người xác minh...',
               hintStyle: const TextStyle(color: Colors.grey),
               filled: true,
               fillColor: const Color(0xFFEEF2FF),
@@ -150,59 +204,31 @@ class SectionPhotos extends StatelessWidget {
     );
   }
 
-  Widget _buildPhotoThumbnail(String label, String imageUrl) {
+  Widget _buildPhotoThumbnail(File file, {required VoidCallback onDelete}) {
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            width: 100,
-            height: 100,
-            color: Colors.grey.shade300,
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.image, color: Colors.grey),
-            ),
-          ),
-        ),
-        Container(
-          width: 100,
-          height: 100,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            gradient: LinearGradient(
-              colors: [Colors.black.withOpacity(0.6), Colors.transparent],
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: 6,
-          left: 6,
-          right: 6,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-            ),
-            maxLines: 2,
+            width: 90,
+            height: 90,
+            color: Colors.grey.shade200,
+            child: Image.file(file, fit: BoxFit.cover),
           ),
         ),
         Positioned(
           top: 4,
           right: 4,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: const BoxDecoration(
-              color: Colors.black54,
-              shape: BoxShape.circle,
+          child: GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, color: Colors.white, size: 14),
             ),
-            child: const Icon(Icons.close, color: Colors.white, size: 12),
           ),
         ),
       ],
@@ -211,20 +237,20 @@ class SectionPhotos extends StatelessWidget {
 
   Widget _buildAddPhotoButton() {
     return Container(
-      width: 100,
-      height: 100,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
         color: const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Colors.red.shade200,
+          color: Colors.teal.shade200,
           style: BorderStyle.solid,
         ),
       ),
       child: const Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.add_a_photo_outlined, color: Colors.teal, size: 24),
+          Icon(Icons.add_a_photo_outlined, color: Colors.teal, size: 22),
           SizedBox(height: 4),
           Text(
             'Thêm ảnh',

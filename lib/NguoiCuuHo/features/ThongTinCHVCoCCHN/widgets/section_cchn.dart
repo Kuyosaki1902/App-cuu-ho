@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 import '../controllers/chv_coCCHN_controller.dart';
 
 class SectionCchn extends StatelessWidget {
   const SectionCchn({super.key});
 
-  /// Hàm dùng chung hiển thị Dialog chọn dữ liệu có ô tìm kiếm
-  void _showSelectionDialog({
+  /// Hàm hiển thị Dialog chọn Cơ quan cấp có ô tìm kiếm
+  void _showIssuerSelectionDialog({
     required BuildContext context,
     required String title,
     required IconData icon,
@@ -59,7 +59,6 @@ class SectionCchn extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 8),
-                    // Ô tìm kiếm
                     TextField(
                       controller: searchController,
                       style: const TextStyle(fontSize: 13),
@@ -121,7 +120,6 @@ class SectionCchn extends StatelessWidget {
                       },
                     ),
                     const SizedBox(height: 12),
-                    // Danh sách lựa chọn
                     Flexible(
                       child: filteredItems.isEmpty
                           ? Padding(
@@ -287,18 +285,28 @@ class SectionCchn extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          // 🟢 Phần nhập Số CCHN + Nút Đối soát BYT
           _buildFieldLabel('Số hiệu chứng chỉ hành nghề', isRequired: true),
           const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
                 child: _buildInputField(
+                  hintText: 'xxxxxx/xxx-CCHN',
                   controller: controller.cchnNoController,
-                  suffixIcon: const Icon(
-                    Icons.check_circle,
-                    color: Color(0xFF00897B),
-                    size: 18,
-                  ),
+                  suffixIcon: controller.isCchnValid == true
+                      ? const Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF00897B),
+                          size: 18,
+                        )
+                      : controller.isCchnValid == false
+                      ? const Icon(
+                          Icons.cancel,
+                          color: Colors.redAccent,
+                          size: 18,
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(width: 8),
@@ -313,75 +321,86 @@ class SectionCchn extends StatelessWidget {
                     vertical: 12,
                   ),
                 ),
-                onPressed: () {},
-                icon: const Icon(Icons.sync, size: 16, color: Colors.white),
+                onPressed: controller.isVerifying
+                    ? null
+                    : () => controller.verifyCchnFormat(),
+                icon: controller.isVerifying
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.sync, size: 16, color: Colors.white),
                 label: const Text(
-                  'Đối soát BYT',
+                  'Kiểm tra định dạng CCHN',
                   style: TextStyle(fontSize: 11, color: Colors.white),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE0F2F1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.check_circle_outline,
-                  color: Color(0xFF00897B),
-                  size: 16,
-                ),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Đã đối soát cổng CSDL Quốc gia Y tế: Hợp lệ & Đang hiệu lực',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF004D40)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
 
-          // 🟢 Chuyên ngành & Chức vụ (Mở Dialog chọn)
+          // 🟢 Thẻ phản hồi kết quả kiểm tra định dạng
+          if (controller.isCchnValid != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: controller.isCchnValid!
+                    ? const Color(0xFFE0F2F1)
+                    : const Color(0xFFFFEBEE),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    controller.isCchnValid!
+                        ? Icons.check_circle_outline
+                        : Icons.error_outline,
+                    color: controller.isCchnValid!
+                        ? const Color(0xFF00897B)
+                        : Colors.redAccent,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      controller.isCchnValid!
+                          ? 'Mã CCHN định dạng hợp lệ'
+                          : 'Mã CCHN không đúng định dạng chuẩn\n(Mẫu chuẩn: 010482/HCM-CCHN)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: controller.isCchnValid!
+                            ? const Color(0xFF004D40)
+                            : Colors.red.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          // 🟢 Chuyên ngành & Chức vụ (Đã chuyển thành ô NHẬP VĂN BẢN)
           Row(
             children: [
               Expanded(
-                child: _buildSelectField(
+                child: _buildFormGroup(
                   label: 'Chuyên ngành',
                   isRequired: true,
-                  value: controller.selectedScope,
-                  placeholder: 'Chọn chuyên ngành',
-                  onTap: () => _showSelectionDialog(
-                    context: context,
-                    title: 'chuyên ngành',
-                    icon: Icons.medical_services_outlined,
-                    items: controller.scopeList,
-                    currentValue: controller.selectedScope,
-                    onSelected: (val) => controller.setScope(val),
-                  ),
+                  controller: controller.scopeController,
+                  hintText: 'Nhập chuyên ngành...',
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildSelectField(
+                child: _buildFormGroup(
                   label: 'Chức vụ',
                   isRequired: true,
-                  value: controller.selectedPosition,
-                  placeholder: 'Chọn chức vụ',
-                  onTap: () => _showSelectionDialog(
-                    context: context,
-                    title: 'chức vụ',
-                    icon: Icons.work_outline,
-                    items: controller.positionList,
-                    currentValue: controller.selectedPosition,
-                    onSelected: (val) => controller.setPosition(val),
-                  ),
+                  controller: controller.positionController,
+                  hintText: 'Nhập chức vụ...',
                 ),
               ),
             ],
@@ -397,7 +416,7 @@ class SectionCchn extends StatelessWidget {
                   isRequired: true,
                   value: controller.selectedCchnIssuer,
                   placeholder: 'Chọn cơ quan cấp',
-                  onTap: () => _showSelectionDialog(
+                  onTap: () => _showIssuerSelectionDialog(
                     context: context,
                     title: 'cơ quan cấp',
                     icon: Icons.account_balance_outlined,
@@ -432,7 +451,7 @@ class SectionCchn extends StatelessWidget {
     );
   }
 
-  /// Widget tùy chỉnh cho các ô chọn kích hoạt Dialog
+  /// Widget tùy chỉnh cho ô chọn kích hoạt Dialog
   Widget _buildSelectField({
     required String label,
     required bool isRequired,
@@ -521,6 +540,7 @@ class SectionCchn extends StatelessWidget {
     required TextEditingController controller,
     bool isRequired = false,
     bool readOnly = false,
+    String? hintText,
     VoidCallback? onTap,
     Widget? suffixIcon,
   }) {
@@ -532,6 +552,7 @@ class SectionCchn extends StatelessWidget {
         _buildInputField(
           controller: controller,
           readOnly: readOnly,
+          hintText: hintText,
           onTap: onTap,
           suffixIcon: suffixIcon,
         ),
@@ -542,6 +563,7 @@ class SectionCchn extends StatelessWidget {
   Widget _buildInputField({
     required TextEditingController controller,
     bool readOnly = false,
+    String? hintText,
     VoidCallback? onTap,
     Widget? suffixIcon,
   }) {
@@ -556,6 +578,12 @@ class SectionCchn extends StatelessWidget {
       ),
       decoration: InputDecoration(
         isDense: true,
+        hintText: hintText,
+        hintStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.normal,
+          color: Colors.grey.shade400,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
           vertical: 10,
