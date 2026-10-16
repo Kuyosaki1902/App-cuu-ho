@@ -40,6 +40,10 @@ dependencies:
   cloud_firestore: ^6.10.0
   intl: ^0.20.3
   permission_handler: ^13.0.2
+  image_picker: ^1.2.4
+  record: ^7.1.2
+  path_provider: ^2.1.6
+  geolocator: ^14.1.1
 
 
 dev_dependencies:

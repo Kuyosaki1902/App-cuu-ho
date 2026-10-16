@@ -4,6 +4,7 @@ import 'package:cuhokhancap/user/DangKy.dart';
 import 'package:cuhokhancap/user/TrangChuNguoiDung.dart'; 
 import 'package:cuhokhancap/firebase/firebase_service.dart'; 
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
+import 'package:cuhokhancap/user/QuenMatKhau.dart';
 
 class DangNhap extends StatefulWidget {
   const DangNhap({super.key});
@@ -235,7 +236,13 @@ class _DangNhapState extends State<DangNhap> {
             children: [
               const Text('Mật khẩu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               InkWell(
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const QuenMatKhau()),
+                  );
+
+                },
                 child: const Text('Quên mật khẩu?', style: TextStyle(color: Color(0xFF1565C0), fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],

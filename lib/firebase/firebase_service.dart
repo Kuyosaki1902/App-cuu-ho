@@ -93,4 +93,60 @@ class FirebaseService {
       return null;
     }
   }
+
+  // THÊM MỚI: Hàm tìm tài khoản dựa trên SĐT hoặc Email
+  Future<NguoiDungModel?> timTaiKhoanQuenMatKhau(String taiKhoan) async {
+    try {
+      // 1. Thử tìm theo Số điện thoại
+      QuerySnapshot phoneQuery = await _firestore
+          .collection('NguoiDung')
+          .where('soDienThoai', isEqualTo: taiKhoan)
+          .get();
+
+      if (phoneQuery.docs.isNotEmpty) {
+        return NguoiDungModel.fromMap(phoneQuery.docs.first.data() as Map<String, dynamic>);
+      }
+
+      // 2. Thử tìm theo Email
+      QuerySnapshot emailQuery = await _firestore
+          .collection('NguoiDung')
+          .where('email', isEqualTo: taiKhoan)
+          .get();
+
+      if (emailQuery.docs.isNotEmpty) {
+        return NguoiDungModel.fromMap(emailQuery.docs.first.data() as Map<String, dynamic>);
+      }
+
+      return null; // Không tìm thấy
+    } catch (e) {
+      print('Lỗi khi tìm tài khoản quên mật khẩu: $e');
+      return null;
+    }
+  }
+
+  // THÊM MỚI: Hàm cập nhật mật khẩu mới lên Firestore
+  Future<bool> capNhatMatKhau(String maNguoiDung, String matKhauMoi) async {
+    try {
+      // Tìm document đang chứa maNguoiDung (vì doc ID có thể khác maNguoiDung tùy cách bạn lưu)
+      QuerySnapshot query = await _firestore
+          .collection('NguoiDung')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        // Lấy document ID thực tế
+        String docId = query.docs.first.id;
+        
+        // Cập nhật trường matKhau
+        await _firestore.collection('NguoiDung').doc(docId).update({
+          'matKhau': matKhauMoi,
+        });
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Lỗi khi cập nhật mật khẩu: $e');
+      return false;
+    }
+  }
 }
