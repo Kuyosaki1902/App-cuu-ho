@@ -1,25 +1,5 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const CommunityLeaderboardApp());
-}
-
-class CommunityLeaderboardApp extends StatelessWidget {
-  const CommunityLeaderboardApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFA7B1C2),
-        fontFamily: 'Roboto',
-      ),
-      home: const CommunityLeaderboardScreen(),
-    );
-  }
-}
-
 class RescuerLeaderboardModel {
   final int rank;
   final String name;
@@ -42,16 +22,14 @@ class RescuerLeaderboardModel {
   });
 }
 
-class CommunityLeaderboardScreen extends StatefulWidget {
-  const CommunityLeaderboardScreen({super.key});
+class BangXepHangCuuHo extends StatefulWidget {
+  const BangXepHangCuuHo({super.key});
 
   @override
-  State<CommunityLeaderboardScreen> createState() =>
-      _CommunityLeaderboardScreenState();
+  State<BangXepHangCuuHo> createState() => _BangXepHangCuuHoState();
 }
 
-class _CommunityLeaderboardScreenState
-    extends State<CommunityLeaderboardScreen> {
+class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
   int selectedTab = 1; // 0: Tuần này, 1: Tháng này, 2: Tất cả
 
   final List<String> tabs = ['Tuần này', 'Tháng này', 'Tất cả'];

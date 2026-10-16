@@ -3,10 +3,136 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/models/nguoidungmodel.dart';
 
+// Class chứa kết quả tìm kiếm kèm trạng thái quan hệ
+class SearchUserResult {
+  final NguoiDungModel user;
+  final String status; // 'connected' | 'pending' | 'received' | 'none'
+
+  SearchUserResult({required this.user, required this.status});
+}
+
 class NguoiThanController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // 1. STREAM LẤY DANH SÁCH NGƯỜI THÂN ĐÃ KẾT NỐI (Chỉ lấy maTrangThai == 'trangthai2')
+  // 1. TÌM KIẾM & KIỂM TRA TRẠNG THÁI MỐI QUAN HỆ CÙNG LÚC
+  Future<SearchUserResult?> searchUserByPhoneOrEmail({
+    required String query,
+    required String currentUserId,
+  }) async {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) return null;
+
+    DocumentSnapshot<Map<String, dynamic>>? userDocSnap;
+
+    // A. Query tìm NguoiDung theo SĐT
+    final phoneQuery = await _firestore
+        .collection('NguoiDung')
+        .where('soDienThoai', isEqualTo: cleanQuery)
+        .limit(1)
+        .get();
+
+    if (phoneQuery.docs.isNotEmpty) {
+      userDocSnap = phoneQuery.docs.first;
+    } else {
+      // B. Query tìm NguoiDung theo Email nếu SĐT không có
+      final emailQuery = await _firestore
+          .collection('NguoiDung')
+          .where('email', isEqualTo: cleanQuery)
+          .limit(1)
+          .get();
+
+      if (emailQuery.docs.isNotEmpty) {
+        userDocSnap = emailQuery.docs.first;
+      }
+    }
+
+    if (userDocSnap == null || userDocSnap.data() == null) return null;
+
+    final data = userDocSnap.data()!;
+    final String targetUserId =
+        (data['maNguoiDung'] != null &&
+            data['maNguoiDung'].toString().isNotEmpty)
+        ? data['maNguoiDung']
+        : userDocSnap.id;
+    data['maNguoiDung'] = targetUserId;
+
+    final userModel = NguoiDungModel.fromMap(data);
+
+    // C. GỘP LẤY TRẠNG THÁI QUAN HỆ PHÍA MÌNH VÀ ĐỐI PHƯƠNG CÙNG LÚC (Parallel Execution)
+    String status = 'none';
+    if (currentUserId.isNotEmpty && targetUserId.isNotEmpty) {
+      final results = await Future.wait([
+        _firestore
+            .collection('NguoiThan')
+            .doc(currentUserId)
+            .collection('DanhSachNguoiThan')
+            .doc(targetUserId)
+            .get(),
+        _firestore
+            .collection('NguoiThan')
+            .doc(targetUserId)
+            .collection('DanhSachNguoiThan')
+            .doc(currentUserId)
+            .get(),
+      ]);
+
+      final myDoc = results[0];
+      final targetDoc = results[1];
+
+      final myStatus = myDoc.exists ? (myDoc.data()?['trangThai'] ?? '') : '';
+      final targetStatus = targetDoc.exists
+          ? (targetDoc.data()?['trangThai'] ?? '')
+          : '';
+
+      if (myStatus == 'trangthai2' && targetStatus == 'trangthai2') {
+        status = 'connected'; // Đã là người thân
+      } else if (myStatus == 'trangthai2' && targetStatus == 'trangthai1') {
+        status = 'pending'; // Đã gửi yêu cầu
+      } else if (myStatus == 'trangthai1') {
+        status = 'received'; // Đã nhận yêu cầu từ đối phương
+      }
+    }
+
+    return SearchUserResult(user: userModel, status: status);
+  }
+
+  // 2. GỬI YÊU CẦU SONG SONG 2 BÊN
+  Future<void> sendRelationRequest({
+    required String currentUserId,
+    required String targetUserId,
+    required String myRelation,
+    required String targetRelation,
+  }) async {
+    final batch = _firestore.batch();
+
+    final senderRef = _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(targetUserId);
+
+    batch.set(senderRef, {
+      'moiQuanHe': myRelation,
+      'trangThai': 'trangthai2',
+      'ngayTao': FieldValue.serverTimestamp(),
+    });
+
+    final receiverRef = _firestore
+        .collection('NguoiThan')
+        .doc(targetUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(currentUserId);
+
+    batch.set(receiverRef, {
+      'moiQuanHe': targetRelation,
+      'trangThai': 'trangthai1',
+      'ngayTao': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
+
+  // 3. STREAM LẤY DANH SÁCH NGƯỜI THÂN ĐÃ KẾT NỐI
   Stream<List<Map<String, dynamic>>> getRelativesStream(String currentUserID) {
     if (currentUserID.trim().isEmpty) return Stream.value([]);
 
@@ -14,7 +140,7 @@ class NguoiThanController {
         .collection('NguoiThan')
         .doc(currentUserID)
         .collection('DanhSachNguoiThan')
-        .where('trangThai', isEqualTo: 'trangthai2') // trangthai2: Đồng ý
+        .where('trangThai', isEqualTo: 'trangthai2')
         .snapshots()
         .asyncMap((snapshot) async {
           if (snapshot.docs.isEmpty) return [];
@@ -24,6 +150,18 @@ class NguoiThanController {
               final data = doc.data();
               final String maNguoiThan = doc.id;
               final String moiQuanHe = data['moiQuanHe'] ?? 'Chưa xác định';
+
+              final otherDoc = await _firestore
+                  .collection('NguoiThan')
+                  .doc(maNguoiThan)
+                  .collection('DanhSachNguoiThan')
+                  .doc(currentUserID)
+                  .get();
+
+              if (!otherDoc.exists ||
+                  otherDoc.data()?['trangThai'] != 'trangthai2') {
+                return null;
+              }
 
               final userDoc = await _firestore
                   .collection('NguoiDung')
@@ -53,27 +191,7 @@ class NguoiThanController {
         });
   }
 
-  // 2. GỬI YÊU CẦU: TẠO BẢN GHI PHÍA NGƯỜI GỬI VỚI maTrangThai = 'trangthai1' (Chờ Xem Xét)
-  Future<void> sendRelationRequest({
-    required String currentUserId,
-    required String targetUserId,
-    required String myRelation,
-    required String targetRelation,
-  }) async {
-    await _firestore
-        .collection('NguoiThan')
-        .doc(currentUserId)
-        .collection('DanhSachNguoiThan')
-        .doc(targetUserId)
-        .set({
-          'moiQuanHe': myRelation,
-          'targetRelation': targetRelation,
-          'trangThai': 'trangthai1', // trangthai1: Chờ Xem Xét
-          'ngayTao': FieldValue.serverTimestamp(),
-        });
-  }
-
-  // 3. STREAM LẤY DANH SÁCH YÊU CẦU ĐÃ GỬI VÀ ĐÃ NHẬN
+  // 4. STREAM LẤY DANH SÁCH YÊU CẦU PENDING
   Stream<List<Map<String, dynamic>>> getPendingRequestsStream(
     String currentUserId,
   ) {
@@ -88,65 +206,45 @@ class NguoiThanController {
           List<Map<String, dynamic>> requestsList = [];
 
           try {
-            // A. XỬ LÝ YÊU CẦU ĐÃ GỬI (Gõ yêu cầu có trangThai == 'trangthai1')
             for (var doc in mySnapshot.docs) {
               final data = doc.data();
+              final String otherUserId = doc.id;
+
               if (data['trangThai'] == 'trangthai1') {
-                final targetId = doc.id;
                 final userDoc = await _firestore
                     .collection('NguoiDung')
-                    .doc(targetId)
+                    .doc(otherUserId)
                     .get();
-                if (userDoc.exists && userDoc.data() != null) {
-                  DateTime? ngayTao;
-                  if (data['ngayTao'] is Timestamp) {
-                    ngayTao = (data['ngayTao'] as Timestamp).toDate();
-                  }
 
+                if (userDoc.exists && userDoc.data() != null) {
                   requestsList.add({
-                    'type': 'sent',
+                    'type': 'received',
                     'user': NguoiDungModel.fromMap(userDoc.data()!),
                     'moiQuanHe': data['moiQuanHe'] ?? '',
-                    'targetId': targetId,
-                    'ngayTao': ngayTao,
+                    'senderId': otherUserId,
                   });
                 }
-              }
-            }
+              } else if (data['trangThai'] == 'trangthai2') {
+                final otherDoc = await _firestore
+                    .collection('NguoiThan')
+                    .doc(otherUserId)
+                    .collection('DanhSachNguoiThan')
+                    .doc(currentUserId)
+                    .get();
 
-            // B. XỬ LÝ YÊU CẦU ĐÃ NHẬN (Quét danh sách tìm người dùng gửi yêu cầu 'trangthai1' tới mình)
-            final allUsersDoc = await _firestore.collection('NguoiThan').get();
-            for (var userParentDoc in allUsersDoc.docs) {
-              final senderId = userParentDoc.id;
-              if (senderId == currentUserId) continue;
-
-              final checkReceivedDoc = await _firestore
-                  .collection('NguoiThan')
-                  .doc(senderId)
-                  .collection('DanhSachNguoiThan')
-                  .doc(currentUserId)
-                  .get();
-
-              if (checkReceivedDoc.exists && checkReceivedDoc.data() != null) {
-                final data = checkReceivedDoc.data()!;
-                if (data['trangThai'] == 'trangthai1') {
+                if (otherDoc.exists &&
+                    otherDoc.data()?['trangThai'] == 'trangthai1') {
                   final userDoc = await _firestore
                       .collection('NguoiDung')
-                      .doc(senderId)
+                      .doc(otherUserId)
                       .get();
-                  if (userDoc.exists && userDoc.data() != null) {
-                    DateTime? ngayTao;
-                    if (data['ngayTao'] is Timestamp) {
-                      ngayTao = (data['ngayTao'] as Timestamp).toDate();
-                    }
 
+                  if (userDoc.exists && userDoc.data() != null) {
                     requestsList.add({
-                      'type': 'received',
+                      'type': 'sent',
                       'user': NguoiDungModel.fromMap(userDoc.data()!),
-                      'moiQuanHe':
-                          data['targetRelation'] ?? data['moiQuanHe'] ?? '',
-                      'senderId': senderId,
-                      'ngayTao': ngayTao,
+                      'moiQuanHe': data['moiQuanHe'] ?? '',
+                      'targetId': otherUserId,
                     });
                   }
                 }
@@ -160,77 +258,36 @@ class NguoiThanController {
         });
   }
 
-  // 4. CHẤP NHẬN YÊU CẦU -> Cập nhật maTrangThai thành 'trangthai2' (Đồng ý)
+  // 5. CHẤP NHẬN YÊU CẦU
   Future<void> acceptRequest(String currentUserId, String senderId) async {
-    final batch = _firestore.batch();
-
-    final senderRef = _firestore
-        .collection('NguoiThan')
-        .doc(senderId)
-        .collection('DanhSachNguoiThan')
-        .doc(currentUserId);
-
-    final snap = await senderRef.get();
-    if (snap.exists) {
-      final data = snap.data()!;
-      final targetRel = data['targetRelation'] ?? 'Chưa xác định';
-
-      // 1. Đổi phía người gửi thành 'trangthai2' (Đồng ý)
-      batch.update(senderRef, {'trangThai': 'trangthai2'});
-
-      // 2. Tạo bản ghi cho người nhận với 'trangthai2' (Đồng ý)
-      final myRef = _firestore
-          .collection('NguoiThan')
-          .doc(currentUserId)
-          .collection('DanhSachNguoiThan')
-          .doc(senderId);
-
-      batch.set(myRef, {
-        'moiQuanHe': targetRel,
-        'trangThai': 'trangthai2',
-        'ngayTao': FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
-    }
-  }
-
-  // 5. TỪ CHỐI / THU HỒI -> Xóa sạch bản ghi
-  Future<void> rejectOrCancelRequest(String senderId, String targetId) async {
     await _firestore
         .collection('NguoiThan')
-        .doc(senderId)
+        .doc(currentUserId)
         .collection('DanhSachNguoiThan')
-        .doc(targetId)
-        .delete();
+        .doc(senderId)
+        .update({'trangThai': 'trangthai2'});
   }
 
-  // Tìm kiếm người dùng theo 100% SĐT/Email
-  Future<NguoiDungModel?> searchUserByPhoneOrEmail(String query) async {
-    final cleanQuery = query.trim();
-    if (cleanQuery.isEmpty) return null;
+  // 6. TỪ CHỐI / THU HỒI -> XÓA 2 BÊN
+  Future<void> rejectOrCancelRequest(String user1, String user2) async {
+    final batch = _firestore.batch();
 
-    final phoneQuery = await _firestore
-        .collection('NguoiDung')
-        .where('soDienThoai', isEqualTo: cleanQuery)
-        .limit(1)
-        .get();
+    final ref1 = _firestore
+        .collection('NguoiThan')
+        .doc(user1)
+        .collection('DanhSachNguoiThan')
+        .doc(user2);
 
-    if (phoneQuery.docs.isNotEmpty) {
-      return NguoiDungModel.fromMap(phoneQuery.docs.first.data());
-    }
+    final ref2 = _firestore
+        .collection('NguoiThan')
+        .doc(user2)
+        .collection('DanhSachNguoiThan')
+        .doc(user1);
 
-    final emailQuery = await _firestore
-        .collection('NguoiDung')
-        .where('email', isEqualTo: cleanQuery)
-        .limit(1)
-        .get();
+    batch.delete(ref1);
+    batch.delete(ref2);
 
-    if (emailQuery.docs.isNotEmpty) {
-      return NguoiDungModel.fromMap(emailQuery.docs.first.data());
-    }
-
-    return null;
+    await batch.commit();
   }
 
   int tinhTuoi(DateTime ngaySinh) {

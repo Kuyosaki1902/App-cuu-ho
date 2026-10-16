@@ -1,33 +1,13 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const EmergencySearchApp());
-}
-
-class EmergencySearchApp extends StatelessWidget {
-  const EmergencySearchApp({super.key});
+class GiaoDienDangTimKiem extends StatefulWidget {
+  const GiaoDienDangTimKiem({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFA7B1C2),
-        fontFamily: 'Roboto',
-      ),
-      home: const EmergencySearchScreen(),
-    );
-  }
+  State<GiaoDienDangTimKiem> createState() => _GiaoDienDangTimKiemState();
 }
 
-class EmergencySearchScreen extends StatefulWidget {
-  const EmergencySearchScreen({super.key});
-
-  @override
-  State<EmergencySearchScreen> createState() => _EmergencySearchScreenState();
-}
-
-class _EmergencySearchScreenState extends State<EmergencySearchScreen> {
+class _GiaoDienDangTimKiemState extends State<GiaoDienDangTimKiem> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(

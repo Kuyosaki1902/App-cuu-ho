@@ -2,22 +2,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/models/nguoidungmodel.dart';
+import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 
 class KetQuaTimKiemWidget extends StatelessWidget {
   final Color primaryColor;
-  final NguoiDungModel? foundUser;
+  final SearchUserResult? searchResult;
   final Function(NguoiDungModel) onAddPressed;
 
   const KetQuaTimKiemWidget({
     super.key,
     required this.primaryColor,
-    required this.foundUser,
+    required this.searchResult,
     required this.onAddPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (foundUser == null) {
+    if (searchResult == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -45,6 +46,9 @@ class KetQuaTimKiemWidget extends StatelessWidget {
         ),
       );
     }
+
+    final user = searchResult!.user;
+    final status = searchResult!.status;
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -74,7 +78,7 @@ class KetQuaTimKiemWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        foundUser!.hoTen,
+                        user.hoTen,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -90,7 +94,7 @@ class KetQuaTimKiemWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            foundUser!.soDienThoai,
+                            user.soDienThoai,
                             style: TextStyle(
                               color: primaryColor,
                               fontWeight: FontWeight.bold,
@@ -98,7 +102,7 @@ class KetQuaTimKiemWidget extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (foundUser!.email.isNotEmpty) ...[
+                      if (user.email.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
@@ -110,7 +114,7 @@ class KetQuaTimKiemWidget extends StatelessWidget {
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
-                                foundUser!.email,
+                                user.email,
                                 style: const TextStyle(
                                   color: Colors.grey,
                                   fontSize: 12,
@@ -124,18 +128,83 @@ class KetQuaTimKiemWidget extends StatelessWidget {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: () => onAddPressed(foundUser!),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      shape: BoxShape.circle,
+
+                // 🌟 HIỂN THỊ NÚT TRỰC TIẾP DỰA VÀO STATUS ĐÃ TRẢ VỀ TỪ SEARCH
+                if (status == 'connected')
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
                     ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.check_circle, color: Colors.green, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Người thân',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (status == 'pending')
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.access_time_filled,
+                          color: Colors.orange,
+                          size: 16,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Đã gửi',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  GestureDetector(
+                    onTap: () => onAddPressed(user),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: primaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),

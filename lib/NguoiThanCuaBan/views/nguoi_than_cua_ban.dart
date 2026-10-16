@@ -1,7 +1,6 @@
 // lib/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart
 
 import 'package:flutter/material.dart';
-// 🛠 Import đúng đường dẫn controller theo cấu trúc thư mục NguoiThanCuaBan
 import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 
 class NguoiThanCuaBanTab extends StatelessWidget {
@@ -15,6 +14,115 @@ class NguoiThanCuaBanTab extends StatelessWidget {
     required this.controller,
     required this.primaryColor,
   });
+
+  // Hàm hiển thị hộp thoại xác nhận xóa
+  // lib/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart
+
+  // Hàm hiển thị hộp thoại xác nhận xóa
+  Future<void> _showDeleteConfirmDialog(
+    BuildContext context, {
+    required String relativeId,
+    required String relativeName,
+  }) async {
+    // 1. Lấy trước messengerState từ Context hiện tại (Trước khi mở Dialog)
+    final messenger = ScaffoldMessenger.of(context);
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Xóa mối quan hệ',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa mối quan hệ người thân với $relativeName không?\n\nLưu ý: Thao tác này sẽ xóa mối quan hệ ở cả hai phía.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Xóa',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        // Gọi controller xóa sạch bản ghi ở cả 2 bên
+        await controller.rejectOrCancelRequest(userId, relativeId);
+
+        // 2. Dùng trực tiếp `messenger` đã lưu để hiện SnackBar (Không sợ mất Context)
+        messenger.showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2E7D32), // Xanh lá
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Đã xóa mối quan hệ với $relativeName thành công!',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFD32F2F), // Đỏ
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Xóa mối quan hệ thất bại: $e',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +173,8 @@ class NguoiThanCuaBanTab extends StatelessWidget {
           itemBuilder: (context, index) {
             final item = relativesList[index];
             return _buildRelativeCard(
+              context: context,
+              relativeId: item['id'],
               name: item['name'],
               age: item['age'],
               phone: item['phone'],
@@ -79,6 +189,8 @@ class NguoiThanCuaBanTab extends StatelessWidget {
   }
 
   Widget _buildRelativeCard({
+    required BuildContext context,
+    required String relativeId,
     required String name,
     required int age,
     required String phone,
@@ -120,7 +232,47 @@ class NguoiThanCuaBanTab extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.more_vert, color: Colors.grey),
+
+              // 🌟 MENU 3 DẤU CHẤM THẲNG ĐỨNG ĐỀ LÊN CARD
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
+                color: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onSelected: (value) {
+                  if (value == 'delete') {
+                    _showDeleteConfirmDialog(
+                      context,
+                      relativeId: relativeId,
+                      relativeName: name,
+                    );
+                  }
+                },
+                itemBuilder: (BuildContext ctx) => [
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.red,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Xóa mối quan hệ',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),

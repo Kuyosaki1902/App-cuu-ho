@@ -1,6 +1,6 @@
 // lib/NguoiThanCuaBan.dart
 
-import 'dart:async'; // Cần import để dùng Timer debounce
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
@@ -24,10 +24,10 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
 
   int _selectedTab = 0;
   bool _isSearching = false;
-  bool _isLoadingSearch = false; // Trạng thái đang query Firestore
+  bool _isLoadingSearch = false;
   int _selectedFilterIndex = 0;
-  NguoiDungModel? _searchedUser;
-  Timer? _debounce; // Chống nháy / mất kết quả khi gõ
+  SearchUserResult? _searchResult;
+  Timer? _debounce;
 
   final Color primaryColor = const Color(0xFF006A55);
 
@@ -38,32 +38,42 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
     super.dispose();
   }
 
+  // 🛠 Hàm tiện ích để dọn dẹp thanh tìm kiếm
+  void _clearSearch() {
+    _debounce?.cancel();
+    setState(() {
+      _searchController.clear();
+      _isSearching = false;
+      _isLoadingSearch = false;
+      _searchResult = null;
+    });
+  }
+
   void _onSearchChanged(String value) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
 
     final query = value.trim();
 
     if (query.isEmpty) {
-      setState(() {
-        _isSearching = false;
-        _isLoadingSearch = false;
-        _searchedUser = null;
-      });
+      _clearSearch();
       return;
     }
 
     setState(() {
       _isSearching = true;
-      _isLoadingSearch = true; // Bật loading
+      _isLoadingSearch = true;
     });
 
-    // Chờ người dùng ngừng gõ 500ms mới tiến hành tìm kiếm trên Firestore
     _debounce = Timer(const Duration(milliseconds: 500), () async {
-      final result = await _controller.searchUserByPhoneOrEmail(query);
+      final result = await _controller.searchUserByPhoneOrEmail(
+        query: query,
+        currentUserId: widget.userId,
+      );
+
       if (mounted) {
         setState(() {
-          _searchedUser = result;
-          _isLoadingSearch = false; // Tắt loading
+          _searchResult = result;
+          _isLoadingSearch = false;
         });
       }
     });
@@ -101,7 +111,10 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                       child: _buildTabButton(
                         title: 'Người Thân Của Bạn',
                         isSelected: _selectedTab == 0,
-                        onTap: () => setState(() => _selectedTab = 0),
+                        onTap: () {
+                          _clearSearch(); // 🛠 Reset thanh tìm kiếm khi bấm chuyển sang Tab Người Thân
+                          setState(() => _selectedTab = 0);
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -109,35 +122,46 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                       child: _buildTabButton(
                         title: 'Tìm Kiếm Người Thân',
                         isSelected: _selectedTab == 1,
-                        onTap: () => setState(() => _selectedTab = 1),
+                        onTap: () {
+                          _clearSearch(); // 🛠 Reset thanh tìm kiếm khi bấm chọn Tab Tìm Kiếm
+                          setState(() => _selectedTab = 1);
+                        },
                       ),
                     ),
                   ],
                 ),
                 if (_selectedTab == 1)
-                  ThanhTimKiemWidget(
-                    searchController: _searchController,
-                    isSearching: _isSearching,
-                    selectedFilterIndex: _selectedFilterIndex,
-                    primaryColor: primaryColor,
-                    onChanged: _onSearchChanged,
-                    onClear: () {
-                      _debounce?.cancel();
-                      setState(() {
-                        _searchController.clear();
-                        _isSearching = false;
-                        _isLoadingSearch = false;
-                        _searchedUser = null;
-                      });
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _controller.getPendingRequestsStream(widget.userId),
+                    builder: (context, snapshot) {
+                      final allRequests = snapshot.data ?? [];
+                      final receivedCount = allRequests
+                          .where((req) => req['type'] == 'received')
+                          .length;
+                      final sentCount = allRequests
+                          .where((req) => req['type'] == 'sent')
+                          .length;
+
+                      return ThanhTimKiemWidget(
+                        searchController: _searchController,
+                        isSearching: _isSearching,
+                        selectedFilterIndex: _selectedFilterIndex,
+                        primaryColor: primaryColor,
+                        receivedCount: receivedCount,
+                        sentCount: sentCount,
+                        onChanged: _onSearchChanged,
+                        onClear: _clearSearch,
+                        onFilterSelected: (index) {
+                          _clearSearch(); // 🛠 Reset thanh tìm kiếm khi bấm chọn các Filter (Tất cả / Đã nhận / Đã gửi)
+                          setState(() => _selectedFilterIndex = index);
+                        },
+                      );
                     },
-                    onFilterSelected: (index) =>
-                        setState(() => _selectedFilterIndex = index),
                   ),
               ],
             ),
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
-
           Expanded(
             child: _selectedTab == 0
                 ? NguoiThanCuaBanTab(
@@ -154,7 +178,7 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                               )
                             : KetQuaTimKiemWidget(
                                 primaryColor: primaryColor,
-                                foundUser: _searchedUser,
+                                searchResult: _searchResult,
                                 onAddPressed: (user) {
                                   BottomSheetGuiYeuCau.show(
                                     context,
@@ -168,6 +192,19 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                                         myRelation: myRel,
                                         targetRelation: targetRel,
                                       );
+
+                                      // 🌟 CẬP NHẬT TRẠNG THÁI TRỰC TIẾP TRÊN LOCAL STATE
+                                      // Nút bấm sẽ đổi thành "Đã gửi" lập tức mà KHÔNG CẦN gọi query Firestore lại
+                                      if (mounted && _searchResult != null) {
+                                        setState(() {
+                                          _searchResult = SearchUserResult(
+                                            user: _searchResult!.user,
+                                            status:
+                                                'pending', // Đổi trạng thái sang Chờ phản hồi
+                                          );
+                                        });
+                                      }
+
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(
                                           context,
@@ -185,7 +222,7 @@ class _NguoiThanCuaBanState extends State<NguoiThanCuaBan> {
                               ))
                       : DanhSachYeuCauWidget(
                           currentUserId: widget.userId,
-                          controller: NguoiThanController(),
+                          controller: _controller,
                           selectedFilterIndex: _selectedFilterIndex,
                           primaryColor: primaryColor,
                         )),

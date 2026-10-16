@@ -1,3 +1,5 @@
+import 'package:cuhokhancap/BangXepHangCuuHo/BangXepHangCuuHo.dart';
+import 'package:cuhokhancap/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart';
 import 'package:cuhokhancap/NguoiThanCuaBan/NguoiThanCuaBan.dart';
 import 'package:cuhokhancap/UpData.dart';
 import 'package:flutter/material.dart';
@@ -28,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: UpData(),
+      home: ChatVoiBacSi(),
     );
   }
 }
