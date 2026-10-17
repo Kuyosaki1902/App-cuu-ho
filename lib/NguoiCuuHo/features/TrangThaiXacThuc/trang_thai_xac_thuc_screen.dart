@@ -6,20 +6,23 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/TrangThaiXacThuc/widgets/card_th
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Import 2 màn hình chính của bạn
-// import 'path/to/man_hinh_chinh_cuu_ho_vien.dart';
-// import 'path/to/man_hinh_chinh_nguoi_dung.dart';
-
 class TrangThaiXacThucScreen extends StatelessWidget {
   final String userId;
-
-  const TrangThaiXacThucScreen({super.key, required this.userId});
+  final bool isCoCCHN; //Thêm biến phân biệt
+  const TrangThaiXacThucScreen({
+    super.key,
+    required this.userId,
+    this.isCoCCHN = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) {
-        final controller = TrangThaiXacThucController(userId: userId);
+        final controller = TrangThaiXacThucController(
+          userId: userId,
+          isCoCCHN: isCoCCHN,
+        );
         //Chuyển sang Màn hình chính Cứu hộ viên khi Admin đổi thành 'cuuho_trangthai_daduyet'
         controller.onApproved = () {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -66,14 +69,6 @@ class TrangThaiXacThucScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(10),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back,
-                    color: Colors.black87,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
               title: Column(

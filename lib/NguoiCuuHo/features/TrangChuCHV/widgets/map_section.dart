@@ -137,10 +137,10 @@ class MapSection extends StatelessWidget {
           right: 12,
           child: Column(
             children: [
-              _buildActionButton(Icons.layers_outlined, onTap: () {}),
-              const SizedBox(height: 8),
-              _buildActionButton(Icons.tune, onTap: () {}),
-              const SizedBox(height: 8),
+              // _buildActionButton(Icons.layers_outlined, onTap: () {}),
+              // const SizedBox(height: 8),
+              // _buildActionButton(Icons.tune, onTap: () {}),
+              // const SizedBox(height: 8),
               //Nút quay về vị trí hiện tại
               _buildActionButton(
                 Icons.my_location,

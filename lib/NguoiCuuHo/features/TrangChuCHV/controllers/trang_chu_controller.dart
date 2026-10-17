@@ -213,10 +213,10 @@ class TrangChuController extends ChangeNotifier {
         );
       }
     } catch (e) {
-      debugPrint('❌ Lỗi đọc dữ liệu Firestore: $e');
+      debugPrint('Lỗi đọc dữ liệu Firestore: $e');
     } finally {
       _isLoadingLocation = false;
-      notifyListeners(); // 🟢 Báo cho Header cập nhật UI
+      notifyListeners();
     }
   }
 }

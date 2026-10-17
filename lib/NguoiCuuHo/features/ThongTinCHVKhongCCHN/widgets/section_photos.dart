@@ -58,35 +58,42 @@ class SectionPhotos extends StatelessWidget {
     final controller = context.watch<CuuHoVienKhongCCHNController>();
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 🟢 Header có Icon chuẩn đồng bộ với các Section trước
           Row(
             children: [
-              _buildSectionIndex('3'),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F2F1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.collections,
+                  color: Color(0xFF00897B),
+                  size: 20,
+                ),
+              ),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Ảnh thực tế',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  '3. Ảnh minh chứng thực tế',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-              ),
-              _buildTag(
-                'Không bắt buộc bằng Y khoa',
-                const Color(0xFFE0F2F1),
-                const Color(0xFF00695C),
               ),
             ],
           ),
@@ -125,16 +132,71 @@ class SectionPhotos extends StatelessWidget {
                   File file = entry.value;
                   return Padding(
                     padding: const EdgeInsets.only(right: 8.0),
-                    child: _buildPhotoThumbnail(
-                      file,
-                      onDelete: () => controller.removePhoto(index),
+                    child: Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: 85,
+                            height: 85,
+                            color: Colors.grey.shade200,
+                            child: Image.file(file, fit: BoxFit.cover),
+                          ),
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: GestureDetector(
+                            onTap: () => controller.removePhoto(index),
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }),
                 if (controller.selectedPhotos.length < 3)
                   InkWell(
                     onTap: () => _showImagePickerModal(context, controller),
-                    child: _buildAddPhotoButton(),
+                    child: Container(
+                      width: 85,
+                      height: 85,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.teal.shade200),
+                      ),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_a_photo_outlined,
+                            color: Colors.teal,
+                            size: 22,
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Thêm ảnh',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.teal,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -151,7 +213,7 @@ class SectionPhotos extends StatelessWidget {
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
               hintText: 'Nhập ghi chú hoặc thông tin người xác minh...',
-              hintStyle: const TextStyle(color: Colors.grey),
+              hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
               filled: true,
               fillColor: const Color(0xFFEEF2FF),
               border: OutlineInputBorder(
@@ -159,105 +221,6 @@ class SectionPhotos extends StatelessWidget {
                 borderSide: BorderSide.none,
               ),
               contentPadding: const EdgeInsets.all(10),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionIndex(String number) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: const BoxDecoration(
-        color: Color(0xFFC80815),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        number,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTag(String text, Color bgColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: textColor,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPhotoThumbnail(File file, {required VoidCallback onDelete}) {
-    return Stack(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            width: 90,
-            height: 90,
-            color: Colors.grey.shade200,
-            child: Image.file(file, fit: BoxFit.cover),
-          ),
-        ),
-        Positioned(
-          top: 4,
-          right: 4,
-          child: GestureDetector(
-            onTap: onDelete,
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, color: Colors.white, size: 14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAddPhotoButton() {
-    return Container(
-      width: 90,
-      height: 90,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.teal.shade200,
-          style: BorderStyle.solid,
-        ),
-      ),
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add_a_photo_outlined, color: Colors.teal, size: 22),
-          SizedBox(height: 4),
-          Text(
-            'Thêm ảnh',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.teal,
-              fontWeight: FontWeight.bold,
             ),
           ),
         ],

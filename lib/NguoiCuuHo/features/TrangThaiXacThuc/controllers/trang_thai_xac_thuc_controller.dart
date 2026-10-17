@@ -5,12 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class TrangThaiXacThucController extends ChangeNotifier {
   bool isRefreshing = false;
 
-  String maHoSo = '#YTE-115-84920';
+  String maHoSo = '';
   String trangThaiText = 'Đang tiếp nhận';
   String thoiGianThamDinh = 'Dự kiến 48 giờ làm việc';
   String thoiGianConLai = 'Còn ~48h00m';
 
   final String userId;
+  final bool isCoCCHN; // 🟢 Phân biệt hồ sơ Có CCHN hay Không CCHN
+
   Timer? _timer;
   DateTime? thoiGianGuiYeuCau;
   StreamSubscription<DocumentSnapshot>? _hoSoSubscription;
@@ -19,20 +21,29 @@ class TrangThaiXacThucController extends ChangeNotifier {
   Function()? onApproved;
   Function()? onRejected;
 
-  TrangThaiXacThucController({required this.userId}) {
-    maHoSo = userId;
+  TrangThaiXacThucController({
+    required this.userId,
+    this.isCoCCHN = false, // 🟢 Mặc định nếu không truyền là hồ sơ Không CCHN
+  }) {
+    String prefix = isCoCCHN ? 'YTE-115' : 'CHV-115';
+    maHoSo =
+        '#$prefix-${userId.length >= 5 ? userId.substring(0, 5).toUpperCase() : '84920'}';
     listenToTrangThaiHoSo();
   }
 
-  /// 🟢 Lắng nghe thời gian thực thay đổi trạng thái từ Firestore
+  /// 🟢 Lắng nghe thời gian thực theo đúng Collection tương ứng
   void listenToTrangThaiHoSo() {
+    // Tự động chọn bảng dữ liệu dựa trên loại hồ sơ
+    String collectionName = isCoCCHN ? 'HoSoCuuHoCoCCHN' : 'HoSoCuuHoKhongCCHN';
+
+    _hoSoSubscription?.cancel(); // Hủy sub cũ nếu có
     _hoSoSubscription = FirebaseFirestore.instance
-        .collection('HoSoCuuHoCoCCHN')
+        .collection(collectionName)
         .doc(userId)
         .snapshots()
         .listen((doc) {
           if (doc.exists && doc.data() != null) {
-            final data = doc.data()!;
+            final data = doc.data() as Map<String, dynamic>;
             String maTrangThai =
                 data['maTrangThaiHoSo'] ?? 'cuuho_trangthai_tiepnhan';
 
@@ -40,7 +51,6 @@ class TrangThaiXacThucController extends ChangeNotifier {
               thoiGianGuiYeuCau = DateTime.tryParse(data['thoiGianOnline']);
             }
 
-            // 🟢 Kiểm tra các mã trong collection TrangThai
             switch (maTrangThai) {
               case 'cuuho_trangthai_tiepnhan':
                 trangThaiText = 'Đang tiếp nhận';
@@ -49,14 +59,14 @@ class TrangThaiXacThucController extends ChangeNotifier {
               case 'cuuho_trangthai_daduyet':
                 trangThaiText = 'Đã phê duyệt';
                 notifyListeners();
-                // Tự động kích hoạt chuyển sang Màn hình chính Cứu hộ viên
+                // 🟢 Tự động chuyển về Màn hình chính Cứu hộ viên
                 if (onApproved != null) onApproved!();
                 return;
 
               case 'cuuho_trangthai_tuchoi':
                 trangThaiText = 'Từ chối hồ sơ';
                 notifyListeners();
-                // Tự động kích hoạt chuyển sang Màn hình chính Người dùng
+                // 🟢 Tự động chuyển về Màn hình chính Người dùng
                 if (onRejected != null) onRejected!();
                 return;
 
@@ -106,8 +116,7 @@ class TrangThaiXacThucController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
-    _hoSoSubscription
-        ?.cancel(); // Hủy đăng ký lắng nghe Firestore khi thoát màn hình
+    _hoSoSubscription?.cancel();
     super.dispose();
   }
 }

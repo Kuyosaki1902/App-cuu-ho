@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cuhokhancap/NguoiCuuHo/KyNangCuuHo/ky_nang_service.dart';
 import 'package:cuhokhancap/NguoiCuuHo/LuuAnh/luu_anh_service.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,13 +23,17 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
   final addressController = TextEditingController();
 
   final organizationController = TextEditingController();
+  final rescueTimesController = TextEditingController(text: '0');
+
+  // Ô ghi thêm kỹ năng tùy chọn
+  final customSkillsController = TextEditingController();
+
   final summaryController = TextEditingController();
   final noteController = TextEditingController();
 
-  String gender = 'Nam';
   bool isAgreed = false;
-
   bool isSubmitting = false;
+
   final LuuAnhService _luuAnhService = LuuAnhService();
 
   String selectedExperience = '1 - 3 năm';
@@ -39,30 +44,27 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     'Trên 5 năm',
   ];
 
-  List<String> availableSkills = [
-    'Ép tim CPR',
-    'Băng bó vết thương',
-    'Cố định gãy xương',
-    'Sơ cứu đuối nước',
-    'Xử lý bỏng ban đầu',
+  // Danh mục Kỹ năng sẵn có
+  List<Map<String, String>> availableSkills = [
+    {'maKyNang': 'kn_cpr', 'tenKyNang': 'Ép tim CPR'},
+    {'maKyNang': 'kn_bang_bo', 'tenKyNang': 'Băng bó vết thương'},
+    {'maKyNang': 'kn_co_dinh', 'tenKyNang': 'Cố định gãy xương'},
+    {'maKyNang': 'kn_duoi_nuoc', 'tenKyNang': 'Sơ cứu đuối nước'},
+    {'maKyNang': 'kn_bong', 'tenKyNang': 'Xử lý bỏng ban đầu'},
   ];
-  List<String> selectedSkills = ['Ép tim CPR'];
 
-  // Quản lý tối đa 3 ảnh thực tế
+  List<String> selectedSkillCodes = [];
   List<File> selectedPhotos = [];
   final ImagePicker _picker = ImagePicker();
 
-  // 🟢 Bổ sung tham số existingFullName vào constructor để tự điền Họ và tên
   CuuHoVienKhongCCHNController({String? existingFullName}) {
-    fullNameController.text =
-        existingFullName ??
-        'Nguyễn Văn A'; // Tên mặc định hoặc lấy từ Auth/Profile
+    fullNameController.text = existingFullName ?? 'Nguyễn Văn A';
     _initDefaultData();
 
-    // Lắng nghe sự thay đổi ô nhập liệu để cập nhật trạng thái Bật/Tắt nút bấm
     cccdCardNoController.addListener(notifyListeners);
     cccdIssuerController.addListener(notifyListeners);
     organizationController.addListener(notifyListeners);
+    _loadSkillsFromFirestore();
   }
 
   void _initDefaultData() {
@@ -70,7 +72,6 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
         'Cục Cảnh sát quản lý hành chính về trật tự xã hội';
   }
 
-  /// Kiểm tra Form đã nhập ĐỦ THÔNG TIN BẮT BUỘC chưa
   bool get isFormValid {
     bool hasFullName = fullNameController.text.trim().isNotEmpty;
     bool hasCccd = cccdCardNoController.text.trim().isNotEmpty;
@@ -94,6 +95,28 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     return 0;
   }
 
+  /// Chọn / Bỏ chọn chip kỹ năng
+  void toggleSkillCode(String code) {
+    if (selectedSkillCodes.contains(code)) {
+      selectedSkillCodes.remove(code);
+    } else {
+      selectedSkillCodes.add(code);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _loadSkillsFromFirestore() async {
+    final kyNangService = KyNangService();
+    await kyNangService.seedDefaultSkills(); // Đảm bảo bảng có dữ liệu mẫu
+
+    List<Map<String, String>> skills = await kyNangService.fetchAllSkills();
+    if (skills.isNotEmpty) {
+      availableSkills = skills;
+      notifyListeners();
+    }
+  }
+
+  // Quản lý ảnh
   Future<void> pickPhoto(ImageSource source) async {
     if (selectedPhotos.length >= 3) return;
 
@@ -121,11 +144,6 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     }
   }
 
-  void setGender(String val) {
-    gender = val;
-    notifyListeners();
-  }
-
   void setAgreed(bool val) {
     isAgreed = val;
     notifyListeners();
@@ -136,16 +154,8 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleSkill(String skill) {
-    if (selectedSkills.contains(skill)) {
-      selectedSkills.remove(skill);
-    } else {
-      selectedSkills.add(skill);
-    }
-    notifyListeners();
-  }
-
-  /// 🚀 Hàm xử lý lưu danh sách ảnh vào bảng LuuAnh & đẩy hồ sơ lên HoSoCuuHoKhongCCHN
+  /// 🚀 Lưu thông tin hồ sơ + Lưu kỹ năng theo CÁCH 2 lên Firestore
+  /// 🚀 Lưu thông tin hồ sơ + Lưu dữ liệu sang bảng ChiTietKyNang riêng
   Future<bool> submitHoSoToFirebase(String currentUserId) async {
     if (!isFormValid) return false;
 
@@ -153,27 +163,32 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Lưu ảnh vào collection LuuAnh
-      if (selectedPhotos.isNotEmpty) {
-        for (int i = 0; i < selectedPhotos.length; i++) {
-          File photoFile = selectedPhotos[i];
-
-          String? base64String = await _luuAnhService.convertFileToBase64(
-            photoFile,
+      // 1. Lưu ảnh Base64 vào bảng LuuAnh
+      for (int i = 0; i < selectedPhotos.length; i++) {
+        String? base64String = await _luuAnhService.convertFileToBase64(
+          selectedPhotos[i],
+        );
+        if (base64String != null) {
+          await _luuAnhService.saveLuuAnh(
+            maNguoiDung: currentUserId,
+            base64Image: base64String,
+            maPhanLoaiAnh: 'ANH_THUC_TE_KHONG_CCHN',
+            maMoTa: 'Ảnh minh chứng hoạt động cứu hộ thực tế ${i + 1}',
           );
-
-          if (base64String != null) {
-            await _luuAnhService.saveLuuAnh(
-              maNguoiDung: currentUserId,
-              base64Image: base64String,
-              maPhanLoaiAnh: 'ANH_THUC_TE_KHONG_CCHN',
-              maMoTa: 'Ảnh minh chứng hoạt động cứu hộ thực tế ${i + 1}',
-            );
-          }
         }
       }
 
-      // 2. Tạo Model ánh xạ cấu trúc bảng HoSoCuuHoKhongCCHN
+      // 🟢 2. LƯU RIÊNG VÀO BẢNG ChiTietKyNang
+      final kyNangService = KyNangService();
+      await kyNangService.saveChiTietKyNang(
+        maNguoiDung: currentUserId,
+        danhSachMaKyNang: selectedSkillCodes,
+        customSkills: customSkillsController.text.trim(),
+      );
+
+      int times = int.tryParse(rescueTimesController.text.trim()) ?? 0;
+
+      // 3. Lưu hồ sơ chính vào bảng HoSoCuuHoKhongCCHN
       final hoSo = HoSoCuuHoKhongCCHNModel(
         maNguoiDung: currentUserId,
         soCanCuoc: cccdCardNoController.text.trim(),
@@ -182,10 +197,12 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
         coQuanCapCanCuoc: cccdIssuerController.text.trim(),
         doiNhom: organizationController.text.trim(),
         soNamHoatDongCuuHo: _parseExperienceYears(selectedExperience),
-        soLanThamGiaCuuHo: 0,
+        soLanThamGiaCuuHo: times,
         diemDanhGia: 0.0,
         tongLuotDanhGia: 0,
-        ghiChu: noteController.text.trim(),
+        ghiChu: noteController.text.trim().isEmpty
+            ? null
+            : noteController.text.trim(),
         thoiGianOnline: DateTime.now().toIso8601String(),
         soLuongCaDuocPhat: 0,
         soluongCaDaNhan: 0,
@@ -194,7 +211,6 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
         maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
       );
 
-      // 3. Đẩy dữ liệu lên Firestore
       await FirebaseFirestore.instance
           .collection('HoSoCuuHoKhongCCHN')
           .doc(currentUserId)
@@ -202,7 +218,7 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      debugPrint('🔴 Lỗi gửi hồ sơ không CCHN: $e');
+      debugPrint('🔴 Lỗi lưu hồ sơ: $e');
       return false;
     } finally {
       isSubmitting = false;
@@ -234,8 +250,6 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     }
   }
 
-  void showAddressDialog(BuildContext context) {}
-
   @override
   void dispose() {
     fullNameController.dispose();
@@ -245,6 +259,8 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
     cccdIssuerController.dispose();
     addressController.dispose();
     organizationController.dispose();
+    rescueTimesController.dispose();
+    customSkillsController.dispose();
     summaryController.dispose();
     noteController.dispose();
     super.dispose();

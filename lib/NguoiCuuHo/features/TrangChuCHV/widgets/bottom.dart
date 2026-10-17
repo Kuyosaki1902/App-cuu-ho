@@ -67,9 +67,7 @@ class TrangChuBottomPanel extends StatelessWidget {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: isOnline
-                              ? ColorCHV.tiep_nhan_yeu_cau
-                              : ColorCHV.ngung_tiep_nhan_yeu_cau,
+                          color: Colors.black,
                         ),
                       ),
                       Text(
@@ -111,9 +109,7 @@ class TrangChuBottomPanel extends StatelessWidget {
                   Icons.access_time,
                   isOnline ? 'Trực ca' : 'Nghỉ ngơi',
                   isOnline ? provider.formattedOnlineTime : 'Offline',
-                  isOnline
-                      ? ColorCHV.tiep_nhan_yeu_cau
-                      : ColorCHV.ngung_tiep_nhan_yeu_cau,
+                  Colors.black,
                 ),
               ),
               const SizedBox(width: 8),
@@ -122,18 +118,16 @@ class TrangChuBottomPanel extends StatelessWidget {
                   Icons.medical_services_outlined,
                   'Hôm nay',
                   isOnline ? '${provider.soLuongCaTiepNhan} ca' : '0 ca',
-                  isOnline
-                      ? ColorCHV.tiep_nhan_yeu_cau
-                      : ColorCHV.ngung_tiep_nhan_yeu_cau,
+                  Colors.black,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _buildStatCard(
-                  Icons.support_agent,
-                  'Tổng đài',
+                  Icons.speed,
+                  'Tốc độ mạng',
                   'Ổn định',
-                  const Color(0xFF059669),
+                  Colors.black,
                 ),
               ),
             ],
@@ -160,9 +154,7 @@ class TrangChuBottomPanel extends StatelessWidget {
                 'Bán kính: ${selectedRadius.split(' ')[0]} km',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isOnline
-                      ? ColorCHV.tiep_nhan_yeu_cau
-                      : ColorCHV.ngung_tiep_nhan_yeu_cau,
+                  color: Colors.black,
                   fontWeight: FontWeight.bold,
                 ),
               ),

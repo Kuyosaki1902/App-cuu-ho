@@ -1,6 +1,7 @@
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThongTinCHVKhongCCHN/controllers/chv_khong_cchn_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../controllers/chv_khong_cchn_controller.dart';
 
 class SectionExperience extends StatelessWidget {
   const SectionExperience({super.key});
@@ -10,126 +11,244 @@ class SectionExperience extends StatelessWidget {
     final controller = context.watch<CuuHoVienKhongCCHNController>();
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Section
           Row(
             children: [
-              _buildSectionIndex('2'),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE0F2F1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.stars,
+                  color: Color(0xFF00897B),
+                  size: 20,
+                ),
+              ),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Kinh nghiệm & Đội cứu trợ',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  '2. Kinh nghiệm & Đội cứu trợ',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
-              ),
-              _buildTag(
-                '• Xét duyệt thực chiến \n• Không cần CCHN',
-                const Color(0xFFE0F2F1),
-                const Color(0xFF00695C),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
+
+          _buildFieldLabel(
             'Đội nhóm / Tổ chức cứu nạn từng tham gia',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            isRequired: true,
           ),
           const SizedBox(height: 4),
-          _buildInputField(
+          TextFormField(
             controller: controller.organizationController,
-            hintText: '............................',
-            suffixIcon: const Icon(
-              Icons.group_outlined,
-              size: 18,
-              color: Colors.teal,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Nhập tên đội nhóm hoặc tổ chức...',
+              hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
+              ),
+              filled: true,
+              fillColor: const Color(0xFFEEF2FF),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              suffixIcon: const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Icon(Icons.group_outlined, size: 18, color: Colors.teal),
+              ),
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 0,
+                minHeight: 0,
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Ghi rõ tên nhóm tự quản, câu lạc bộ tình nguyện hoặc tổ chức trực thuộc',
-            style: TextStyle(fontSize: 10, color: Colors.black45),
-          ),
           const SizedBox(height: 10),
-          const Text(
-            'Số năm / Thâm niên hoạt động cứu hộ',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 40,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEEF2FF),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: controller.selectedExperience,
-                        isExpanded: true,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.w500,
+
+          // Số năm kinh nghiệm & Số lần tham gia
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('Thâm niên hoạt động'),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 38,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        items: controller.experienceOptions
-                            .map(
-                              (e) => DropdownMenuItem(value: e, child: Text(e)),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          if (val != null) controller.setExperience(val);
-                        },
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: controller.selectedExperience,
+                            isExpanded: true,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            items: controller.experienceOptions
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                    value: e,
+                                    child: Text(e),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) controller.setExperience(val);
+                            },
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const Icon(Icons.history, size: 18, color: Colors.teal),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Các kỹ năng sơ cấp cứu thành thạo',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                'Tự do kê khai kỹ năng',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF00897B),
-                  fontWeight: FontWeight.bold,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildFieldLabel('Số lần tham gia cứu hộ'),
+                    const SizedBox(height: 4),
+                    TextFormField(
+                      controller: controller.rescueTimesController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: '0',
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFEEF2FF),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // 🟢 KHUNG 1: Chọn kỹ năng sẵn có từ danh mục
+          _buildFieldLabel('Kỹ năng sơ cấp cứu thành thạo (Chọn từ danh mục)'),
           const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: controller.availableSkills.map((item) {
+                final String code = item['maKyNang']!;
+                final String name = item['tenKyNang']!;
+                final isSelected = controller.selectedSkillCodes.contains(code);
+
+                return GestureDetector(
+                  onTap: () => controller.toggleSkillCode(code),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFFE0F2F1)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF00897B)
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.check_circle
+                              : Icons.circle_outlined,
+                          size: 14,
+                          color: isSelected
+                              ? const Color(0xFF00897B)
+                              : Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isSelected
+                                ? const Color(0xFF00695C)
+                                : Colors.black87,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // 🟢 KHUNG 2: Ghi thêm kỹ năng khác (Ô riêng biệt)
+          _buildFieldLabel('Ghi thêm kỹ năng sơ cấp cứu khác (Nếu có)'),
+          const SizedBox(height: 4),
           TextFormField(
-            maxLines: 3,
-            style: const TextStyle(fontSize: 12),
+            controller: controller.customSkillsController,
+            maxLines: 2,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             decoration: InputDecoration(
               hintText:
-                  '............................\n............................\n............................',
-              hintStyle: const TextStyle(color: Colors.grey),
+                  'Nhập các kỹ năng khác ngoài danh mục trên (phân cách bằng dấu phẩy)...',
+              hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
               filled: true,
               fillColor: const Color(0xFFEEF2FF),
               border: OutlineInputBorder(
@@ -139,68 +258,18 @@ class SectionExperience extends StatelessWidget {
               contentPadding: const EdgeInsets.all(10),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: controller.availableSkills.map((skill) {
-              final isSelected = controller.selectedSkills.contains(skill);
-              return GestureDetector(
-                onTap: () => controller.toggleSkill(skill),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? const Color(0xFFE0F2F1)
-                        : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isSelected ? Icons.check_circle : Icons.circle_outlined,
-                        size: 14,
-                        color: isSelected
-                            ? const Color(0xFF00897B)
-                            : Colors.grey,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        skill,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isSelected
-                              ? const Color(0xFF00695C)
-                              : Colors.black87,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
           const SizedBox(height: 12),
-          const Text(
-            'Tóm tắt các ca cứu hộ thực tế từng tham gia',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
+
+          // Tóm tắt các ca cứu hộ
+          _buildFieldLabel('Tóm tắt các ca cứu hộ thực tế từng tham gia'),
           const SizedBox(height: 4),
           TextFormField(
             controller: controller.summaryController,
-            maxLines: 4,
+            maxLines: 3,
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
-              hintText:
-                  '............................\n............................\n............................',
-              hintStyle: const TextStyle(color: Colors.grey),
+              hintText: 'Mô tả tóm tắt tình huống sơ cứu thực tế...',
+              hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
               filled: true,
               fillColor: const Color(0xFFEEF2FF),
               border: OutlineInputBorder(
@@ -209,93 +278,24 @@ class SectionExperience extends StatelessWidget {
               ),
               contentPadding: const EdgeInsets.all(10),
             ),
-          ),
-          const SizedBox(height: 4),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Giúp điều phối viên ưu tiên phân công đúng tình huống',
-                style: TextStyle(fontSize: 10, color: Colors.black45),
-              ),
-              Text(
-                '178/500 ký tự',
-                style: TextStyle(fontSize: 10, color: Colors.black45),
-              ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionIndex(String number) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: const BoxDecoration(
-        color: Color(0xFFC80815),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        number,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTag(String text, Color bgColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          color: textColor,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInputField({
-    required TextEditingController controller,
-    String? hintText,
-    Widget? suffixIcon,
-  }) {
-    return TextFormField(
-      controller: controller,
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: hintText,
-        hintStyle: const TextStyle(color: Colors.grey),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 10,
-        ),
-        filled: true,
-        fillColor: const Color(0xFFEEF2FF),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
-        ),
-        suffixIcon: suffixIcon != null
-            ? Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: suffixIcon,
-              )
-            : null,
-        suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+  Widget _buildFieldLabel(String label, {bool isRequired = false}) {
+    return RichText(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(fontSize: 10, color: Colors.grey),
+        children: [
+          if (isRequired)
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+        ],
       ),
     );
   }

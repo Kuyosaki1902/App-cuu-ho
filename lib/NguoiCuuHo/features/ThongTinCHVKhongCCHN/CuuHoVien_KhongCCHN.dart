@@ -167,6 +167,7 @@ class CuuhovienKhongcchn extends StatelessWidget {
                                           builder: (context) =>
                                               TrangThaiXacThucScreen(
                                                 userId: currentUserId,
+                                                isCoCCHN: false,
                                               ),
                                         ),
                                       );
