@@ -14,7 +14,6 @@ class TrangThaiXacThucScreen extends StatelessWidget {
     required this.userId,
     this.isCoCCHN = false,
   });
-
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
@@ -24,6 +23,7 @@ class TrangThaiXacThucScreen extends StatelessWidget {
           isCoCCHN: isCoCCHN,
         );
         //Chuyển sang Màn hình chính Cứu hộ viên khi Admin đổi thành 'cuuho_trangthai_daduyet'
+
         controller.onApproved = () {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

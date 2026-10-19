@@ -8,9 +8,9 @@ import 'widgets/section_hospital.dart';
 import 'widgets/terms_and_info_box.dart';
 
 class CuuhovienCocchn extends StatelessWidget {
-  final String? userFullName; // Họ tên đã đăng ký tài khoản trước đó
+  final String? userFullName;
   const CuuhovienCocchn({super.key, this.userFullName});
-  final currentUserId = 'nguoidung2';
+  final currentUserId = 'nguoidung5';
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +144,7 @@ class CuuhovienCocchn extends StatelessWidget {
                                                 builder: (context) =>
                                                     TrangThaiXacThucScreen(
                                                       userId: currentUserId,
+                                                      isCoCCHN: true,
                                                     ),
                                               ),
                                             );

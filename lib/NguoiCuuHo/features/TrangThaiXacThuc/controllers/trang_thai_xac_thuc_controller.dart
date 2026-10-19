@@ -11,7 +11,7 @@ class TrangThaiXacThucController extends ChangeNotifier {
   String thoiGianConLai = 'Còn ~48h00m';
 
   final String userId;
-  final bool isCoCCHN; // 🟢 Phân biệt hồ sơ Có CCHN hay Không CCHN
+  final bool isCoCCHN;
 
   Timer? _timer;
   DateTime? thoiGianGuiYeuCau;
@@ -21,62 +21,55 @@ class TrangThaiXacThucController extends ChangeNotifier {
   Function()? onApproved;
   Function()? onRejected;
 
-  TrangThaiXacThucController({
-    required this.userId,
-    this.isCoCCHN = false, // 🟢 Mặc định nếu không truyền là hồ sơ Không CCHN
-  }) {
-    String prefix = isCoCCHN ? 'YTE-115' : 'CHV-115';
-    maHoSo =
-        '#$prefix-${userId.length >= 5 ? userId.substring(0, 5).toUpperCase() : '84920'}';
+  TrangThaiXacThucController({required this.userId, this.isCoCCHN = false}) {
+    maHoSo = userId;
     listenToTrangThaiHoSo();
   }
 
   /// 🟢 Lắng nghe thời gian thực theo đúng Collection tương ứng
   void listenToTrangThaiHoSo() {
-    // Tự động chọn bảng dữ liệu dựa trên loại hồ sơ
+    isRefreshing = true;
+    notifyListeners();
+
     String collectionName = isCoCCHN ? 'HoSoCuuHoCoCCHN' : 'HoSoCuuHoKhongCCHN';
 
-    _hoSoSubscription?.cancel(); // Hủy sub cũ nếu có
-    _hoSoSubscription = FirebaseFirestore.instance
+    _hoSoSubscription?.cancel();
+
+    // 🟢 Đọc trực tiếp từ Server để không bị dính dữ liệu cũ trong Cache
+    FirebaseFirestore.instance
         .collection(collectionName)
         .doc(userId)
-        .snapshots()
-        .listen((doc) {
+        .get(const GetOptions(source: Source.server)) // 👈 Ép lấy từ Server
+        .then((doc) {
+          isRefreshing = false;
           if (doc.exists && doc.data() != null) {
             final data = doc.data() as Map<String, dynamic>;
             String maTrangThai =
-                data['maTrangThaiHoSo'] ?? 'cuuho_trangthai_tiepnhan';
+                (data['maTrangThaiHoSo'] ?? 'cuuho_trangthai_tiepnhan')
+                    .toString()
+                    .trim();
 
-            if (data['thoiGianOnline'] != null) {
-              thoiGianGuiYeuCau = DateTime.tryParse(data['thoiGianOnline']);
+            debugPrint('📌 Dữ liệu THỰC TẾ từ Server: "$maTrangThai"');
+
+            if (maTrangThai == 'cuuho_trangthai_daduyet') {
+              trangThaiText = 'Đã phê duyệt';
+              notifyListeners();
+              if (onApproved != null) onApproved!();
+            } else if (maTrangThai == 'cuuho_trangthai_tuchoi') {
+              trangThaiText = 'Từ chối hồ sơ';
+              notifyListeners();
+              if (onRejected != null) onRejected!();
+            } else {
+              trangThaiText = 'Đang tiếp nhận';
+              notifyListeners();
+              _startCountdownTimer();
             }
-
-            switch (maTrangThai) {
-              case 'cuuho_trangthai_tiepnhan':
-                trangThaiText = 'Đang tiếp nhận';
-                break;
-
-              case 'cuuho_trangthai_daduyet':
-                trangThaiText = 'Đã phê duyệt';
-                notifyListeners();
-                // 🟢 Tự động chuyển về Màn hình chính Cứu hộ viên
-                if (onApproved != null) onApproved!();
-                return;
-
-              case 'cuuho_trangthai_tuchoi':
-                trangThaiText = 'Từ chối hồ sơ';
-                notifyListeners();
-                // 🟢 Tự động chuyển về Màn hình chính Người dùng
-                if (onRejected != null) onRejected!();
-                return;
-
-              default:
-                trangThaiText = 'Đang tiếp nhận';
-            }
-
-            notifyListeners();
-            _startCountdownTimer();
           }
+        })
+        .catchError((e) {
+          isRefreshing = false;
+          notifyListeners();
+          debugPrint('🔴 Lỗi tải dữ liệu từ Server: $e');
         });
   }
 

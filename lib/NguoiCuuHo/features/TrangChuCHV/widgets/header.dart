@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 
@@ -5,7 +7,10 @@ class LifeguardProfileHeader extends StatelessWidget {
   final bool isOnline;
   final String? name;
   final String? role;
-  final String? image;
+
+  // Tham số base64Image đại diện cho chuỗi Base64 lấy từ Firestore
+  final String? base64Image;
+
   final ValueChanged<bool> onOnlineChanged;
   final VoidCallback? onExitToUserMode;
 
@@ -15,11 +20,23 @@ class LifeguardProfileHeader extends StatelessWidget {
     required this.onOnlineChanged,
     required this.name,
     required this.role,
-    required this.image,
+    required this.base64Image,
     this.onExitToUserMode,
   });
 
-  /// 🟢 Hộp thoại xác nhận khi TẮT trạng thái hoạt động
+  /// Hàm hỗ trợ giải mã Base64 an toàn
+  Uint8List? _getDecodedImage(String? base64Str) {
+    if (base64Str == null || base64Str.isEmpty) return null;
+    try {
+      String cleanBase64 = base64Str.contains(',')
+          ? base64Str.split(',').last
+          : base64Str;
+      return base64Decode(cleanBase64.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _showOfflineConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -72,7 +89,6 @@ class LifeguardProfileHeader extends StatelessWidget {
     );
   }
 
-  /// Hộp thoại xác nhận khi THOÁT CHẾ ĐỘ cứu hộ viên
   void _showExitConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -129,6 +145,9 @@ class LifeguardProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🟢 Chuyển chuỗi Base64 sang dữ liệu Byte để dựng ảnh
+    final Uint8List? imageBytes = _getDecodedImage(base64Image);
+
     return Container(
       padding: const EdgeInsets.all(16),
       color: Colors.white,
@@ -136,11 +155,11 @@ class LifeguardProfileHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Ảnh đại diện
-              image != null
+              // 🟢 Kiểm tra và hiển thị ảnh đại diện từ Base64 bằng MemoryImage
+              imageBytes != null
                   ? CircleAvatar(
                       radius: 24,
-                      backgroundImage: NetworkImage(image!),
+                      backgroundImage: MemoryImage(imageBytes),
                     )
                   : const CircleAvatar(
                       radius: 24,
@@ -198,7 +217,7 @@ class LifeguardProfileHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
 
-              // 🟢 2. Nút THOÁT CHẾ ĐỘ CỨU HỘ VIÊN (Nằm ở bên phải ngoài cùng + Viền tròn hoàn chỉnh)
+              // 2. Nút THOÁT CHẾ ĐỘ CỨU HỘ VIÊN
               IconButton(
                 tooltip: 'Thoát chế độ Cứu hộ viên',
                 onPressed: () {
@@ -276,8 +295,6 @@ class LifeguardProfileHeader extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // Switch Bật/Tắt có xác nhận khi ngắt kết nối
                 Switch(
                   value: isOnline,
                   activeColor: ColorCHV.tiep_nhan_yeu_cau,

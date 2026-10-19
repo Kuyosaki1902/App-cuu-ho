@@ -9,7 +9,7 @@ import 'widgets/terms_box_no_cchn.dart';
 
 class CuuhovienKhongcchn extends StatelessWidget {
   const CuuhovienKhongcchn({super.key});
-  final String currentUserId = 'nguoidung3';
+  final String currentUserId = 'nguoidung4';
   @override
   Widget build(BuildContext context) {
     String userFullName = 'BS.Nguyễn Xuân Hanh';

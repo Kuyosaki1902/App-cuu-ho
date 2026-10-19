@@ -14,46 +14,62 @@ class Trangchunguoicuuho extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => TrangChuController(),
       child: Consumer<TrangChuController>(
-        builder: (context, provider, child) {
+        builder: (context, controller, child) {
           return Scaffold(
             backgroundColor: const Color(0xFFF3F4F6),
             body: SafeArea(
               child: Column(
                 children: [
                   // 1. Header Bác sĩ
-                  LifeguardProfileHeader(
-                    isOnline: provider.isOnline,
-                    onOnlineChanged: (val) {
-                      provider.toggleOnline(
-                        val,
-                      ); // Truyền value mới từ Header về Controller
+                  FutureBuilder<String?>(
+                    future: controller.getAvatarBase64(controller.userID),
+                    builder: (context, avatarSnapshot) {
+                      String? avatarBase64 = avatarSnapshot.data;
+
+                      return LifeguardProfileHeader(
+                        isOnline: controller.isOnline,
+                        onOnlineChanged: (val) {
+                          controller.toggleOnline(
+                            val,
+                          ); // Truyền giá trị từ Header về Controller
+                        },
+                        name: controller.name,
+                        role: controller.role,
+                        base64Image:
+                            avatarBase64, // 🟢 Truyền dữ liệu Base64 đã giải mã từ LuuAnh & PhanLoaiAnh
+                        onExitToUserMode: () {
+                          // Điều hướng thoát chế độ Cứu hộ viên về Màn hình người dùng
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/user_home', // Thay đường dẫn bằng Route Màn hình người dùng của bạn
+                            (route) => false,
+                          );
+                        },
+                      );
                     },
-                    name: provider.name,
-                    role: provider.role,
-                    image: provider.image,
                   ),
 
                   // 2. Map Section
                   Expanded(
                     child: MapSection(
-                      currentPosition: provider.currentPosition,
-                      isLoadingLocation: provider.isLoadingLocation,
-                      selectedRadius: provider.selectedRadius,
-                      zoomLevel: provider.getZoomLevel(),
-                      circleRadiusMeters: provider.getCircleRadiusInMeters(),
-                      onMapCreated: provider.setMapController,
-                      isOnline: provider.isOnline,
-                      RefreshLocation: provider.initLocationService,
+                      currentPosition: controller.currentPosition,
+                      isLoadingLocation: controller.isLoadingLocation,
+                      selectedRadius: controller.selectedRadius,
+                      zoomLevel: controller.getZoomLevel(),
+                      circleRadiusMeters: controller.getCircleRadiusInMeters(),
+                      onMapCreated: controller.setMapController,
+                      isOnline: controller.isOnline,
+                      RefreshLocation: controller.initLocationService,
                     ),
                   ),
 
                   // 3. Bottom Panel
                   TrangChuBottomPanel(
-                    selectedRadius: provider.selectedRadius,
-                    onRadiusSelected: provider.updateSelectedRadius,
-                    isOnline: provider.isOnline,
-                    timer: provider.timer!,
-                    soLuongCaTiepNhan: provider.soLuongCaTiepNhan,
+                    selectedRadius: controller.selectedRadius,
+                    onRadiusSelected: controller.updateSelectedRadius,
+                    isOnline: controller.isOnline,
+                    timer: controller.timer!,
+                    soLuongCaTiepNhan: controller.soLuongCaTiepNhan,
                   ),
                 ],
               ),

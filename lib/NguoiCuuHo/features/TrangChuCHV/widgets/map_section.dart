@@ -64,7 +64,7 @@ class MapSection extends StatelessWidget {
             zoom: 12,
           ),
           onMapCreated: onMapCreated,
-          myLocationEnabled: true,
+          myLocationEnabled: false,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           markers: {
@@ -76,7 +76,7 @@ class MapSection extends StatelessWidget {
                 snippet: 'Đang trực cứu hộ',
               ),
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueRed,
+                BitmapDescriptor.hueGreen,
               ),
             ),
           },
