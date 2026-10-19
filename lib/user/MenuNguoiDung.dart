@@ -16,15 +16,15 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
   // Biến trạng thái để kiểm soát việc đóng/mở thẻ "Đăng ký người cứu hộ"
   bool _isExpanded = false;
   
-  // Khai báo Firebase service và Future cho dữ liệu người dùng
+  // Khai báo Firebase service và Stream (Luồng dữ liệu thời gian thực)
   final FirebaseService _firebaseService = FirebaseService();
-  late Future<NguoiDungModel?> _userFuture;
+  late Stream<NguoiDungModel?> _userStream;
 
   @override
   void initState() {
     super.initState();
-    // Gọi hàm lấy thông tin người dùng dựa trên mã được truyền vào
-    _userFuture = _firebaseService.layThongTinNguoiDung(widget.maNguoiDung);
+    // Gọi hàm lắng nghe thông tin người dùng Real-time từ FirebaseService
+    _userStream = _firebaseService.layThongTinNguoiDungRealTime(widget.maNguoiDung);
   }
 
   // Hàm tạo ký tự viết tắt đại diện cho Avatar (Ví dụ: "Nguyễn Văn An" -> "NA")
@@ -114,9 +114,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Profile User - Load động từ Firebase
-                    FutureBuilder<NguoiDungModel?>(
-                      future: _userFuture,
+                    // Profile User - Load động từ Firebase (REAL-TIME STREAM)
+                    StreamBuilder<NguoiDungModel?>(
+                      stream: _userStream,
                       builder: (context, snapshot) {
                         // Hiển thị trạng thái tải
                         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -156,10 +156,12 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16), // Bo góc hiệu ứng chạm khớp với viền
                               onTap: () {
-                                Navigator.push(
-                                  context, 
-                                  MaterialPageRoute(builder: (context) => ThongTinTaiKhoan(nguoiDung: user!)), // Truyền dữ liệu người dùng nếu cần
-                                );
+                                if (user != null) {
+                                  Navigator.push(
+                                    context, 
+                                    MaterialPageRoute(builder: (context) => ThongTinTaiKhoan(nguoiDung: user)), // Truyền dữ liệu người dùng sang trang sửa
+                                  );
+                                }
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(12), // Đưa padding vào bên trong InkWell

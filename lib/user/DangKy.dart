@@ -266,7 +266,7 @@ class _DangKyState extends State<DangKy> {
         queQuan: '${_selectedProvince!.name}',
         soDienThoai: _phoneController.text.trim(),
         maGioiTinh: maGioiTinh,
-        maVaiTro: 'vaitro1',
+        maVaiTro: 'vaitro_nguoidung',
         ngaySinh: _selectedDate!,
         ngayTao: DateTime.now(),
         matKhau: _passwordController.text,
