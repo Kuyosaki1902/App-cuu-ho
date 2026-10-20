@@ -118,8 +118,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                 circleId: const CircleId('radius_circle'),
                 center: _currentPosition, 
                 radius: _currentRadius,
-                fillColor: const Color(0xFF00695C).withOpacity(0.15),
-                strokeColor: const Color(0xFF00695C).withOpacity(0.5),
+                fillColor: const Color(0xFF00695C).withValues(alpha: 0.15),
+                strokeColor: const Color(0xFF00695C).withValues(alpha: 0.5),
                 strokeWidth: 2,
               ),
             },
@@ -146,7 +146,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
                     ],
                   ),
                   child: Row(
@@ -163,7 +163,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
                     ],
                   ),
                   child: Material(
@@ -223,7 +223,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                         colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
                       ),
                       boxShadow: [
-                        BoxShadow(color: Colors.red.withOpacity(0.6), blurRadius: 20, spreadRadius: 5),
+                        BoxShadow(color: Colors.red.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 5),
                       ],
                     ),
                     child: const Column(
@@ -434,7 +434,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
           color: Colors.white,
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
           ],
         ),
         child: Icon(icon, color: Colors.black87),

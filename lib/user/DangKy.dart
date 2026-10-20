@@ -263,7 +263,7 @@ class _DangKyState extends State<DangKy> {
         hoTen: _fullNameController.text.trim(),
         email: _emailController.text.trim(),
         diaChi: finalAddress,
-        queQuan: '${_selectedProvince!.name}',
+        queQuan: _selectedProvince!.name,
         soDienThoai: _phoneController.text.trim(),
         maGioiTinh: maGioiTinh,
         maVaiTro: 'vaitro_nguoidung',
@@ -479,7 +479,7 @@ class _DangKyState extends State<DangKy> {
                     DropdownButtonFormField<String>(
                       isExpanded:
                           true, // Ngăn chặn lỗi tràn chữ trên màn hình nhỏ
-                      value: _selectedGender,
+                      initialValue: _selectedGender,
                       items: _genders
                           .map(
                             (String gender) => DropdownMenuItem(

@@ -1,8 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:http/http.dart' as http;
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+
+  // ================= CẤU HÌNH EMAILJS =================
+  // ĐIỀN THÔNG TIN CỦA BẠN VÀO ĐÂY
+  final String _serviceId = 'service_mjq8s5n'; 
+  final String _templateId = 'template_xgoatgh'; 
+  final String _publicKey = 'ui8hvA1YiR6O-spA1'; 
+  final String _privateKey = 'iGWSAbxAHAOt3koQgtpHz';
+  // ====================================================
 
   // Hàm đăng ký người dùng mới lên Firebase với mã tăng dần
   Future<bool> taoTaiKhoan(NguoiDungModel nguoiDung) async {
@@ -67,7 +79,7 @@ class FirebaseService {
           .snapshots()
           .map((querySnapshot) {
         if (querySnapshot.docs.isNotEmpty) {
-          return NguoiDungModel.fromMap(querySnapshot.docs.first.data() as Map<String, dynamic>);
+          return NguoiDungModel.fromMap(querySnapshot.docs.first.data());
         }
         return null;
       });
@@ -144,6 +156,87 @@ class FirebaseService {
       return false;
     } catch (e) {
       print('Lỗi khi cập nhật thông tin: $e');
+      return false;
+    }
+  }
+
+
+  // THÊM MỚI 1: Hàm gọi API của EmailJS để gửi thư
+  // Hàm gọi API của EmailJS để gửi thư
+  Future<bool> guiEmailOTP(String email, String otpCode) async {
+    final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'service_id': _serviceId,
+          'template_id': _templateId,
+          'user_id': _publicKey,
+          'accessToken': _privateKey, // BẮT BUỘC THÊM DÒNG NÀY ĐỂ TRUYỀN PRIVATE KEY
+          'template_params': {
+            'to_email': email,
+            'otp_code': otpCode,
+          },
+        }),
+      );
+      
+      if (response.statusCode != 200) {
+        print('👉 LỖI EMAILJS TỪ CHỐI GỬI: ${response.body}');
+      }
+      
+      return response.statusCode == 200;
+    } catch (e) {
+      print('👉 LỖI MẠNG / HTTP KHI GỬI EMAIL: $e');
+      return false;
+    }
+  }
+
+  // THÊM MỚI 2: Tạo mã OTP, lưu lên Firestore và gửi Email
+  Future<String?> taoVaGuiOTP(String email) async {
+    try {
+      // Sinh mã 6 số ngẫu nhiên
+      String otpCode = (100000 + Random().nextInt(900000)).toString();
+      DateTime expireTime = DateTime.now().add(const Duration(minutes: 5));
+
+      // Lưu hoặc cập nhật mã OTP vào Firestore
+      await _firestore.collection('XacThucOTP').doc(email).set({
+        'email': email,
+        'otp': otpCode,
+        'expireTime': expireTime,
+        'createdAt': DateTime.now(),
+      });
+
+      // Gửi Email
+      bool sent = await guiEmailOTP(email, otpCode);
+      return sent ? otpCode : null;
+    } catch (e) {
+      print('Lỗi tạo và gửi OTP: $e');
+      return null;
+    }
+  }
+
+  // THÊM MỚI 3: Kiểm tra mã OTP do người dùng nhập
+  Future<bool> xacNhanMaOTP(String email, String otpNhap) async {
+    try {
+      DocumentSnapshot doc = await _firestore.collection('XacThucOTP').doc(email).get();
+
+      if (!doc.exists || doc.data() == null) return false;
+
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+      String otpLuu = data['otp'] ?? '';
+      Timestamp expireTimestamp = data['expireTime'];
+      DateTime expireTime = expireTimestamp.toDate();
+
+      // Kiểm tra xem khớp mã và chưa hết hạn 5 phút
+      if (otpNhap == otpLuu && DateTime.now().isBefore(expireTime)) {
+        // Xóa mã OTP sau khi đã xác minh thành công
+        await _firestore.collection('XacThucOTP').doc(email).delete();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Lỗi xác thực OTP: $e');
       return false;
     }
   }

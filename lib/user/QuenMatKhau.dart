@@ -13,24 +13,23 @@ class QuenMatKhau extends StatefulWidget {
 class _QuenMatKhauState extends State<QuenMatKhau> {
   final FirebaseService _firebaseService = FirebaseService();
   
-  // Trạng thái màn hình: 0 = Tìm kiếm, 1 = Đổi mật khẩu
+  // Trạng thái màn hình: 0 = Tìm kiếm, 1 = Nhập OTP, 2 = Đổi mật khẩu
   int _step = 0; 
   bool _isLoading = false;
 
-  // Controllers cho bước Tìm kiếm
+  // Controllers
   final TextEditingController _searchController = TextEditingController();
-  
-  // Controllers cho bước Đổi mật khẩu
+  final TextEditingController _otpController = TextEditingController(); // Mới thêm
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
-  // Lưu thông tin user tìm được
   NguoiDungModel? _foundUser;
 
-  // --- HÀM 1: TÌM KIẾM TÀI KHOẢN ---
-  Future<void> _handleSearch() async {
+  // --- HÀM 1: TÌM KIẾM TÀI KHOẢN VÀ GỬI OTP ---
+  Future<void> _handleSearchAndSendOTP() async {
     String searchValue = _searchController.text.trim();
     
     if (searchValue.isEmpty) {
@@ -40,21 +39,61 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
 
     setState(() => _isLoading = true);
 
+    // Tìm user
     NguoiDungModel? user = await _firebaseService.timTaiKhoanQuenMatKhau(searchValue);
 
+    if (user == null) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Không tìm thấy tài khoản nào khớp với thông tin này.', Colors.red);
+      return;
+    }
+
+    if (user.email.isEmpty) {
+      setState(() => _isLoading = false);
+      _showSnackBar('Tài khoản này chưa đăng ký Email để nhận mã OTP!', Colors.red);
+      return;
+    }
+
+    // Gửi OTP
+    String? otp = await _firebaseService.taoVaGuiOTP(user.email);
+    
     setState(() => _isLoading = false);
 
-    if (user != null) {
+    if (otp != null) {
       setState(() {
         _foundUser = user;
-        _step = 1; // Chuyển sang bước đổi mật khẩu
+        _step = 1; // Chuyển sang bước nhập OTP
       });
+      _showSnackBar('Mã OTP 6 số đã được gửi đến email ${user.email}', Colors.green);
     } else {
-      _showSnackBar('Không tìm thấy tài khoản nào khớp với thông tin này.', Colors.red);
+      _showSnackBar('Gửi mã OTP thất bại, vui lòng thử lại sau.', Colors.red);
     }
   }
 
-  // --- HÀM 2: CẬP NHẬT MẬT KHẨU MỚI ---
+  // --- HÀM 2: XÁC NHẬN MÃ OTP ---
+  Future<void> _handleVerifyOTP() async {
+    String otpNhap = _otpController.text.trim();
+    
+    if (otpNhap.length < 6) {
+      _showSnackBar('Vui lòng nhập đủ 6 số OTP.', Colors.red);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    bool isValid = await _firebaseService.xacNhanMaOTP(_foundUser!.email, otpNhap);
+
+    setState(() => _isLoading = false);
+
+    if (isValid) {
+      setState(() => _step = 2); // Chuyển sang bước đặt lại mật khẩu
+      _showSnackBar('Xác thực OTP thành công!', Colors.green);
+    } else {
+      _showSnackBar('Mã OTP không đúng hoặc đã hết hạn (quá 5 phút).', Colors.red);
+    }
+  }
+
+  // --- HÀM 3: CẬP NHẬT MẬT KHẨU MỚI ---
   Future<void> _handleUpdatePassword() async {
     String pass = _newPasswordController.text.trim();
     String confirmPass = _confirmPasswordController.text.trim();
@@ -69,20 +108,12 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
       return;
     }
 
-    if (_foundUser == null || _foundUser!.maNguoiDung == null) {
-      _showSnackBar('Lỗi hệ thống. Không xác định được người dùng.', Colors.red);
-      return;
-    }
-
     setState(() => _isLoading = true);
-
     bool isSuccess = await _firebaseService.capNhatMatKhau(_foundUser!.maNguoiDung!, pass);
-
     setState(() => _isLoading = false);
 
     if (isSuccess) {
       _showSnackBar('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.', Colors.green);
-      // Xóa sạch lịch sử và quay về trang Đăng nhập
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -104,18 +135,13 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
     ));
   }
 
-  // Hàm ẩn 1 phần số điện thoại/email để bảo mật
   String _maskData(String data) {
     if (data.contains('@')) {
       List<String> parts = data.split('@');
-      if (parts[0].length > 3) {
-        return '${parts[0].substring(0, 3)}***@${parts[1]}';
-      }
+      if (parts[0].length > 3) return '${parts[0].substring(0, 3)}***@${parts[1]}';
       return data;
     } else {
-      if (data.length > 6) {
-        return '${data.substring(0, 3)}****${data.substring(data.length - 3)}';
-      }
+      if (data.length > 6) return '${data.substring(0, 3)}****${data.substring(data.length - 3)}';
       return data;
     }
   }
@@ -130,13 +156,8 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () {
-            if (_step == 1) {
-              // Nếu đang ở bước đổi pass, cho phép quay lại bước tìm kiếm
-              setState(() {
-                _step = 0;
-                _newPasswordController.clear();
-                _confirmPasswordController.clear();
-              });
+            if (_step > 0) {
+              setState(() => _step--); // Cho phép quay lại bước trước đó
             } else {
               Navigator.pop(context);
             }
@@ -155,8 +176,10 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
               _buildSystemBanner(),
               const SizedBox(height: 16),
               
-              // Chuyển đổi giữa 2 giao diện dựa vào trạng thái _step
-              _step == 0 ? _buildSearchCard() : _buildResetPasswordCard(),
+              // Điều hướng hiển thị 1 trong 3 bảng tương ứng với Step
+              if (_step == 0) _buildSearchCard(),
+              if (_step == 1) _buildOTPCard(),
+              if (_step == 2) _buildResetPasswordCard(),
             ],
           ),
         ),
@@ -164,14 +187,10 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
     );
   }
 
-  // --- UI: BANNER (Giống màn hình Đăng nhập) ---
   Widget _buildSystemBanner() {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF1F5),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFEFF1F5), borderRadius: BorderRadius.circular(8)),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -179,17 +198,11 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
             children: [
               Icon(Icons.circle, color: Color(0xFFB71C1C), size: 12),
               SizedBox(width: 8),
-              Text(
-                'HỆ THỐNG ĐIỀU PHỐI CẤP CỨU QUỐC GIA 115',
-                style: TextStyle(color: Color(0xFFB71C1C), fontWeight: FontWeight.bold, fontSize: 12),
-              ),
+              Text('HỆ THỐNG ĐIỀU PHỐI CẤP CỨU QUỐC GIA 115', style: TextStyle(color: Color(0xFFB71C1C), fontWeight: FontWeight.bold, fontSize: 12)),
             ],
           ),
           SizedBox(height: 4),
-          Text(
-            'Nhập thông tin đã đăng ký để tìm lại tài khoản của bạn.',
-            style: TextStyle(fontSize: 13, color: Colors.black87),
-          ),
+          Text('Nhập thông tin đã đăng ký để hệ thống gửi mã xác minh.', style: TextStyle(fontSize: 13, color: Colors.black87)),
         ],
       ),
     );
@@ -202,9 +215,7 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -233,14 +244,14 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
           SizedBox(
             height: 50,
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleSearch,
+              onPressed: _isLoading ? null : _handleSearchAndSendOTP,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1565C0), // Xanh
+                backgroundColor: const Color(0xFF1565C0),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: _isLoading
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('TÌM KIẾM', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  : const Text('GỬI MÃ OTP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           ),
         ],
@@ -248,16 +259,68 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
     );
   }
 
-  // --- UI: BƯỚC 2 - ĐỔI MẬT KHẨU ---
+  // --- UI: BƯỚC 2 - NHẬP OTP (MỚI) ---
+  Widget _buildOTPCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(Icons.mark_email_read_outlined, size: 50, color: Color(0xFFF57C00)), // Màu Cam
+          const SizedBox(height: 12),
+          const Text('XÁC NHẬN MÃ OTP', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text('Mã 6 số đã được gửi tới ${_maskData(_foundUser?.email ?? '')}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: Colors.black54)),
+          const SizedBox(height: 24),
+
+          TextField(
+            controller: _otpController,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, letterSpacing: 10, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              hintText: '••••••',
+              counterText: "", // Ẩn chữ đếm ký tự (0/6)
+              filled: true,
+              fillColor: const Color(0xFFF5F6F8),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          SizedBox(
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleVerifyOTP,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF57C00), // Cam
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: _isLoading
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('XÁC NHẬN MÃ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- UI: BƯỚC 3 - ĐỔI MẬT KHẨU ---
   Widget _buildResetPasswordCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,10 +339,7 @@ class _QuenMatKhauState extends State<QuenMatKhau> {
                 const Text('Tài khoản khả dụng:', style: TextStyle(fontSize: 12, color: Color(0xFF2E7D32))),
                 const SizedBox(height: 4),
                 Text(_foundUser?.hoTen ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text(
-                  _maskData(_foundUser!.soDienThoai.isNotEmpty ? _foundUser!.soDienThoai : _foundUser!.email),
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
-                ),
+                Text(_maskData(_foundUser?.email ?? ''), style: const TextStyle(fontSize: 13, color: Colors.black54)),
               ],
             ),
           ),
