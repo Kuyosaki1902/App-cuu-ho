@@ -20,7 +20,7 @@ class Trangchunguoicuuho extends StatelessWidget {
             body: SafeArea(
               child: Column(
                 children: [
-                  // 1. Header Bác sĩ
+                  // 1. Header Cứu hộ viên
                   FutureBuilder<String?>(
                     future: controller.getAvatarBase64(controller.userID),
                     builder: (context, avatarSnapshot) {
@@ -29,19 +29,15 @@ class Trangchunguoicuuho extends StatelessWidget {
                       return LifeguardProfileHeader(
                         isOnline: controller.isOnline,
                         onOnlineChanged: (val) {
-                          controller.toggleOnline(
-                            val,
-                          ); // Truyền giá trị từ Header về Controller
+                          controller.toggleOnline(val);
                         },
                         name: controller.name,
                         role: controller.role,
-                        base64Image:
-                            avatarBase64, // 🟢 Truyền dữ liệu Base64 đã giải mã từ LuuAnh & PhanLoaiAnh
+                        base64Image: avatarBase64,
                         onExitToUserMode: () {
-                          // Điều hướng thoát chế độ Cứu hộ viên về Màn hình người dùng
                           Navigator.pushNamedAndRemoveUntil(
                             context,
-                            '/user_home', // Thay đường dẫn bằng Route Màn hình người dùng của bạn
+                            '/user_home',
                             (route) => false,
                           );
                         },
@@ -49,24 +45,19 @@ class Trangchunguoicuuho extends StatelessWidget {
                     },
                   ),
 
-                  // 2. Map Section
+                  // 2. Map Section (Đã bỏ thiết lập phạm vi)
                   Expanded(
                     child: MapSection(
                       currentPosition: controller.currentPosition,
                       isLoadingLocation: controller.isLoadingLocation,
-                      selectedRadius: controller.selectedRadius,
-                      zoomLevel: controller.getZoomLevel(),
-                      circleRadiusMeters: controller.getCircleRadiusInMeters(),
                       onMapCreated: controller.setMapController,
                       isOnline: controller.isOnline,
                       RefreshLocation: controller.initLocationService,
                     ),
                   ),
 
-                  // 3. Bottom Panel
+                  // 3. Bottom Panel (Đã bỏ các nút chọn bán kính)
                   TrangChuBottomPanel(
-                    selectedRadius: controller.selectedRadius,
-                    onRadiusSelected: controller.updateSelectedRadius,
                     isOnline: controller.isOnline,
                     timer: controller.timer!,
                     soLuongCaTiepNhan: controller.soLuongCaTiepNhan,

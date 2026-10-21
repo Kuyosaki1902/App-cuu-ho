@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const TrangThaiXacThucScreen(userId: 'nguoidung4', isCoCCHN: false),
+      home: const TrangThaiXacThucScreen(userId: 'nguoidung3', isCoCCHN: false),
     );
   }
 }

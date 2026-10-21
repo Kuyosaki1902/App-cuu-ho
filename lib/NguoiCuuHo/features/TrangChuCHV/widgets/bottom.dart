@@ -5,16 +5,12 @@ import 'package:provider/provider.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 
 class TrangChuBottomPanel extends StatelessWidget {
-  final String selectedRadius;
-  final ValueChanged<String> onRadiusSelected;
   final bool isOnline;
   final Timer? timer;
   final int? soLuongCaTiepNhan;
 
   const TrangChuBottomPanel({
     super.key,
-    required this.selectedRadius,
-    required this.onRadiusSelected,
     required this.isOnline,
     required this.timer,
     required this.soLuongCaTiepNhan,
@@ -22,7 +18,6 @@ class TrangChuBottomPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Lắng nghe Controller tự động cập nhật từng giây
     final provider = context.watch<TrangChuController>();
     return Container(
       padding: const EdgeInsets.all(16),
@@ -64,7 +59,7 @@ class TrangChuBottomPanel extends StatelessWidget {
                         isOnline
                             ? 'Tiếp nhận yêu cầu'
                             : 'Ngưng tiếp nhận yêu cầu',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                           color: Colors.black,
@@ -72,9 +67,12 @@ class TrangChuBottomPanel extends StatelessWidget {
                       ),
                       Text(
                         isOnline
-                            ? 'Đang quét tín hiệu cứu nạn...'
+                            ? 'Đang sẵn sàng nhận ca trên toàn hệ thống...'
                             : 'Ngừng quét tín hiệu cứu nạn...',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -132,44 +130,6 @@ class TrangChuBottomPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.near_me_outlined, size: 18, color: Colors.grey),
-                  SizedBox(width: 4),
-                  Text(
-                    'THIẾT LẬP PHẠM VI TIẾP NHẬN',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'Bán kính: ${selectedRadius.split(' ')[0]} km',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _buildRadiusOption('1.0 km'),
-              const SizedBox(width: 8),
-              _buildRadiusOption('3.0 km (Chuẩn)'),
-              const SizedBox(width: 8),
-              _buildRadiusOption('5.0 km'),
-            ],
-          ),
         ],
       ),
     );
@@ -210,35 +170,6 @@ class TrangChuBottomPanel extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRadiusOption(String text) {
-    bool isSelected = selectedRadius == text;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => onRadiusSelected(text),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isSelected
-                ? (isOnline
-                      ? ColorCHV.tiep_nhan_yeu_cau
-                      : ColorCHV.ngung_tiep_nhan_yeu_cau)
-                : const Color(0xFFF3F4F6),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black87,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 13,
-            ),
-          ),
-        ),
       ),
     );
   }
