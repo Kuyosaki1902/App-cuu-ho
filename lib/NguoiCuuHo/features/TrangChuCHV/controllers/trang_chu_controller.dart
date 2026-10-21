@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 🟢 1. Import SharedPreferences
+import 'package:intl/intl.dart'; // 🟢 2. Import intl để format ngày
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -23,6 +25,10 @@ class TrangChuController extends ChangeNotifier {
   final String _userID = 'nguoidung2';
   final int _soLuongCaTiepNhan = 0;
 
+  // 🟢 QUẢN LÝ THỜI GIAN THEO NGÀY
+  int _onlineSeconds = 0;
+  String _todayDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
   // Getters cho UI đọc dữ liệu
   LatLng? get currentPosition => _currentPosition;
   bool get isLoadingLocation => _isLoadingLocation;
@@ -30,10 +36,11 @@ class TrangChuController extends ChangeNotifier {
   Timer? get timer => _timer;
   int get soLuongCaTiepNhan => _soLuongCaTiepNhan;
   String get userID => _userID;
+  int get onlineSeconds => _onlineSeconds;
 
   TrangChuController() {
     initLocationService();
-    _startTimer();
+    _initAndCheckNewDayTimer(); // 🟢 Khởi tạo và kiểm tra làm mới theo ngày
     fetchFullUserData(_userID);
   }
 
@@ -49,12 +56,86 @@ class TrangChuController extends ChangeNotifier {
     mapController = controller;
   }
 
-  void toggleOnline(bool val) {
-    _isOnline = val;
-    if (!_isOnline) {
+  // 🟢 1. Khởi tạo thời gian từ SharedPreferences và kiểm tra ngày mới
+  Future<void> _initAndCheckNewDayTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    String currentDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    String? savedDate = prefs.getString('saved_online_date');
+
+    if (savedDate == null || savedDate != currentDate) {
+      // Sang ngày mới -> Reset về 0
       _onlineSeconds = 0;
+      await prefs.setString('saved_online_date', currentDate);
+      await prefs.setInt('saved_online_seconds', 0);
+    } else {
+      // Cùng ngày -> Đọc lại số giây tích lũy trước đó
+      _onlineSeconds = prefs.getInt('saved_online_seconds') ?? 0;
+    }
+    _todayDateStr = currentDate;
+    notifyListeners();
+
+    // Nếu đang Online thì bắt đầu đếm tiếp
+    if (_isOnline) {
+      _startTimer();
+    }
+  }
+
+  // 🟢 2. Cập nhật Bật/Tắt Online (Không reset về 0)
+  void toggleOnline(bool val) {
+    _checkDayRollover(); // Kiểm tra xem có qua ngày mới trong lúc thao tác không
+    _isOnline = val;
+
+    if (_isOnline) {
+      _startTimer(); // Bật lại -> Tiếp tục đếm cộng dồn từ số giây hiện tại
+    } else {
+      _stopTimer(); // Tắt -> Dừng đếm và lưu trạng thái
     }
     notifyListeners();
+  }
+
+  // 🟢 3. Bắt đầu bộ đếm giờ
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _checkDayRollover();
+      _onlineSeconds++;
+      _saveOnlineSeconds(); // Lưu liên tục vào bộ nhớ local
+      notifyListeners();
+    });
+  }
+
+  // 🟢 4. Dừng đếm giờ
+  void _stopTimer() {
+    _timer?.cancel();
+    _saveOnlineSeconds();
+  }
+
+  // 🟢 5. Kiểm tra nếu thời gian đếm xuyên qua thời khắc 00:00 đêm sang ngày mới
+  void _checkDayRollover() {
+    String nowStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (nowStr != _todayDateStr) {
+      _todayDateStr = nowStr;
+      _onlineSeconds = 0; // Tự động reset về 0 khi sang ngày mới
+      _saveOnlineSeconds();
+    }
+  }
+
+  // 🟢 6. Lưu thời gian vào SharedPreferences
+  Future<void> _saveOnlineSeconds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_online_date', _todayDateStr);
+    await prefs.setInt('saved_online_seconds', _onlineSeconds);
+  }
+
+  // 🟢 7. Định dạng thời gian hiển thị hh:mm:ss
+  String get formattedOnlineTime {
+    int hours = _onlineSeconds ~/ 3600;
+    int minutes = (_onlineSeconds % 3600) ~/ 60;
+    int seconds = _onlineSeconds % 60;
+
+    return '${hours.toString().padLeft(2, '0')}h '
+        '${minutes.toString().padLeft(2, '0')}m '
+        '${seconds.toString().padLeft(2, '0')}s';
   }
 
   // --- LOGIC GPS & BẢN ĐỒ ---
@@ -119,43 +200,11 @@ class TrangChuController extends ChangeNotifier {
     notifyListeners();
 
     if (mapController != null) {
-      //Lấy góc zoom hiện tại mà người dùng đang thu phóng trên bản đồ
       double currentZoom = await mapController!.getZoomLevel();
-
-      // Di chuyển camera về vị trí mới và GIỮ NGUYÊN góc zoom hiện tại
       mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(newPos, currentZoom),
       );
     }
-  }
-
-  //================= XỬ LÝ BOTTOM PANEL =================
-  DateTime _currentTime = DateTime.now();
-  DateTime get currentTime => _currentTime;
-
-  int _onlineSeconds = 0;
-  int get onlineSeconds => _onlineSeconds;
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _currentTime = DateTime.now();
-
-      if (_isOnline) {
-        _onlineSeconds++;
-        notifyListeners();
-      }
-    });
-  }
-
-  String get formattedOnlineTime {
-    int hours = _onlineSeconds ~/ 3600;
-    int minutes = (_onlineSeconds % 3600) ~/ 60;
-    int seconds = _onlineSeconds % 60;
-
-    return '${hours.toString().padLeft(2, '0')}h '
-        '${minutes.toString().padLeft(2, '0')}m '
-        '${seconds.toString().padLeft(2, '0')}s';
   }
 
   //================= Firebase =================

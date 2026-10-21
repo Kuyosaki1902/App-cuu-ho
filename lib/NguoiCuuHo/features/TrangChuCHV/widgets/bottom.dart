@@ -67,7 +67,7 @@ class TrangChuBottomPanel extends StatelessWidget {
                       ),
                       Text(
                         isOnline
-                            ? 'Đang sẵn sàng nhận ca trên toàn hệ thống...'
+                            ? 'Đang sẵn sàng nhận ca...'
                             : 'Ngừng quét tín hiệu cứu nạn...',
                         style: const TextStyle(
                           color: Colors.grey,
@@ -82,12 +82,14 @@ class TrangChuBottomPanel extends StatelessWidget {
                     horizontal: 10,
                     vertical: 4,
                   ),
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: const Color(0xFFECFDF5),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    isOnline ? 'Chế độ chờ' : 'Chế độ\nnghỉ ngơi',
+                    isOnline ? 'Chế độ\nchờ' : 'Chế độ\nnghỉ ngơi',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: isOnline
                           ? ColorCHV.tiep_nhan_yeu_cau
