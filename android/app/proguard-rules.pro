@@ -1,0 +1,1 @@
+-keep interface kotlin.coroutines.Continuation { *; }

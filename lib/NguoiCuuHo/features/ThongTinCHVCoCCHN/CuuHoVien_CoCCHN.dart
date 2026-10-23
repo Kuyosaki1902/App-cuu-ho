@@ -10,7 +10,7 @@ import 'widgets/terms_and_info_box.dart';
 class CuuhovienCocchn extends StatelessWidget {
   final String? userFullName;
   const CuuhovienCocchn({super.key, this.userFullName});
-  final currentUserId = 'nguoidung5';
+  final currentUserId = 'nguoidung8';
 
   @override
   Widget build(BuildContext context) {

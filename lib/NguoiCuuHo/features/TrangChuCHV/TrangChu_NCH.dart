@@ -53,13 +53,13 @@ class Trangchunguoicuuho extends StatelessWidget {
                       onMapCreated: controller.setMapController,
                       isOnline: controller.isOnline,
                       RefreshLocation: controller.initLocationService,
+                      nearbyUsers: controller.nearbyUsers,
                     ),
                   ),
 
                   // 3. Bottom Panel (Đã bỏ các nút chọn bán kính)
                   TrangChuBottomPanel(
                     isOnline: controller.isOnline,
-                    timer: controller.timer!,
                     soLuongCaTiepNhan: controller.soLuongCaTiepNhan,
                   ),
                 ],

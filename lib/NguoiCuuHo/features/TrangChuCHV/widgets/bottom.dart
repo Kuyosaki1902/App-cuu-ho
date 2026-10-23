@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,13 +5,11 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_ch
 
 class TrangChuBottomPanel extends StatelessWidget {
   final bool isOnline;
-  final Timer? timer;
   final int? soLuongCaTiepNhan;
 
   const TrangChuBottomPanel({
     super.key,
     required this.isOnline,
-    required this.timer,
     required this.soLuongCaTiepNhan,
   });
 
