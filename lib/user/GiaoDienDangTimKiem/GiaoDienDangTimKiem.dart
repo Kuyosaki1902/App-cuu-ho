@@ -2,13 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-
 import 'controllers/tim_kiem_cuu_ho_controller.dart';
 import 'views/top_navigation_bar.dart';
 import 'views/bottom_sheet_tim_kiem_ai.dart';
 
 class GiaoDienDangTimKiem extends StatefulWidget {
-  const GiaoDienDangTimKiem({super.key});
+  final String maYeuCau;
+
+  const GiaoDienDangTimKiem({super.key, required this.maYeuCau});
 
   @override
   State<GiaoDienDangTimKiem> createState() => _GiaoDienDangTimKiemState();
@@ -21,11 +22,15 @@ class _GiaoDienDangTimKiemState extends State<GiaoDienDangTimKiem> {
   @override
   void initState() {
     super.initState();
-    _controller.fetchCurrentLocation(() {
-      if (mounted) {
-        setState(() {});
-      }
+    _controller.initSearch(widget.maYeuCau, () {
+      if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -37,91 +42,57 @@ class _GiaoDienDangTimKiemState extends State<GiaoDienDangTimKiem> {
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: _controller.currentDeviceLocation,
-              zoom: 15.5,
+              zoom: 14.5,
             ),
             onMapCreated: _controller.onMapCreated,
             circles: _controller.circles,
-            markers: _controller.markers, // 🌟 Hiện Marker điểm cấp cứu thực tế
-            myLocationEnabled:
-                true, // 🌟 Bật chấm xanh GPS mặc định của Google Maps
+            markers: _controller.markers,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             compassEnabled: false,
             mapToolbarEnabled: false,
+            padding: const EdgeInsets.only(bottom: 300),
           ),
 
-          // 🔄 2. Màn hình chờ xoay nhẹ ở chính giữa khi đang định vị
+          // 2. Loading Indicator
           if (_controller.isLoading)
             Container(
               color: Colors.white.withOpacity(0.6),
               child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      color: primaryColor,
-                      strokeWidth: 3,
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 4),
-                        ],
-                      ),
-                      child: const Text(
-                        'Đang định vị vị trí cấp cứu...',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                child: CircularProgressIndicator(color: primaryColor),
               ),
             ),
 
-          // 3. Thanh Navigation & Status phía trên
+          // 3. Navigation Bar
           const TopNavigationBarWidget(),
 
-          // 4. Nút định vị GPS
+          // 4. BottomSheet Tim Kiem AI
+          BottomSheetTimKiemAIWidget(
+            primaryColor: primaryColor,
+            controller: _controller,
+          ),
+
+          // 5. Nút Định vị
           Positioned(
-            right: 16,
-            bottom: 390,
-            child: Material(
-              elevation: 3,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.antiAlias,
-              color: Colors.white,
-              child: CircleAvatar(
-                backgroundColor: Colors.white,
-                radius: 20,
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.my_location,
-                    color: Colors.black87,
-                    size: 20,
-                  ),
-                  onPressed: () {
-                    _controller.fetchCurrentLocation(() {
-                      if (mounted) setState(() {});
-                    });
-                  },
-                ),
+            top: 450,
+            right: 12,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 4),
+                ],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.my_location, color: Colors.black),
+                onPressed: () {
+                  _controller.moveToCurrentLocation();
+                },
               ),
             ),
           ),
-
-          // 5. BottomSheet Tìm kiếm AI phía dưới
-          BottomSheetTimKiemAIWidget(primaryColor: primaryColor),
         ],
       ),
     );

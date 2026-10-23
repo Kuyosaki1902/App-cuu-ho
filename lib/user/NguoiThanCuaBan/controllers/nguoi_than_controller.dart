@@ -1,6 +1,7 @@
 // lib/NguoiThanCuaBan/controllers/nguoi_than_controller.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 
 // Class chứa kết quả tìm kiếm kèm trạng thái quan hệ
@@ -9,6 +10,93 @@ class SearchUserResult {
   final String status; // 'connected' | 'pending' | 'received' | 'none'
 
   SearchUserResult({required this.user, required this.status});
+}
+
+// 🌟 CONTROLLER QUẢN LÝ LOGIC BOTTOM SHEET CHỌN MỐI QUAN HỆ CỦA NGƯỜI THÂN
+class BottomSheetGuiYeuCauController extends ChangeNotifier {
+  String myRelation = 'Con';
+  String targetRelation = 'Cha';
+
+  // Danh sách đầy đủ các mối quan hệ phía "Bạn là"
+  final List<String> myRelationOptions = [
+    'Con',
+    'Cha',
+    'Mẹ',
+    'Anh',
+    'Chị',
+    'Em',
+    'Chồng',
+    'Vợ',
+    'Cháu',
+    'Ông',
+    'Bà',
+    'Bạn bè',
+    'Khác',
+  ];
+
+  // Logic lọc danh sách đối ứng vế phải
+  List<String> getTargetOptions() {
+    switch (myRelation) {
+      case 'Con':
+        return ['Cha', 'Mẹ'];
+      case 'Cha':
+      case 'Mẹ':
+        return ['Con'];
+      case 'Anh':
+      case 'Chị':
+        return ['Em'];
+      case 'Em':
+        return ['Anh', 'Chị'];
+      case 'Chồng':
+        return ['Vợ'];
+      case 'Vợ':
+        return ['Chồng'];
+      case 'Cháu':
+        return ['Ông', 'Bà'];
+      case 'Ông':
+      case 'Bà':
+        return ['Cháu'];
+      case 'Bạn bè':
+        return ['Bạn bè'];
+      default:
+        return ['Khác'];
+    }
+  }
+
+  // Xử lý chọn quan hệ phía mình
+  void updateMyRelation(String newMyRel) {
+    myRelation = newMyRel;
+    List<String> targetOpts = getTargetOptions();
+    if (!targetOpts.contains(targetRelation)) {
+      targetRelation = targetOpts.first;
+    }
+    notifyListeners();
+  }
+
+  // Xử lý chọn quan hệ phía đối phương
+  void updateTargetRelation(String newTargetRel) {
+    targetRelation = newTargetRel;
+    notifyListeners();
+  }
+
+  // Xử lý hoán đổi 2 chiều (Swap)
+  void swapRelations() {
+    String tempMy = targetRelation;
+    String tempTarget = myRelation;
+
+    if (!myRelationOptions.contains(tempMy)) {
+      tempMy = 'Khác';
+    }
+
+    myRelation = tempMy;
+    List<String> targetOpts = getTargetOptions();
+    if (!targetOpts.contains(tempTarget)) {
+      tempTarget = targetOpts.first;
+    }
+    targetRelation = tempTarget;
+
+    notifyListeners();
+  }
 }
 
 class NguoiThanController {
@@ -297,6 +385,6 @@ class NguoiThanController {
         (now.month == ngaySinh.month && now.day < ngaySinh.day)) {
       age--;
     }
-    return age < 0 ? 0 : age;
+    return age;
   }
 }

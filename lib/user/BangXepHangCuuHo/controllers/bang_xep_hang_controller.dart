@@ -1,6 +1,6 @@
 // lib/BangXepHangCuuHo/controllers/bang_xep_hang_controller.dart
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhokhongcchnmodel.dart';
@@ -26,7 +26,7 @@ class RescuerLeaderboardItemModel {
 }
 
 class BangXepHangController {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseService _firebaseService = FirebaseService();
 
   Future<List<RescuerLeaderboardItemModel>> fetchLeaderboard(
     int selectedTab,
@@ -39,10 +39,10 @@ class BangXepHangController {
       filterKey = 'tatCa';
     }
 
-    // ⚡ 1. Đọc song song cả 2 collection Hồ sơ
+    // ⚡ 1. Đọc song song cả 2 collection Hồ sơ thông qua FirebaseService
     final results = await Future.wait([
-      _firestore.collection('HoSoCuuHoCoCCHN').get(),
-      _firestore.collection('HoSoCuuHoKhongCCHN').get(),
+      _firebaseService.getHoSoCoCCHNSnapshot(),
+      _firebaseService.getHoSoKhongCCHNSnapshot(),
     ]);
 
     List<Map<String, dynamic>> rawDataList = [];
@@ -104,27 +104,15 @@ class BangXepHangController {
 
     if (userIdsSet.isEmpty) return [];
 
-    // ⚡ 4. Lấy NguoiDung song song qua whereIn (Tối ưu từ N+1 query về 1 query)
+    // ⚡ 4. Lấy NguoiDung thông qua FirebaseService
     List<String> userIds = userIdsSet.toList();
-    Map<String, NguoiDungModel> userMap = {};
+    List<NguoiDungModel> userList = await _firebaseService.getUsersByIds(
+      userIds,
+    );
 
-    for (var i = 0; i < userIds.length; i += 30) {
-      var chunk = userIds.sublist(
-        i,
-        i + 30 > userIds.length ? userIds.length : i + 30,
-      );
-      var userSnapshots = await _firestore
-          .collection('NguoiDung')
-          .where(FieldPath.documentId, whereIn: chunk)
-          .get();
-
-      for (var doc in userSnapshots.docs) {
-        if (doc.exists && doc.data() != null) {
-          // 🌟 Gọi fromMap với chỉ doc.data()! đúng yêu cầu
-          userMap[doc.id] = NguoiDungModel.fromMap(doc.data()!);
-        }
-      }
-    }
+    Map<String, NguoiDungModel> userMap = {
+      for (var user in userList) user.maNguoiDung!: user,
+    };
 
     // 5. Ghép dữ liệu & Sắp xếp giảm dần theo số ca
     List<RescuerLeaderboardItemModel> fullList = [];

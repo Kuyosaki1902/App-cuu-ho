@@ -1,10 +1,12 @@
 // lib/mock_data.dart
 
+import 'package:cuhokhancap/user/models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/models/chitietphancongcuuhomodel%20.dart';
 import 'package:cuhokhancap/user/models/gioitinhmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhokhongcchnmodel.dart';
 import 'package:cuhokhancap/user/models/loaiyeucaumodel.dart';
+import 'package:cuhokhancap/user/models/moiquanhe.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/models/nguoithanmodel.dart';
 import 'package:cuhokhancap/user/models/tinhtrangyeucaumodel.dart';
@@ -14,43 +16,58 @@ import 'package:cuhokhancap/user/models/yeucaucuuhomodel.dart';
 
 final List<NguoiDungModel> NguoiDungList = [
   NguoiDungModel(
-    maNguoiDung: 'nguoidung1',
-    hoTen: 'Liễu Như Yên',
-    email: 'phannhuyen@gmail.com',
-    diaChi: 'Tổng Dinh Thự Họ Liễu',
-    queQuan: 'Dinh Thự Họ Liễu',
-    soDienThoai: '0123456789',
-    maGioiTinh: 'gioitinh_nu', // 🛠 Đã cập nhật
-    maVaiTro: 'vaitro_nguoidung', // 🛠 Đã cập nhật
+    maNguoiDung: 'nguoidung4',
+    hoTen: 'Nguyễn Phan Liêm',
+    email: 'phanliem@gmail.com',
+    diaChi: 'Đô Lương, P.11, TP. Vũng Tàu',
+    queQuan: 'Bà Rịa - Vũng Tàu',
+    soDienThoai: '0907777888',
+    maGioiTinh: 'gioitinh_nam',
+    maVaiTro: 'vaitro_cuuhococc',
     matKhau: '123456',
-    ngaySinh: DateTime(2000, 10, 7),
+    ngaySinh: DateTime(1985, 3, 12),
     ngayTao: DateTime.now(),
+    viDo: 10.3750,
+    kinhDo: 107.1050,
+    geohash: 'w263f9x',
+    isOnline: false,
+    nhanCaCuuHo: false,
   ),
   NguoiDungModel(
-    maNguoiDung: 'nguoidung2',
-    hoTen: 'Nguyễn Văn A',
-    email: 'nguyenvana@gmail.com',
-    diaChi: '123 Đường ABC, Quận 1',
-    queQuan: 'TP. Hồ Chí Minh',
-    soDienThoai: '0123456788',
-    maGioiTinh: 'gioitinh_nam', // 🛠 Đã cập nhật
-    maVaiTro: 'vaitro_cuuhococc', // 🛠 Đã cập nhật (Cứu hộ có CCHN)
+    maNguoiDung: 'nguoidung5',
+    hoTen: 'Nguyễn Không Liêm',
+    email: 'phanliem@gmail.com',
+    diaChi: 'Đô Lương, P.11, TP. Vũng Tàu',
+    queQuan: 'Bà Rịa - Vũng Tàu',
+    soDienThoai: '0907777888',
+    maGioiTinh: 'gioitinh_nam',
+    maVaiTro: 'vaitro_cuuhococc',
     matKhau: '123456',
-    ngaySinh: DateTime(1998, 5, 12),
+    ngaySinh: DateTime(1985, 3, 12),
     ngayTao: DateTime.now(),
+    viDo: 10.3750,
+    kinhDo: 107.1050,
+    geohash: 'w263f9x',
+    isOnline: false,
+    nhanCaCuuHo: false,
   ),
   NguoiDungModel(
-    maNguoiDung: 'nguoidung3',
-    hoTen: 'Trần Văn B',
-    email: 'tranvanb@gmail.com',
-    diaChi: '456 Đường Lê Văn Việt, TP. Thủ Đức',
-    queQuan: 'Đồng Nai',
-    soDienThoai: '0123456777',
-    maGioiTinh: 'gioitinh_nam', // 🛠 Đã cập nhật
-    maVaiTro: 'vaitro_cuuhochuacocc', // 🛠 Đã cập nhật (Cứu hộ KHÔNG CCHN)
+    maNguoiDung: 'nguoidung6',
+    hoTen: 'Nguyễn Chỉ Liêm',
+    email: 'phanliem@gmail.com',
+    diaChi: 'Đô Lương, P.11, TP. Vũng Tàu',
+    queQuan: 'Bà Rịa - Vũng Tàu',
+    soDienThoai: '0907777888',
+    maGioiTinh: 'gioitinh_nam',
+    maVaiTro: 'vaitro_cuuhococc',
     matKhau: '123456',
-    ngaySinh: DateTime(1995, 8, 20),
+    ngaySinh: DateTime(1985, 3, 12),
     ngayTao: DateTime.now(),
+    viDo: 10.3750,
+    kinhDo: 107.1050,
+    geohash: 'w263f9x',
+    isOnline: false,
+    nhanCaCuuHo: false,
   ),
 ];
 
@@ -70,21 +87,38 @@ final List<VaiTroModel> VaiTroList = [
 
 final List<HoSoCuuHoCoCCHNModel> HoSoCuuHoCoCCHNList = [
   HoSoCuuHoCoCCHNModel(
-    maNguoiDung: 'nguoidung2',
-    soCanCuoc: '079198001234',
-    ngayCapCanCuoc: DateTime(2021, 3, 15),
-    ngayHetHanCanCuoc: DateTime(2038, 5, 12),
+    maNguoiDung: 'nguoidung6',
+    soCanCuoc: '079188009999',
+    ngayCapCanCuoc: DateTime(2020, 5, 10),
+    ngayHetHanCanCuoc: DateTime(2038, 9, 20),
     coQuanCapCanCuoc: 'Cục Cảnh sát QLHC về TTXH',
-    maCCHN: 'CCHN-YTE-2023-089',
-    ngayCapCCHN: DateTime(2023, 6, 10),
-    coQuanCapCCHN: 'Sở Y tế TP. Hồ Chí Minh',
-    maTheChuyenNganh: 'TCN-CH-001',
-    tenChuyenNganh: 'Tim Mạch',
-    chucDanh: 'Bác sĩ Cấp cứu ngoài bệnh viện',
-    donViCongTac: 'Trung tâm Cấp cứu 115 TP.HCM',
+    maCCHN: 'CCHN-YTE-2022-555',
+    ngayCapCCHN: DateTime(2022, 1, 15),
+    coQuanCapCCHN: 'Sở Y tế Bà Rịa - Vũng Tàu',
+    maTheChuyenNganh: 'TCN-CH-005',
+    tenChuyenNganh: 'Chấn thương Chỉnh hình',
+    chucDanh: 'Bác sĩ Cấp cứu Ngoại khoa',
+    donViCongTac: 'Bệnh viện Đa khoa Vũng Tàu',
+    diemDanhGia: 5.0,
+    tongLuotDanhGia: 42,
+    maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
+  ),
+  HoSoCuuHoCoCCHNModel(
+    maNguoiDung: 'nguoidung7',
+    soCanCuoc: '079185007777',
+    ngayCapCanCuoc: DateTime(2019, 8, 20),
+    ngayHetHanCanCuoc: DateTime(2035, 3, 12),
+    coQuanCapCanCuoc: 'Cục Cảnh sát QLHC về TTXH',
+    maCCHN: 'CCHN-YTE-2021-777',
+    ngayCapCCHN: DateTime(2021, 4, 10),
+    coQuanCapCCHN: 'Sở Y tế Bà Rịa - Vũng Tàu',
+    maTheChuyenNganh: 'TCN-CH-007',
+    tenChuyenNganh: 'Hồi sức Cấp cứu',
+    chucDanh: 'Trưởng khoa Cấp cứu',
+    donViCongTac: 'Trung tâm Y tế TP. Vũng Tàu',
     diemDanhGia: 4.9,
-    tongLuotDanhGia: 38,
-    maTrangThaiHoSo: 'DA_DUYET',
+    tongLuotDanhGia: 56,
+    maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
   ),
 ];
 
@@ -151,6 +185,20 @@ final List<YeuCauCuuHoModel> listYeuCauCuuHo = [
     thoiGianHoanThanh: null,
     maLoaiYeuCau: 'loaiyeucau_sos', // 🛠 Đã cập nhật
     maTinhTrangYeuCau: 'user_tinhtrang_chotiepnhan', // 🛠 Đã cập nhật
+  ),
+  YeuCauCuuHoModel(
+    maYeuCau: 'yeucau2',
+    thoiGianTao: DateTime.now(),
+    viDo: 10.3394,
+    kinhDo: 107.0835,
+    mucDoKhanCap: 1,
+    soNguoiCanCuuHo: 1,
+    maNguoiYeuCau: 'nguoidung4',
+    maAdminDieuPhoi: null,
+    thoiGianPhanCong: null,
+    thoiGianHoanThanh: null,
+    maLoaiYeuCau: 'loaiyeucau_sos',
+    maTinhTrangYeuCau: 'user_tinhtrang_chotiepnhan',
   ),
 ];
 
@@ -232,5 +280,18 @@ final List<TrangThaiModel> listTrangThai = [
   TrangThaiModel(maTrangThai: "cuuho_trangthai_daduyet", trangThai: "Đã Duyệt"),
   TrangThaiModel(maTrangThai: "cuuho_trangthai_tuchoi", trangThai: "Từ Chối"),
 ];
-
+final List<ChiTietMoTaHienTruongModel> ChiTietMoTaHienTruongList = [
+  ChiTietMoTaHienTruongModel(
+    maYeuCau: 'yeucau2',
+    videoUrl: 'https://example.com/video_hientruong_2.mp4',
+    ghiAmUrl: 'https://example.com/audio_hientruong_2.mp3',
+    ghiChuText: {
+      'trieuChung': ['Sốt cao 39.5°C', 'Co giật nhẹ', 'Khó thở'],
+      'moTaChiTiet':
+          'Bệnh nhân có biểu hiện co giật kéo dài khoảng 2 phút, người nhà đã sơ cứu mở thoáng đường thở. Cần bác sĩ ngoại khoa/cấp cứu hỗ trợ gấp tại hiện trường.',
+    },
+    thoiGianTao: DateTime.now(),
+  ),
+];
+final List<MoiQuanHeModel> listMoiQuanHe = [];
 final List<List> ListAll = [NguoiDungList];

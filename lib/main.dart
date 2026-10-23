@@ -1,5 +1,6 @@
 import 'package:cuhokhancap/user/BangXepHangCuuHo/BangXepHangCuuHo.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart';
+
 import 'package:cuhokhancap/user/NguoiThanCuaBan/NguoiThanCuaBan.dart';
 import 'package:cuhokhancap/user/UpData.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +31,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: BangXepHangCuuHo(),
+      home: UpData(),
     );
   }
 }

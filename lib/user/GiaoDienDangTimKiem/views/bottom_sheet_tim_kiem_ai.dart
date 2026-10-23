@@ -1,14 +1,47 @@
 // lib/GiaoDienDangTimKiem/views/bottom_sheet_tim_kiem_ai.dart
 
 import 'package:flutter/material.dart';
+import '../controllers/tim_kiem_cuu_ho_controller.dart';
 
 class BottomSheetTimKiemAIWidget extends StatelessWidget {
   final Color primaryColor;
+  final TimKiemCuuHoController controller;
 
-  const BottomSheetTimKiemAIWidget({super.key, required this.primaryColor});
+  const BottomSheetTimKiemAIWidget({
+    super.key,
+    required this.primaryColor,
+    required this.controller,
+  });
 
   @override
   Widget build(BuildContext context) {
+    int mucDoKhanCap = controller.yeuCauCuuHo?.mucDoKhanCap ?? 1;
+
+    String trieuChungText = 'Chưa cập nhật triệu chứng';
+    String moTaChiTietText = 'Chưa có mô tả chi tiết';
+
+    final ghiChuData = controller.chiTietMoTa?.ghiChuText;
+    if (ghiChuData is Map) {
+      if (ghiChuData['trieuChung'] != null) {
+        if (ghiChuData['trieuChung'] is List) {
+          trieuChungText = (ghiChuData['trieuChung'] as List).join(', ');
+        } else {
+          trieuChungText = ghiChuData['trieuChung'].toString();
+        }
+      }
+      if (ghiChuData['moTaChiTiet'] != null) {
+        moTaChiTietText = ghiChuData['moTaChiTiet'].toString();
+      }
+    } else if (ghiChuData is String && ghiChuData.isNotEmpty) {
+      trieuChungText = ghiChuData;
+    }
+
+    double currentRadiusKm =
+        controller.scanRadii[controller.currentScanStep] / 1000;
+    int rescuerCount = controller.rescuerList.length;
+    bool isMaxScanReached =
+        controller.currentScanStep == controller.scanRadii.length - 1;
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(
@@ -35,8 +68,10 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
+
+            // 1. Tiêu đề + Bộ đếm thời gian nhảy từng giây bên phải
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
                   child: Column(
@@ -61,47 +96,45 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Đang tìm kiếm bác sĩ xung quanh',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
                       Text(
-                        'Hệ thống đang rà soát bác sĩ trực tiếp phù hợp với triệu chứng',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
+                        rescuerCount == 0
+                            ? 'Đang tìm kiếm cứu hộ viên...'
+                            : 'Đã tìm thấy $rescuerCount người cứu hộ',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+
+                // ⏱️ Bộ đếm thời gian bên phải
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF2F5F9),
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: primaryColor.withOpacity(0.15)),
                   ),
                   child: Column(
-                    children: const [
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        '41s',
+                        controller.formattedElapsedTime,
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                          color: Color(0xFF00382B),
+                          fontSize: 16,
+                          color: primaryColor,
                         ),
                       ),
-                      Text(
-                        'Ước tính',
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
+                      const Text(
+                        'Thời gian quét',
+                        style: TextStyle(color: Colors.grey, fontSize: 10),
                       ),
                     ],
                   ),
@@ -109,6 +142,8 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
+
+            // 2. Khối Tình trạng bệnh nhân
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -139,9 +174,9 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                           color: Colors.red.shade100,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          'Ưu tiên 1',
-                          style: TextStyle(
+                        child: Text(
+                          'Ưu tiên $mucDoKhanCap',
+                          style: const TextStyle(
                             color: Colors.red,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
@@ -150,43 +185,58 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Sốt cao 38.5°C, đau họng, nghẹt mũi',
-                    style: TextStyle(
+                  const SizedBox(height: 8),
+                  Text(
+                    trieuChungText,
+                    style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    moTaChiTietText,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
+
+            // 3. Tiến trình Quét bán kính (Mở rộng liên tục đến 5km)
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFE8F5E9),
+                  decoration: BoxDecoration(
+                    color: rescuerCount > 0
+                        ? const Color(0xFFE8F5E9)
+                        : Colors.orange.shade50,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.check, color: Colors.green, size: 16),
+                  child: Icon(
+                    rescuerCount > 0 ? Icons.check : Icons.search,
+                    color: rescuerCount > 0 ? Colors.green : Colors.orange,
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Quét trong bán kính 3.5km',
-                        style: TextStyle(
+                      Text(
+                        'Quét trong bán kính ${currentRadiusKm.toStringAsFixed(1)}km',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
                       ),
                       Text(
-                        'Tìm thấy 8 bác sĩ đang sẵn sàng trực tuyến',
+                        rescuerCount == 0
+                            ? 'Đang mở rộng vùng quét tìm kiếm...'
+                            : 'Đã tìm thấy $rescuerCount cứu hộ viên gần nhất',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 12,
@@ -195,10 +245,14 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Text(
-                  'Đã xong',
+                Text(
+                  (rescuerCount >= 5 || isMaxScanReached)
+                      ? 'Đã xong'
+                      : 'Đang quét...',
                   style: TextStyle(
-                    color: Colors.green,
+                    color: (rescuerCount >= 5 || isMaxScanReached)
+                        ? Colors.green
+                        : Colors.orange,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -206,17 +260,21 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+
+            // 🌟 4. MỤC "XÁC NHẬN NHẬN CA TRỰC TIẾP" (Đã khôi phục chuẩn thiết kế)
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: rescuerCount > 0
+                        ? Colors.blue.shade50
+                        : Colors.grey.shade100,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.hourglass_empty,
-                    color: Colors.grey,
+                    color: rescuerCount > 0 ? Colors.blue : Colors.grey,
                     size: 16,
                   ),
                 ),
@@ -233,7 +291,9 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Bác sĩ phản hồi tín hiệu chấp thuận',
+                        rescuerCount > 0
+                            ? 'Đã gửi thông báo đến $rescuerCount cứu hộ viên'
+                            : 'Chờ kết nối cứu hộ viên chấp nhận',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 12,
@@ -243,16 +303,21 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Chờ ghép',
+                  rescuerCount > 0 ? 'Chờ xác nhận.' : 'Chờ ghép..',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: rescuerCount > 0
+                        ? Colors.blue
+                        : Colors.grey.shade500,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 20),
+
+            // 5. Nút thao tác
             Row(
               children: [
                 Expanded(

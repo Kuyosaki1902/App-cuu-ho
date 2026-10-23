@@ -1,6 +1,7 @@
-// lib/views/nguoi_than/bottom_sheet_gui_yeu_cau.dart
+// lib/user/NguoiThanCuaBan/views/bottom_sheet_gui_yeu_cau.dart
 
 import 'package:flutter/material.dart';
+import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 
 class BottomSheetGuiYeuCau extends StatefulWidget {
   final Color primaryColor;
@@ -41,18 +42,41 @@ class BottomSheetGuiYeuCau extends StatefulWidget {
 }
 
 class _BottomSheetGuiYeuCauState extends State<BottomSheetGuiYeuCau> {
-  // Hardcode danh sách mối quan hệ
-  String _myRelation = 'Con trai';
-  String _targetRelation = 'Bố (Ba)';
+  late final BottomSheetGuiYeuCauController _sheetController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sheetController = BottomSheetGuiYeuCauController();
+    _sheetController.addListener(_onControllerUpdate);
+  }
+
+  void _onControllerUpdate() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _sheetController.removeListener(_onControllerUpdate);
+    _sheetController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final targetOptions = _sheetController.getTargetOptions();
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -69,67 +93,99 @@ class _BottomSheetGuiYeuCauState extends State<BottomSheetGuiYeuCau> {
             'Thiết lập mối quan hệ',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 1. Phía "Bạn là"
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       'Bạn là',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _myRelation,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Con trai',
-                          child: Text('Con trai'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Con gái',
-                          child: Text('Con gái'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Anh/Em',
-                          child: Text('Anh/Em'),
-                        ),
-                      ],
-                      onChanged: (val) => setState(() => _myRelation = val!),
+                      isExpanded: true,
+                      value: _sheetController.myRelation,
+                      decoration: _buildInputDecoration(),
+                      items: _sheetController.myRelationOptions
+                          .map(
+                            (rel) => DropdownMenuItem(
+                              value: rel,
+                              child: Text(
+                                rel,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) _sheetController.updateMyRelation(val);
+                      },
                     ),
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                child: Icon(Icons.swap_horiz),
+
+              // 2. Nút Swap Mũi tên 2 chiều
+              Padding(
+                padding: const EdgeInsets.only(top: 18.0, left: 4, right: 4),
+                child: Material(
+                  color: widget.primaryColor.withOpacity(0.1),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.swap_horiz_rounded,
+                      color: widget.primaryColor,
+                    ),
+                    tooltip: 'Đổi chiều mối quan hệ',
+                    onPressed: _sheetController.swapRelations,
+                  ),
+                ),
               ),
+
+              // 3. Phía "Đối phương là"
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '${widget.targetName} là',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _targetRelation,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Bố (Ba)',
-                          child: Text('Bố (Ba)'),
-                        ),
-                        DropdownMenuItem(value: 'Mẹ', child: Text('Mẹ')),
-                        DropdownMenuItem(
-                          value: 'Bạn bè',
-                          child: Text('Bạn bè'),
-                        ),
-                      ],
-                      onChanged: (val) =>
-                          setState(() => _targetRelation = val!),
+                      isExpanded: true,
+                      value: _sheetController.targetRelation,
+                      decoration: _buildInputDecoration(),
+                      items: targetOptions
+                          .map(
+                            (rel) => DropdownMenuItem(
+                              value: rel,
+                              child: Text(
+                                rel,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null)
+                          _sheetController.updateTargetRelation(val);
+                      },
                     ),
                   ],
                 ),
@@ -141,17 +197,41 @@ class _BottomSheetGuiYeuCauState extends State<BottomSheetGuiYeuCau> {
             style: ElevatedButton.styleFrom(
               backgroundColor: widget.primaryColor,
               minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onPressed: () {
-              widget.onConfirm(_myRelation, _targetRelation);
+              widget.onConfirm(
+                _sheetController.myRelation,
+                _sheetController.targetRelation,
+              );
               Navigator.pop(context);
             },
             child: const Text(
               'Gửi yêu cầu thiết lập',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration() {
+    return InputDecoration(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
       ),
     );
   }
