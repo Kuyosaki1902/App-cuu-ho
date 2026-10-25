@@ -1,5 +1,6 @@
 // lib/mock_data.dart
 
+import 'package:cuhokhancap/user/models/chitietkynangmodel.dart';
 import 'package:cuhokhancap/user/models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/models/chitietphancongcuuhomodel%20.dart';
 import 'package:cuhokhancap/user/models/gioitinhmodel.dart';
@@ -9,6 +10,7 @@ import 'package:cuhokhancap/user/models/loaiyeucaumodel.dart';
 import 'package:cuhokhancap/user/models/moiquanhe.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/models/nguoithanmodel.dart';
+import 'package:cuhokhancap/user/models/phanloaianhmodel.dart';
 import 'package:cuhokhancap/user/models/tinhtrangyeucaumodel.dart';
 import 'package:cuhokhancap/user/models/trangthaimodel.dart';
 import 'package:cuhokhancap/user/models/vaitromodel.dart';
@@ -294,4 +296,49 @@ final List<ChiTietMoTaHienTruongModel> ChiTietMoTaHienTruongList = [
   ),
 ];
 final List<MoiQuanHeModel> listMoiQuanHe = [];
-final List<List> ListAll = [NguoiDungList];
+final List<ChiTietKyNangModel> listChiTietKiNang = [
+  ChiTietKyNangModel(
+    maNguoiDung: 'nguoidung3',
+    danhSachKiNang: [
+      ChiTietKyNangItemModel(
+        maKyNangCuuHo: 'kn_bang_bo',
+        ngayCapNhat: DateTime.now(),
+      ),
+      ChiTietKyNangItemModel(
+        maKyNangCuuHo: 'kn_bong',
+        ngayCapNhat: DateTime.now(),
+      ),
+      ChiTietKyNangItemModel(
+        maKyNangCuuHo: 'kn_cpr',
+        ngayCapNhat: DateTime.now(),
+      ),
+      ChiTietKyNangItemModel(
+        maKyNangCuuHo: 'kn_co_dinh',
+        ngayCapNhat: DateTime.now(),
+      ),
+      ChiTietKyNangItemModel(
+        maKyNangCuuHo: 'kn_duoi_nuoc',
+        ngayCapNhat: DateTime.now(),
+      ),
+    ],
+  ),
+];
+final List<PhanLoaiAnhModel> listPhanLoaiAnh = [
+  PhanLoaiAnhModel(
+    maPhanLoaiAnh: 'phanloaianh_anhthuctekhongcchn',
+    tenLoai: 'Ảnh Thực Tế Không CCHN',
+  ),
+  PhanLoaiAnhModel(
+    maPhanLoaiAnh: 'phanloaianh_thecongtac',
+    tenLoai: 'Thẻ Công Tác',
+  ),
+  PhanLoaiAnhModel(
+    maPhanLoaiAnh: 'phanloaianh_avatar',
+    tenLoai: 'Ảnh Avatar Người Dùng',
+  ),
+  PhanLoaiAnhModel(
+    maPhanLoaiAnh: 'phanloaianh_hientruong',
+    tenLoai: 'Ảnh Hiện Trường Nạn Nhân',
+  ),
+];
+final List<List> ListAll = [listPhanLoaiAnh];

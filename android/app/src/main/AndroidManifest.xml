@@ -9,6 +9,9 @@
         <meta-data 
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps"/>
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

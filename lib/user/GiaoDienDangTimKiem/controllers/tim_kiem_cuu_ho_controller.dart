@@ -49,9 +49,12 @@ class TimKiemCuuHoController {
 
   Timer? _scanTimer;
   Timer? _secondsTimer;
-  int elapsedSeconds = 0;
+  Timer? _timeoutTimer;
+  StreamSubscription<List<ChiTietPhanCongCuuHoModel>>? _phanCongSubscription;
 
-  List<Map<String, dynamic>> rescuerList = [];
+  int elapsedSeconds = 0;
+  List<Map<String, dynamic>> rescuerList = []; // Cứu hộ viên được đề xuất/quét
+  List<String> acceptedRescuerIds = []; // Danh sách CHV ĐÃ TIẾP NHẬN
 
   String get formattedElapsedTime {
     int minutes = elapsedSeconds ~/ 60;
@@ -67,26 +70,282 @@ class TimKiemCuuHoController {
     onUpdate();
 
     try {
-      // Đọc yêu cầu cứu hộ từ FirebaseService
-      yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
-      if (yeuCauCuuHo != null) {
-        currentDeviceLocation = LatLng(yeuCauCuuHo!.viDo, yeuCauCuuHo!.kinhDo);
-      } else {
-        await fetchGPSLocation();
-      }
+      await fetchGPSLocation();
 
+      await _firebaseService.updateYeuCauLocation(
+        maYeuCau: maYeuCau,
+        viDo: currentDeviceLocation.latitude,
+        kinhDo: currentDeviceLocation.longitude,
+      );
+
+      yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
       moveToCurrentLocation();
 
-      // Đọc chi tiết mô tả hiện trường từ FirebaseService
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
+      await updateMapOverlays();
 
-      updateMapOverlays();
-      startScanProcess(maYeuCau, onUpdate);
+      // 🌟 1. Bật Stream Realtime lắng nghe bảng ChiTietPhanCongCuuHo
+      _listenToPhanCongChanges(maYeuCau, onUpdate);
+
+      // 🌟 2. Khởi tạo đếm ngược 5 phút (300s) timeout
+      _startTimeoutTimer(maYeuCau, onUpdate);
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
       isLoading = false;
       onUpdate();
+    }
+
+    // 🌟 3. Tiến hành Quét AI & Gửi yêu cầu
+    startScanProcess(maYeuCau, onUpdate);
+  }
+
+  /// 🌟 REALTIME MONITORING: Lắng nghe liên tục thay đổi trạng thái phản hồi
+  void _listenToPhanCongChanges(String maYeuCau, Function() onUpdate) {
+    _phanCongSubscription?.cancel();
+    _phanCongSubscription = _firebaseService
+        .streamPhanCongByYeuCau(maYeuCau)
+        .listen((phanCongList) {
+          acceptedRescuerIds.clear();
+
+          for (var pc in phanCongList) {
+            // Nếu chuyển trạng thái sang cuuho_trangthai_tiepnhan
+            if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_tiepnhan') {
+              if (!acceptedRescuerIds.contains(pc.maNguoiCuuHo)) {
+                acceptedRescuerIds.add(pc.maNguoiCuuHo);
+              }
+            }
+            // Nếu cuuho_trangthai_tuchoi thì tự động bỏ qua (không ghi nhận)
+          }
+
+          // 🛑 ĐIỀU KIỆN CỐT LÕI 1: Có đủ 5 Cứu hộ viên tiếp nhận ca -> Dừng tìm kiếm ngay
+          if (acceptedRescuerIds.length >= 5) {
+            _stopAllTimersAndSearch();
+            _firebaseService.updateTinhTrangYeuCau(
+              maYeuCau,
+              'user_tinhtrang_daphancong',
+            );
+            debugPrint('🎯 Đã có đủ 5 Cứu hộ viên nhận đơn. Dừng tìm kiếm!');
+          }
+
+          onUpdate();
+        });
+  }
+
+  /// 🌟 TIMEOUT TIMER: Đếm ngược 5 phút (300 giây)
+  void _startTimeoutTimer(String maYeuCau, Function() onUpdate) {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(const Duration(minutes: 5), () async {
+      _stopAllTimersAndSearch();
+
+      if (acceptedRescuerIds.isNotEmpty) {
+        // 🛑 ĐIỀU KIỆN CỐT LÕI 2: Quá 5 phút & Ít nhất 1 CHV nhận -> user_tinhtrang_daphancong
+        await _firebaseService.updateTinhTrangYeuCau(
+          maYeuCau,
+          'user_tinhtrang_daphancong',
+        );
+        debugPrint(
+          '⏱️ Hết 5 phút: Đã có ${acceptedRescuerIds.length} CHV nhận.',
+        );
+      } else {
+        // 🛑 ĐIỀU KIỆN CỐT LÕI 3: Quá 5 phút & KHÔNG có ai nhận -> user_tinhtrang_quahandieuphoi
+        await _firebaseService.updateTinhTrangYeuCau(
+          maYeuCau,
+          'user_tinhtrang_quahandieuphoi',
+        );
+        debugPrint('⏱️ Hết 5 phút: Không có CHV nào nhận đơn!');
+      }
+      onUpdate();
+    });
+  }
+
+  void startScanProcess(String maYeuCau, Function() onUpdate) {
+    currentScanStep = 0;
+    elapsedSeconds = 0;
+
+    _performScanWithAI(maYeuCau, onUpdate);
+
+    _secondsTimer?.cancel();
+    _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      elapsedSeconds++;
+      onUpdate();
+    });
+
+    _scheduleNextScanStep(maYeuCau, onUpdate);
+  }
+
+  void _scheduleNextScanStep(String maYeuCau, Function() onUpdate) {
+    _scanTimer?.cancel();
+    _scanTimer = Timer(scanIntervals[currentScanStep], () {
+      if (rescuerList.length < 5 && currentScanStep < scanRadii.length - 1) {
+        currentScanStep++;
+        updateMapOverlays();
+        _performScanWithAI(maYeuCau, onUpdate);
+        _scheduleNextScanStep(maYeuCau, onUpdate);
+      }
+    });
+  }
+
+  /// 🌟 PHÂN TÍCH TỪ KHÓA AI & MATCH HỒ SƠ
+  Future<void> _performScanWithAI(String maYeuCau, Function() onUpdate) async {
+    double currentRadiusMeters = scanRadii[currentScanStep];
+
+    try {
+      Set<String> rescuerUserIds = await _firebaseService
+          .getAllRescuerUserIds();
+      if (rescuerUserIds.isEmpty) return;
+
+      List<String> userIdsList = rescuerUserIds.toList();
+      List<NguoiDungModel> rescuerUsers = [];
+
+      for (var i = 0; i < userIdsList.length; i += 30) {
+        var chunk = userIdsList.sublist(
+          i,
+          i + 30 > userIdsList.length ? userIdsList.length : i + 30,
+        );
+        for (var userId in chunk) {
+          final user = await _firebaseService.getUserById(userId);
+          if (user != null) rescuerUsers.add(user);
+        }
+      }
+
+      // Trích xuất mô tả hiện trường từ màn hình trước
+      String keywordsText = '';
+      if (chiTietMoTa?.ghiChuText != null) {
+        keywordsText = chiTietMoTa!.ghiChuText.toString().toLowerCase();
+      }
+
+      String loaiYeuCau = yeuCauCuuHo?.maLoaiYeuCau ?? 'loaiyeucau_sos';
+
+      for (var user in rescuerUsers) {
+        if (rescuerList.length >= 5) break;
+
+        if (yeuCauCuuHo != null &&
+            user.maNguoiDung == yeuCauCuuHo!.maNguoiYeuCau) {
+          continue;
+        }
+
+        if (user.viDo == null || user.kinhDo == null) continue;
+
+        double distanceInMeters = Geolocator.distanceBetween(
+          currentDeviceLocation.latitude,
+          currentDeviceLocation.longitude,
+          user.viDo!,
+          user.kinhDo!,
+        );
+
+        if (distanceInMeters <= currentRadiusMeters) {
+          bool isExisted = rescuerList.any(
+            (r) => r['user'].maNguoiDung == user.maNguoiDung,
+          );
+
+          if (!isExisted) {
+            // Lọc theo maLoaiYeuCau
+            bool isMatched = await _checkAIMatchProfile(
+              user.maNguoiDung!,
+              loaiYeuCau,
+              keywordsText,
+            );
+
+            if (isMatched) {
+              double distanceKm = (distanceInMeters / 1000);
+
+              rescuerList.add({
+                'user': user,
+                'distanceKm': distanceKm.toStringAsFixed(1),
+              });
+
+              _addRescuerMarker(user, distanceKm.toStringAsFixed(1));
+
+              // Gửi bản ghi phân công với trạng thái chờ phản hồi initial
+              await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
+            }
+          }
+        }
+      }
+
+      onUpdate();
+    } catch (e) {
+      debugPrint('Lỗi quét AI cứu hộ: $e');
+    }
+  }
+
+  /// 🌟 KIỂM TRA MATCH HỒ SƠ DỰA VÀO LOẠI YÊU CẦU & AI KEYWORDS
+  Future<bool> _checkAIMatchProfile(
+    String userId,
+    String loaiYeuCau,
+    String keywords,
+  ) async {
+    // 1. loaiyeucau_timtudong: Chỉ tìm HoSoCuuHoCoCCHN
+    final hoSoCoCCHN = await _firebaseService.getHoSoCoCCHN(userId);
+    if (hoSoCoCCHN != null) {
+      if (keywords.isEmpty)
+        return true; // Không có mô tả -> Ghép mặc định theo vị trí
+      String chuyenNganh = hoSoCoCCHN.tenChuyenNganh.toLowerCase();
+      if (keywords.contains(chuyenNganh) || chuyenNganh.contains(keywords)) {
+        return true;
+      }
+    }
+
+    if (loaiYeuCau == 'loaiyeucau_timtudong') {
+      return false; // Bỏ qua hồ sơ không CCHN nếu chọn tìm tự động chuẩn y tế
+    }
+
+    // 2. loaiyeucau_sos: Tìm cả 2 hồ sơ (Kiểm tra tiếp HoSoCuuHoKhongCCHN)
+    final hoSoKhongCCHN = await _firebaseService.getHoSoKhongCCHN(userId);
+    if (hoSoKhongCCHN != null) {
+      if (keywords.isEmpty) return true;
+
+      // 🌟 Truy vấn danh sách ID kỹ năng từ Subcollection ChiTietKiNang/{userId}/DanhSachKiNang
+      List<String> userSkillIds = await _firebaseService.getSkillIdsByUserId(
+        userId,
+      );
+
+      if (userSkillIds.isNotEmpty) {
+        // Kiểm tra mã kỹ năng (vd: kn_bang_bo, kn_cpr) có nằm trong ghi chú mô tả không
+        bool isSkillIdMatched = userSkillIds.any(
+          (skId) => keywords.contains(skId.toLowerCase()),
+        );
+        if (isSkillIdMatched) return true;
+
+        // Đọc tiếp tên / mô tả kỹ năng từ bảng KyNangCuuHo để so sánh từ khóa
+        List<String> skillDetails = await _firebaseService.getSkillNamesByIds(
+          userSkillIds,
+        );
+        bool isSkillDetailMatched = skillDetails.any(
+          (detail) => keywords.contains(detail) || detail.contains(keywords),
+        );
+        if (isSkillDetailMatched) return true;
+      }
+    }
+
+    return true; // Mặc định hỗ trợ tìm rộng nếu chưa trùng khớp hoàn toàn từ khóa
+  }
+
+  Future<void> _createAssignmentRecord(
+    String maYeuCau,
+    String maNguoiCuuHo,
+  ) async {
+    try {
+      int previousCount = await _firebaseService.countAssignmentsByRescuer(
+        maNguoiCuuHo,
+      );
+      int soCaThamGia = previousCount + 1;
+      String maPhanCong = 'phancong_${maNguoiCuuHo}_$soCaThamGia';
+
+      final phanCong = ChiTietPhanCongCuuHoModel(
+        maPhanCong: maPhanCong,
+        maYeuCau: maYeuCau,
+        loaiPhanCong: 'Hệ thống AI tự động',
+        maNguoiCuuHo: maNguoiCuuHo,
+        thoiGianGui: DateTime.now(),
+        maLoaiPhanCong: 'phancong_hethongtudong',
+        maTrangThaiTiepNhan: 'cuuho_trangthai_chophanhoi', // Trạng thái ban đầu
+      );
+
+      await _firebaseService.createPhanCongCuuHo(phanCong);
+    } catch (e) {
+      debugPrint('Lỗi tạo bản ghi phân công: $e');
     }
   }
 
@@ -107,127 +366,6 @@ class TimKiemCuuHoController {
       currentDeviceLocation = LatLng(position.latitude, position.longitude);
     } catch (e) {
       debugPrint('Lỗi GPS: $e');
-    }
-  }
-
-  void startScanProcess(String maYeuCau, Function() onUpdate) {
-    currentScanStep = 0;
-    elapsedSeconds = 0;
-
-    _performScan(maYeuCau, onUpdate);
-
-    _secondsTimer?.cancel();
-    _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      elapsedSeconds++;
-      onUpdate();
-    });
-
-    _scheduleNextScanStep(maYeuCau, onUpdate);
-  }
-
-  void _scheduleNextScanStep(String maYeuCau, Function() onUpdate) {
-    _scanTimer?.cancel();
-    _scanTimer = Timer(scanIntervals[currentScanStep], () {
-      if (rescuerList.length < 5 && currentScanStep < scanRadii.length - 1) {
-        currentScanStep++;
-        updateMapOverlays();
-        _performScan(maYeuCau, onUpdate);
-        _scheduleNextScanStep(maYeuCau, onUpdate);
-      }
-    });
-  }
-
-  Future<void> _performScan(String maYeuCau, Function() onUpdate) async {
-    double currentRadiusMeters = scanRadii[currentScanStep];
-
-    try {
-      Set<String> rescuerUserIds = await _firebaseService
-          .getAllRescuerUserIds();
-      if (rescuerUserIds.isEmpty) return;
-
-      List<String> userIdsList = rescuerUserIds.toList();
-      List<NguoiDungModel> rescuerUsers = [];
-
-      for (var i = 0; i < userIdsList.length; i += 30) {
-        var chunk = userIdsList.sublist(
-          i,
-          i + 30 > userIdsList.length ? userIdsList.length : i + 30,
-        );
-
-        for (var userId in chunk) {
-          final user = await _firebaseService.getUserById(userId);
-          if (user != null) rescuerUsers.add(user);
-        }
-      }
-
-      for (var user in rescuerUsers) {
-        if (rescuerList.length >= 5) break;
-
-        if (yeuCauCuuHo != null &&
-            user.maNguoiDung == yeuCauCuuHo!.maNguoiYeuCau) {
-          continue;
-        }
-
-        if (user.viDo == null || user.kinhDo == null) {
-          continue;
-        }
-
-        double distanceInMeters = Geolocator.distanceBetween(
-          currentDeviceLocation.latitude,
-          currentDeviceLocation.longitude,
-          user.viDo!,
-          user.kinhDo!,
-        );
-
-        if (distanceInMeters <= currentRadiusMeters) {
-          bool isExisted = rescuerList.any(
-            (r) => r['user'].maNguoiDung == user.maNguoiDung,
-          );
-          if (!isExisted) {
-            double distanceKm = (distanceInMeters / 1000);
-
-            rescuerList.add({
-              'user': user,
-              'distanceKm': distanceKm.toStringAsFixed(1),
-            });
-
-            _addRescuerMarker(user, distanceKm.toStringAsFixed(1));
-            await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
-          }
-        }
-      }
-
-      onUpdate();
-    } catch (e) {
-      debugPrint('Lỗi quét cứu hộ: $e');
-    }
-  }
-
-  Future<void> _createAssignmentRecord(
-    String maYeuCau,
-    String maNguoiCuuHo,
-  ) async {
-    try {
-      int previousCount = await _firebaseService.countAssignmentsByRescuer(
-        maNguoiCuuHo,
-      );
-      int soCaThamGia = previousCount + 1;
-
-      String maPhanCong = 'phancong_${maNguoiCuuHo}_$soCaThamGia';
-
-      final phanCong = ChiTietPhanCongCuuHoModel(
-        maPhanCong: maPhanCong,
-        maYeuCau: maYeuCau,
-        loaiPhanCong: 'Hệ thống tự động',
-        maNguoiCuuHo: maNguoiCuuHo,
-        thoiGianGui: DateTime.now(),
-        maLoaiPhanCong: 'phancong_hethongtudong',
-        maTrangThaiTiepNhan: 'chv_choxacnhan',
-      );
-
-      await _firebaseService.createPhanCongCuuHo(phanCong);
-    } catch (e) {
-      debugPrint('Lỗi tạo bản ghi phân công: $e');
     }
   }
 
@@ -398,8 +536,14 @@ class TimKiemCuuHoController {
     mapController?.animateCamera(CameraUpdate.newLatLng(currentDeviceLocation));
   }
 
-  void dispose() {
+  void _stopAllTimersAndSearch() {
     _scanTimer?.cancel();
     _secondsTimer?.cancel();
+    _timeoutTimer?.cancel();
+  }
+
+  void dispose() {
+    _stopAllTimersAndSearch();
+    _phanCongSubscription?.cancel();
   }
 }

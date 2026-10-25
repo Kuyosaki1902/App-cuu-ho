@@ -7,7 +7,6 @@ import 'package:cuhokhancap/user/models/gioitinhmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhokhongcchnmodel.dart';
 import 'package:cuhokhancap/user/models/loaiyeucaumodel.dart';
-import 'package:cuhokhancap/user/models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/models/moiquanhe.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/models/nguoithanmodel.dart';
@@ -199,9 +198,76 @@ class FirebaseService {
         .set(phanCong.toMap(), SetOptions(merge: true));
   }
 
+  Stream<List<ChiTietPhanCongCuuHoModel>> streamPhanCongByYeuCau(
+    String maYeuCau,
+  ) {
+    return _firestore
+        .collection('ChiTietPhanCongCuuHo')
+        .where('maYeuCau', isEqualTo: maYeuCau)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map(
+                (doc) => ChiTietPhanCongCuuHoModel.fromMap(doc.data(), doc.id),
+              )
+              .toList(),
+        );
+  }
+
+  Future<void> updateTinhTrangYeuCau(
+    String maYeuCau,
+    String maTinhTrang,
+  ) async {
+    try {
+      await _firestore.collection('YeuCauCuuHo').doc(maYeuCau).update({
+        'maTinhTrangYeuCau': maTinhTrang,
+      });
+    } catch (e) {
+      print('Lỗi FirebaseService.updateTinhTrangYeuCau: $e');
+    }
+  }
+
   // ===========================================================================
   // 4. HO SO CUU HO & QUẢN LÝ CỨU HỘ VIÊN
   // ===========================================================================
+
+  /// Lấy Hồ sơ Cứu hộ CÓ Chứng chỉ hành nghề theo ID Người dùng
+  Future<HoSoCuuHoCoCCHNModel?> getHoSoCoCCHN(String userId) async {
+    try {
+      final snap = await _firestore
+          .collection('HoSoCuuHoCoCCHN')
+          .where('maNguoiDung', isEqualTo: userId)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        final doc = snap.docs.first;
+        return HoSoCuuHoCoCCHNModel.fromMap(doc.data(), doc.id);
+      }
+    } catch (e) {
+      print('Lỗi FirebaseService.getHoSoCoCCHN: $e');
+    }
+    return null;
+  }
+
+  /// Lấy Hồ sơ Cứu hộ KHÔNG CÓ Chứng chỉ hành nghề theo ID Người dùng
+  Future<HoSoCuuHoKhongCCHNModel?> getHoSoKhongCCHN(String userId) async {
+    try {
+      final snap = await _firestore
+          .collection('HoSoCuuHoKhongCCHN')
+          .where('maNguoiDung', isEqualTo: userId)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        final doc = snap.docs.first;
+        return HoSoCuuHoKhongCCHNModel.fromMap(doc.data(), doc.id);
+      }
+    } catch (e) {
+      print('Lỗi FirebaseService.getHoSoKhongCCHN: $e');
+    }
+    return null;
+  }
 
   Future<QuerySnapshot<Map<String, dynamic>>> getHoSoCoCCHNSnapshot() async {
     return await _firestore.collection('HoSoCuuHoCoCCHN').get();
@@ -411,5 +477,101 @@ class FirebaseService {
     batch.delete(ref2);
 
     await batch.commit();
+  }
+
+  /// Cập nhật nhanh vị trí GPS cho Yêu Cầu Cứu Hộ
+  Future<void> updateYeuCauLocation({
+    required String maYeuCau,
+    required double viDo,
+    required double kinhDo,
+  }) async {
+    try {
+      await _firestore.collection('YeuCauCuuHo').doc(maYeuCau).update({
+        'viDo': viDo,
+        'kinhDo': kinhDo,
+      });
+    } catch (e) {
+      print('Lỗi FirebaseService.updateYeuCauLocation: $e');
+    }
+  }
+  // lib/services/firebase_service.dart
+
+  /// Lấy danh sách mã kỹ năng cứu hộ của người dùng từ ChiTietKiNang/{userId}/DanhSachKiNang
+  Future<List<String>> getSkillIdsByUserId(String userId) async {
+    List<String> skillIds = [];
+    try {
+      final snap = await _firestore
+          .collection('ChiTietKiNang')
+          .doc(userId)
+          .collection('DanhSachKiNang')
+          .get();
+
+      for (var doc in snap.docs) {
+        final data = doc.data();
+        String maKN =
+            (data['maKiNangCuuHo'] != null &&
+                data['maKiNangCuuHo'].toString().isNotEmpty)
+            ? data['maKiNangCuuHo'].toString()
+            : doc.id;
+        skillIds.add(maKN);
+      }
+    } catch (e) {
+      print('Lỗi FirebaseService.getSkillIdsByUserId: $e');
+    }
+    return skillIds;
+  }
+
+  /// Lấy danh sách Tên / Mô tả kỹ năng từ danh sách maKiNangCuuHo
+  Future<List<String>> getSkillNamesByIds(List<String> skillIds) async {
+    List<String> skillNames = [];
+    if (skillIds.isEmpty) return skillNames;
+
+    try {
+      for (var i = 0; i < skillIds.length; i += 30) {
+        var chunk = skillIds.sublist(
+          i,
+          i + 30 > skillIds.length ? skillIds.length : i + 30,
+        );
+
+        var snap = await _firestore
+            .collection('KyNangCuuHo')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+
+        for (var doc in snap.docs) {
+          final data = doc.data();
+          if (data['ten'] != null)
+            skillNames.add(data['ten'].toString().toLowerCase());
+          if (data['moTa'] != null)
+            skillNames.add(data['moTa'].toString().toLowerCase());
+        }
+      }
+    } catch (e) {
+      print('Lỗi FirebaseService.getSkillNamesByIds: $e');
+    }
+    return skillNames;
+  }
+
+  Future<void> createPhanCongTheoNgay({
+    required String maNguoiCuuHo,
+    required ChiTietPhanCongCuuHoModel phanCong,
+  }) async {
+    try {
+      // Lấy chuỗi ngày hôm nay dạng YYYY-MM-DD
+      final String todayStr = DateTime.now().toString().substring(0, 10);
+
+      // Tham chiếu đến đúng Subcollection theo sơ đồ phân cấp
+      final docRef = _firestore
+          .collection('NguoiDung')
+          .doc(maNguoiCuuHo)
+          .collection('DanhSachNgay')
+          .doc(todayStr)
+          .collection('DanhSachPhanCong')
+          .doc(phanCong.maPhanCong);
+
+      await docRef.set(phanCong.toMap(), SetOptions(merge: true));
+    } catch (e) {
+      print('Lỗi FirebaseService.createPhanCongTheoNgay: $e');
+    }
   }
 }
