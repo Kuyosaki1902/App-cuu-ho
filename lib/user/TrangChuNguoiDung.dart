@@ -1,90 +1,221 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart'; // THÊM THƯ VIỆN GPS
+import 'package:geolocator/geolocator.dart'; 
+import 'package:geohash_plus/geohash_plus.dart' hide LatLng; 
+import 'package:firebase_database/firebase_database.dart'; // THÊM IMPORT NÀY
+import 'package:cuhokhancap/firebase/firebase_service.dart'; 
+import 'package:cuhokhancap/user/DangNhap.dart'; // THÊM IMPORT NÀY
 import 'MenuNguoiDung.dart'; 
 import 'package:cuhokhancap/user/MoTaTinhTrang.dart'; 
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
-  const TrangChuNguoiDung({super.key, required this.maNguoiDung});
+  final String maThietBi; // Bổ sung biến maThietBi
+  
+  const TrangChuNguoiDung({super.key, required this.maNguoiDung, required this.maThietBi});
 
   @override
   State<TrangChuNguoiDung> createState() => _TrangChuNguoiDungState();
 }
 
-class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
+class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   GoogleMapController? _mapController;
+  final FirebaseService _firebaseService = FirebaseService();
 
-  // Biến lưu tọa độ hiện tại
   LatLng _currentPosition = const LatLng(10.7725, 106.6980);
   double _currentRadius = 3000;
+  
+  StreamSubscription<Position>? _positionStreamSubscription;
+  StreamSubscription<ServiceStatus>? _serviceStatusStreamSubscription;
+  StreamSubscription<DatabaseEvent>? _kickOutSubscription; // Biến lắng nghe đá văng
+  
+  bool _hasLocationPermission = false;
+  bool _isKickedOut = false; // Biến cờ ngăn báo false nhầm
 
   @override
   void initState() {
     super.initState();
-    // Tự động quét và xin quyền định vị ngay khi vào màn hình
+    WidgetsBinding.instance.addObserver(this); 
+    
+    // Gửi kèm mã thiết bị lên Server
+    _firebaseService.thietLapTrangThaiOnline(widget.maNguoiDung, widget.maThietBi);
+    
+    // Bật radar lắng nghe mã thiết bị
+    _langNgheBiDaVang();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _getCurrentLocationAndMove();
+      _checkPermissionAndListenLocation();
     });
   }
 
-  // Hàm quét vị trí thực tế
-  Future<void> _getCurrentLocationAndMove() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vui lòng bật định vị (GPS) trên điện thoại.')),
-        );
+  // HÀM LẮNG NGHE ĐÁ VĂNG
+  void _langNgheBiDaVang() {
+    final rtdb = FirebaseDatabase.instanceFor(
+      app: Firebase.app(),
+      databaseURL: 'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
+    );
+    
+    _kickOutSubscription = rtdb.ref('NguoiDung/${widget.maNguoiDung}/maThietBi').onValue.listen((event) {
+      final thietBiTrenServer = event.snapshot.value?.toString();
+      
+      // Nếu mã trên server bị thay đổi khác với mã của máy này -> Bị đăng nhập đè!
+      if (thietBiTrenServer != null && thietBiTrenServer != widget.maThietBi) {
+        _hienThiThongBaoBiDaVang();
       }
+    });
+  }
+
+  // HIỆN THÔNG BÁO VÀ VĂNG RA TRANG ĐĂNG NHẬP
+  void _hienThiThongBaoBiDaVang() {
+    if (!mounted) return;
+    
+    // Đánh dấu cờ là bị đá văng
+    _isKickedOut = true; 
+    // Hủy OnDisconnect để máy cũ không kéo sập trạng thái online của máy mới
+    _firebaseService.huyOnDisconnect(widget.maNguoiDung); 
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Đăng xuất', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('Hiện tại có người đang đăng nhập tài khoản này trên thiết bị khác. Bạn đã bị đăng xuất.'),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const DangNhap()),
+                (route) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB71C1C)),
+            child: const Text('Xác nhận', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, true);
+    } 
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _positionStreamSubscription?.cancel(); 
+    _serviceStatusStreamSubscription?.cancel();
+    _kickOutSubscription?.cancel();
+    
+    // CỰC KỲ QUAN TRỌNG: Chỉ set False nếu đóng app bình thường, 
+    // KHÔNG set False nếu bị đá văng (vì sẽ làm máy kia bị tắt online theo).
+    if (!_isKickedOut) {
+      _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false); 
+    }
+    
+    super.dispose();
+  }
+
+  // ... (Toàn bộ code giao diện và định vị phía dưới giữ nguyên 100%)
+  
+  Future<void> _checkPermissionAndListenLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
+      _showErrorAndExit('Vui lòng bật GPS trên thiết bị.');
       return;
     }
 
-    permission = await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Quyền định vị bị từ chối.')),
-          );
-        }
+        _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
+        _showErrorAndExit('Bạn đã từ chối quyền định vị.');
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Quyền định vị bị từ chối vĩnh viễn. Vui lòng mở Cài đặt để cấp lại.')),
-        );
-      }
+      _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
+      _showErrorAndExit('Quyền định vị bị từ chối vĩnh viễn.');
       return;
     }
 
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high
-    );
+    setState(() {
+      _hasLocationPermission = true;
+    });
 
+    Position initialPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    _processAndUpdateLocation(initialPosition);
+
+    _positionStreamSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 300, 
+      ),
+    ).listen((Position newPosition) {
+      _processAndUpdateLocation(newPosition);
+    });
+
+    _serviceStatusStreamSubscription = Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+      if (status == ServiceStatus.disabled) {
+        _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
+        _showErrorAndExit('GPS đã bị tắt, ứng dụng chuyển sang ngoại tuyến.');
+      } else if (status == ServiceStatus.enabled) {
+        _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, true);
+      }
+    });
+  }
+
+  void _processAndUpdateLocation(Position position) {
+    if (!mounted) return;
+    
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
-
     _recenterCamera();
+
+    String geohash = GeoHash.encode(position.latitude, position.longitude).hash;
+
+    _firebaseService.capNhatViTriVaTrangThai(
+      widget.maNguoiDung,
+      position.latitude,
+      position.longitude,
+      geohash,
+      true, 
+    );
   }
 
-  // Hàm đưa Camera về đúng vị trí định vị mà không gọi lại GPS
+  void _showErrorAndExit(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+      Future.delayed(const Duration(seconds: 2), () {
+        SystemNavigator.pop(); 
+      });
+    }
+  }
+
   void _recenterCamera() {
     if (_mapController != null) {
-      // Giữ nguyên thông số zoom của bạn
-      double targetZoom = 12.5;
-      if (_currentRadius == 1000) targetZoom = 13.5;
-      if (_currentRadius == 5000) targetZoom = 11.5;
+      double targetZoom = 13.5;
+      if (_currentRadius == 1000) targetZoom = 14.5;
+      if (_currentRadius == 5000) targetZoom = 12.5;
 
       _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(_currentPosition, targetZoom),
@@ -100,19 +231,12 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
       body: Stack(
         children: [
           GoogleMap(
-            // Padding đẩy tâm bản đồ lên trên 400 pixel (né bảng Bottom Panel) và 100 pixel bên trên
             padding: const EdgeInsets.only(bottom: 400, top: 100),
-            initialCameraPosition: CameraPosition(
-              target: _currentPosition,
-              zoom: 13.5,
-            ),
+            initialCameraPosition: CameraPosition(target: _currentPosition, zoom: 13.5),
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false, 
-            myLocationEnabled: true, // Chấm xanh dương mặc định
-            onMapCreated: (controller) {
-              _mapController = controller;
-            },
-            // Đã xóa hoàn toàn khối markers (chấm đỏ) ở đây
+            myLocationEnabled: _hasLocationPermission, 
+            onMapCreated: (controller) => _mapController = controller,
             circles: {
               Circle(
                 circleId: const CircleId('radius_circle'),
@@ -124,8 +248,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
               ),
             },
           ),
-
-          // Thanh công cụ trên cùng
           Positioned(
             top: 50,
             left: 16,
@@ -133,22 +255,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCircularButton(
-                  icon: Icons.menu,
-                  onTap: () {
-                    _scaffoldKey.currentState?.openDrawer();
-                  },
-                ),
-
+                _buildCircularButton(icon: Icons.menu, onTap: () => _scaffoldKey.currentState?.openDrawer()),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
-                    ],
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)]),
                   child: Row(
                     children: [
                       _buildRadiusOption("1 km", 1000),
@@ -157,22 +267,13 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                     ],
                   ),
                 ),
-
                 Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
-                    ],
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)]),
                   child: Material(
                     color: Colors.transparent, 
                     child: InkWell(
                       borderRadius: BorderRadius.circular(30), 
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatVoiAIScreen()));
-                      },
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatVoiAIScreen())),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         child: Row(
@@ -189,22 +290,11 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
               ],
             ),
           ),
-
           Positioned(
             top: 120,
             right: 16,
-            child: Column(
-              children: [
-                // Nút chỉ dùng để di chuyển Camera về lại vị trí
-                _buildCircularButton(
-                  icon: Icons.center_focus_strong,
-                  onTap: _recenterCamera, 
-                ),
-              ],
-            ),
+            child: _buildCircularButton(icon: Icons.center_focus_strong, onTap: _recenterCamera),
           ),
-
-          // Khối ở dưới cùng
           Positioned(
             bottom: 0,
             left: 0,
@@ -219,12 +309,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                     height: 80,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: const RadialGradient(
-                        colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(color: Colors.red.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 5),
-                      ],
+                      gradient: const RadialGradient(colors: [Color(0xFFE53935), Color(0xFFB71C1C)]),
+                      boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 5)],
                     ),
                     child: const Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -235,17 +321,13 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 20),
-
                 Container(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -256,10 +338,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                           width: 40,
                           height: 4,
                           margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                       Row(
@@ -274,18 +353,14 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F5E9),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
+                            decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(20)),
                             child: const Text("Tốc độ 8-15p", style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      const Text("Trong bán kính quét 3km quanh vị trí hiện tại", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      const Text("Trong bán kính quét quanh vị trí hiện tại", style: TextStyle(color: Colors.grey, fontSize: 13)),
                       const SizedBox(height: 16),
-
                       GestureDetector(
                         onTap: () {
                           showModalBottomSheet(
@@ -300,10 +375,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                         },
                         child: Container(
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF5F7FA),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: BoxDecoration(color: const Color(0xFFF5F7FA), borderRadius: BorderRadius.circular(12)),
                           child: Row(
                             children: [
                               Container(
@@ -327,7 +399,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
@@ -394,15 +465,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
         setState(() {
           _currentRadius = radiusValue;
         });
-
-        // Giữ nguyên thông số zoom của bạn
-        double targetZoom = 13;
+        double targetZoom = 13.0;
         if (radiusValue == 1000) targetZoom = 14.5;
         if (radiusValue == 5000) targetZoom = 12.5;
-
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_currentPosition, targetZoom),
-        );
+        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition, targetZoom));
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -410,33 +476,17 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> {
           color: isSelected ? const Color(0xFF004D40) : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 13,
-          ),
-        ),
+        child: Text(text, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
       ),
     );
   }
 
-  Widget _buildCircularButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildCircularButton({required IconData icon, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
-          ],
-        ),
+        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8)]),
         child: Icon(icon, color: Colors.black87),
       ),
     );

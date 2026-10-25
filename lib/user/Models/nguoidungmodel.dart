@@ -13,6 +13,15 @@ class NguoiDungModel {
   final DateTime ngaySinh;
   final DateTime ngayTao;
 
+  // 🌟 Thuộc tính tọa độ GPS & Geohash
+  final double? viDo;
+  final double? kinhDo;
+  final String? geohash;
+
+  // 🌟 Bổ sung 2 thuộc tính mới theo sơ đồ ERD
+  final bool nhanCaCuuHo;
+  final bool isOnline;
+
   NguoiDungModel({
     this.maNguoiDung,
     required this.hoTen,
@@ -25,6 +34,11 @@ class NguoiDungModel {
     required this.ngaySinh,
     required this.ngayTao,
     required this.matKhau,
+    this.viDo,
+    this.kinhDo,
+    this.geohash,
+    required this.nhanCaCuuHo,
+    required this.isOnline,
   });
   
   Map<String, dynamic> toMap() {
@@ -41,6 +55,11 @@ class NguoiDungModel {
           ngaySinh, // Firestore sẽ tự động chuyển DateTime thành Timestamp
       'ngayTao': ngayTao,
       'matKhau': matKhau,
+      'viDo': viDo,
+      'kinhDo': kinhDo,
+      'geohash': geohash,
+      'nhanCaCuuHo': nhanCaCuuHo,
+      'isOnline': isOnline,
     };
   }
 
@@ -62,6 +81,11 @@ class NguoiDungModel {
           ? (map['ngayTao'] as dynamic).toDate()
           : DateTime.now(),
       matKhau: map['matKhau'] ?? '',
+      viDo: (map['viDo'] as num?)?.toDouble(),
+      kinhDo: (map['kinhDo'] as num?)?.toDouble(),
+      geohash: map['geohash'],
+      nhanCaCuuHo: map['nhanCaCuuHo'] ?? false,
+      isOnline: map['isOnline'] ?? false,
     );
   }
 }

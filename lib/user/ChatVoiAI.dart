@@ -24,7 +24,7 @@ class _ChatVoiAIScreenState extends State<ChatVoiAIScreen> {
     // Cấu hình AI chuyên gia sơ cứu
     _model = GenerativeModel(
       model: 'gemini-3.7-flash',
-      apiKey: 'AQ.Ab8RN6LxQ5NV8qV7lTcTVLbeqcfl1T05I-I4c0WsvD5maQwdkw',
+      apiKey: 'AQ.Ab8RN6Kvcm8JpONWlIdW2OalDw2Su6yi1Q5fpMBNsg4kIqCbZw',
       systemInstruction: Content.system(
         'Bạn là chuyên gia y tế sơ cứu khẩn cấp. Chỉ trả lời các câu hỏi về sơ cứu, '
         'xử lý vết thương. Từ chối mọi câu hỏi ngoài lề. '
