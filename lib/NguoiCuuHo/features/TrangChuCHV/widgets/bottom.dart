@@ -1,7 +1,6 @@
-import 'package:cuhokhancap/core/color/Color_CHV.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 
 class TrangChuBottomPanel extends StatelessWidget {
   final bool isOnline;
@@ -26,79 +25,6 @@ class TrangChuBottomPanel extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE0F2FE),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.radar,
-                    color: isOnline
-                        ? ColorCHV.tiep_nhan_yeu_cau
-                        : ColorCHV.ngung_tiep_nhan_yeu_cau,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isOnline
-                            ? 'Tiếp nhận yêu cầu'
-                            : 'Ngưng tiếp nhận yêu cầu',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.black,
-                        ),
-                      ),
-                      Text(
-                        isOnline
-                            ? 'Đang sẵn sàng nhận ca...'
-                            : 'Ngừng quét tín hiệu cứu nạn...',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isOnline ? 'Chế độ\nchờ' : 'Chế độ\nnghỉ ngơi',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isOnline
-                          ? ColorCHV.tiep_nhan_yeu_cau
-                          : ColorCHV.ngung_tiep_nhan_yeu_cau,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(

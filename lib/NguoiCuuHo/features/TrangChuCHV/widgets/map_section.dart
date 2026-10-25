@@ -29,16 +29,7 @@ class MapSection extends StatefulWidget {
 
 class _MapSectionState extends State<MapSection> {
   Set<Marker> _userMarkers = {};
-  Set<Polyline> _familyPolylines = {};
-
-  // Bảng màu phân biệt các nhóm người thân khác nhau
-  final List<Color> _familyColorPalette = [
-    const Color(0xFFF97316), // Cam
-    const Color(0xFFA855F7), // Tím
-    const Color(0xFF0D9488), // Teal
-    const Color(0xFFEC4899), // Hồng
-    const Color(0xFF6366F1), // Chàm
-  ];
+  String? _selectedUserId;
 
   @override
   void initState() {
@@ -54,86 +45,74 @@ class _MapSectionState extends State<MapSection> {
     }
   }
 
-  // 🟢 1. THUẬT TOÁN PHÂN NHÓM NGƯỜI THÂN TRONG BÁN KÍNH 10M
-  Map<String, dynamic> _processFamilyGroups(List<Map<String, dynamic>> users) {
-    int groupCounter = 1;
-    Map<String, int> userGroupMap = {};
-    Set<Polyline> polylines = {};
+  // 🟢 1. TẠO MARKER & TÔ MÀU (ĐỎ CHO NGƯỜI CHÍNH, CAM CHO DANH SÁCH NGƯỜI THÂN)
+  Future<void> _generateCustomMarkers() async {
+    Set<Marker> newMarkers = {};
 
-    for (int i = 0; i < users.length; i++) {
-      String u1Id = users[i]['userId'] ?? '';
-      List<dynamic> listNT1 = users[i]['danhSachNguoiThan'] ?? [];
+    // 🟢 Nếu đang Offline -> Xóa toàn bộ marker người dùng xung quanh
+    if (!widget.isOnline) {
+      if (mounted) {
+        setState(() {
+          _userMarkers = {};
+          _selectedUserId = null;
+        });
+      }
+      return;
+    }
 
-      for (int j = i + 1; j < users.length; j++) {
-        String u2Id = users[j]['userId'] ?? '';
+    // 1. Tìm object người dùng chính đang được chọn
+    Map<String, dynamic>? selectedUser;
+    if (_selectedUserId != null) {
+      try {
+        selectedUser = widget.nearbyUsers.firstWhere(
+          (u) => u['userId'] == _selectedUserId,
+        );
+      } catch (_) {
+        selectedUser = null;
+      }
+    }
 
-        // Kiểm tra xem user 2 có nằm trong danh sách người thân của user 1 không
-        bool isRelative = listNT1.any((nt) => nt['maNguoiThan'] == u2Id);
-
-        if (isRelative) {
-          int assignedGroup;
-
-          if (userGroupMap.containsKey(u1Id)) {
-            assignedGroup = userGroupMap[u1Id]!;
-          } else if (userGroupMap.containsKey(u2Id)) {
-            assignedGroup = userGroupMap[u2Id]!;
-          } else {
-            assignedGroup = groupCounter++;
-          }
-
-          userGroupMap[u1Id] = assignedGroup;
-          userGroupMap[u2Id] = assignedGroup;
-
-          Color groupColor =
-              _familyColorPalette[(assignedGroup - 1) %
-                  _familyColorPalette.length];
-
-          // Tạo đường nối nét đứt giữa 2 người thân
-          if (users[i]['location'] != null && users[j]['location'] != null) {
-            polylines.add(
-              Polyline(
-                polylineId: PolylineId('poly_${u1Id}_$u2Id'),
-                points: [users[i]['location'], users[j]['location']],
-                color: groupColor.withOpacity(0.8),
-                width: 3,
-                patterns: [PatternItem.dash(12), PatternItem.gap(6)],
-              ),
-            );
+    // 2. Trích xuất danh sách ID người thân của người dùng chính
+    Map<String, String> relativeRelationMap =
+        {}; // Key: maNguoiThan, Value: moiQuanHe
+    if (selectedUser != null) {
+      List<dynamic> listNT = selectedUser['danhSachNguoiThan'] ?? [];
+      for (var nt in listNT) {
+        if (nt is Map) {
+          String ntId = (nt['maNguoiThan'] ?? '').toString();
+          if (ntId.isNotEmpty) {
+            relativeRelationMap[ntId] = (nt['moiQuanHe'] ?? 'Thân').toString();
           }
         }
       }
     }
 
-    return {'userGroupMap': userGroupMap, 'polylines': polylines};
-  }
-
-  // 🟢 2. TẠO TẤT CẢ MARKERS VÀ POLYLINES
-  Future<void> _generateCustomMarkers() async {
-    Set<Marker> newMarkers = {};
-
-    var groupResult = _processFamilyGroups(widget.nearbyUsers);
-    Map<String, int> userGroupMap = groupResult['userGroupMap'];
-    Set<Polyline> newPolylines = groupResult['polylines'];
-
+    // 3. Duyệt toàn bộ danh sách người dùng xung quanh để gán màu Marker
     for (var user in widget.nearbyUsers) {
-      String userId = user['userId'] ?? '';
+      String userId = (user['userId'] ?? '').toString();
       Uint8List? avatarBytes = user['avatarBytes'];
 
-      int? groupId = userGroupMap[userId];
-      Color groupColor = groupId != null
-          ? _familyColorPalette[(groupId - 1) % _familyColorPalette.length]
-          : const Color(0xFF0284C7); // Màu xanh lam mặc định cho user lẻ
+      Color markerColor = Colors.white; // Mặc định màu trắng
+      String? relationBadge;
+
+      if (_selectedUserId != null && selectedUser != null) {
+        if (userId == _selectedUserId) {
+          // 🔴 NGƯỜI DÙNG CHÍNH ĐANG CHỌN -> HIỂN THỊ MÀU ĐỎ
+          markerColor = const ui.Color.fromARGB(255, 214, 39, 39);
+          relationBadge = 'Chính';
+        } else if (relativeRelationMap.containsKey(userId)) {
+          // 🟠 TẤT CẢ NGƯỜI THÂN TRONG DANH SÁCH -> HIỂN THỊ CÙNG 1 MÀU CAM CHUNGS
+          markerColor = const ui.Color.fromARGB(255, 202, 23, 178);
+          relationBadge = relativeRelationMap[userId];
+        }
+      }
 
       BitmapDescriptor customIcon = await createCustomUserMarker(
-        distance: (user['distance'] as num).toDouble(),
+        distance: (user['distance'] as num?)?.toDouble() ?? 0.0,
         avatarBytes: avatarBytes,
-        primaryColor: groupColor,
-        groupId: groupId,
+        primaryColor: markerColor,
+        relationBadge: relationBadge,
       );
-
-      // Lưu lại màu và groupId vào user map để BottomSheet dùng
-      user['groupColor'] = groupColor;
-      user['groupId'] = groupId;
 
       newMarkers.add(
         Marker(
@@ -141,8 +120,9 @@ class _MapSectionState extends State<MapSection> {
           position: user['location'],
           icon: customIcon,
           anchor: const Offset(0.5, 0.5),
-          onTap: () {
-            _showUserInfoModal(context, user);
+          consumeTapEvents: true,
+          onTap: () async {
+            await _handleMarkerTap(userId, user);
           },
         ),
       );
@@ -151,12 +131,25 @@ class _MapSectionState extends State<MapSection> {
     if (mounted) {
       setState(() {
         _userMarkers = newMarkers;
-        _familyPolylines = newPolylines;
       });
     }
   }
 
-  // 🟢 3. HÀM VẼ ICON MẶC ĐỊNH
+  // 🟢 2. XỬ LÝ SỰ KIỆN TAP BẤM MARKER BẤT ĐỒNG BỘ
+  Future<void> _handleMarkerTap(
+    String userId,
+    Map<String, dynamic> user,
+  ) async {
+    if (_selectedUserId == userId) {
+      // Nếu bấm lần 2 vào chính người dùng đang chọn -> Mở Modal thông tin
+      _showUserInfoModal(context, user);
+    } else {
+      // Bấm chọn người dùng mới -> Đổi ID và re-render Marker ngay lập tức
+      _selectedUserId = userId;
+      await _generateCustomMarkers();
+    }
+  }
+
   void _drawDefaultIcon(
     Canvas canvas,
     Offset center,
@@ -169,7 +162,7 @@ class _MapSectionState extends State<MapSection> {
         style: TextStyle(
           fontSize: radius * 1.1,
           fontFamily: Icons.person.fontFamily,
-          color: color,
+          color: color == Colors.white ? const Color(0xFF0284C7) : color,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -184,25 +177,30 @@ class _MapSectionState extends State<MapSection> {
     );
   }
 
-  // 🟢 4. HÀM VẼ CUSTOM MARKER CANVAS (CÓ HIỂN THỊ BADGE G1, G2 NẾU CÓ NHÓM)
+  // 🟢 VẼ CANVAS MARKER VỚI BADGE MỐI QUAN HỆ ĐẶT ĐÈ LÊN VIỀN ĐÁY (BOTTOM-CENTER BORDER)
   Future<BitmapDescriptor> createCustomUserMarker({
     required double distance,
     Uint8List? avatarBytes,
-    Color primaryColor = const Color(0xFF0284C7),
-    int? groupId,
+    Color primaryColor = Colors.white,
+    String? relationBadge,
   }) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
 
     const double avatarRadius = 20.0;
-    const double padding = 5.0;
+    const double padding = 6.0;
     String distanceText = '${distance.toStringAsFixed(1)}m';
 
+    bool isWhite = primaryColor == Colors.white;
+    Color textColor = isWhite ? const Color(0xFF1F2937) : primaryColor;
+    Color borderColor = isWhite ? const Color(0xFFCBD5E1) : primaryColor;
+
+    // 1. Chuẩn bị Text Khoảng cách
     TextPainter distancePainter = TextPainter(
       text: TextSpan(
         text: distanceText,
         style: TextStyle(
-          color: primaryColor,
+          color: textColor,
           fontSize: 11,
           fontWeight: FontWeight.bold,
         ),
@@ -210,16 +208,49 @@ class _MapSectionState extends State<MapSection> {
       textDirection: TextDirection.ltr,
     )..layout();
 
+    // 2. Chuẩn bị Text Nhãn Mối quan hệ
+    TextPainter? badgeTextPainter;
+    double badgeHeight = 0;
+    double badgeWidth = 0;
+
+    if (relationBadge != null && relationBadge.isNotEmpty) {
+      badgeTextPainter = TextPainter(
+        text: TextSpan(
+          text: relationBadge,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      badgeHeight = 15.0;
+      badgeWidth = badgeTextPainter.width + 10;
+      if (badgeWidth < 22.0) badgeWidth = 22.0;
+    }
+
     double avatarDiameter = avatarRadius * 2;
+
+    // Tính bề rộng Card
+    double maxContentWidth = distancePainter.width;
+    if (badgeWidth > maxContentWidth) maxContentWidth = badgeWidth;
+
     double cardWidth =
-        (distancePainter.width + padding * 2) < (avatarDiameter + padding * 2)
+        (maxContentWidth + padding * 2) < (avatarDiameter + padding * 2)
         ? (avatarDiameter + padding * 2)
-        : (distancePainter.width + padding * 2);
+        : (maxContentWidth + padding * 2);
 
+    // Tính chiều cao chuẩn của Card
     double cardHeight =
-        avatarDiameter + distancePainter.height + (padding * 2.5);
+        avatarDiameter + distancePainter.height + (padding * 2.2);
 
-    // 1. Vẽ bóng
+    // 🟢 Tổng chiều cao Canvas tính thêm một nửa chiều cao Badge lấn ra ngoài viền đáy
+    double totalCanvasHeight =
+        cardHeight + (badgeHeight > 0 ? (badgeHeight / 2) : 0);
+
+    // 3. Vẽ bóng Card
     Paint shadowPaint = Paint()
       ..color = Colors.black26
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
@@ -229,20 +260,23 @@ class _MapSectionState extends State<MapSection> {
     );
     canvas.drawRRect(bgRRect.shift(const Offset(2, 2)), shadowPaint);
 
-    // 2. Vẽ nền trắng
+    // 4. Vẽ nền Card
     Paint bgPaint = Paint()..color = Colors.white;
     canvas.drawRRect(bgRRect, bgPaint);
 
-    // 3. Vẽ viền NỔI THEO MÀU NHÓM
+    // 5. Vẽ viền Card
     Paint borderPaint = Paint()
-      ..color = primaryColor
+      ..color = borderColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
+      ..strokeWidth = isWhite ? 1.5 : 2.5;
     canvas.drawRRect(bgRRect, borderPaint);
 
-    // 4. Vẽ Avatar
+    // 6. Vẽ Avatar
     Offset avatarCenter = Offset(cardWidth / 2, padding + avatarRadius);
-    Paint avatarBgPaint = Paint()..color = primaryColor.withOpacity(0.15);
+    Paint avatarBgPaint = Paint()
+      ..color = isWhite
+          ? const Color(0xFFF1F5F9)
+          : primaryColor.withOpacity(0.15);
     canvas.drawCircle(avatarCenter, avatarRadius, avatarBgPaint);
 
     if (avatarBytes != null && avatarBytes.isNotEmpty) {
@@ -272,48 +306,88 @@ class _MapSectionState extends State<MapSection> {
       _drawDefaultIcon(canvas, avatarCenter, avatarRadius, primaryColor);
     }
 
-    // 5. VẼ BADGE NHÓM NGƯỜI THÂN (Ví dụ: G1, G2) NẾU CÓ
-    if (groupId != null) {
-      Offset badgeCenter = Offset(cardWidth - 2, 2);
-      Paint badgeBg = Paint()..color = primaryColor;
-      canvas.drawCircle(badgeCenter, 9, badgeBg);
+    // 7. VẼ ICON (i) THÔNG TIN Ở GÓC TRÊN-PHẢI BORDER AVATAR
+    double iconOffset = avatarRadius * 0.707;
+    Offset infoBtnCenter = Offset(
+      avatarCenter.dx + iconOffset,
+      avatarCenter.dy - iconOffset,
+    );
 
-      Paint badgeBorder = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2;
-      canvas.drawCircle(badgeCenter, 9, badgeBorder);
+    const double infoRadius = 7.0;
 
-      TextPainter badgeText = TextPainter(
-        text: TextSpan(
-          text: 'G$groupId',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 8,
-            fontWeight: FontWeight.bold,
-          ),
+    Paint infoBgPaint = Paint()..color = const Color(0xFF0284C7);
+    canvas.drawCircle(infoBtnCenter, infoRadius, infoBgPaint);
+
+    Paint infoBorderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawCircle(infoBtnCenter, infoRadius, infoBorderPaint);
+
+    TextPainter infoTextPainter = TextPainter(
+      text: const TextSpan(
+        text: 'i',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          fontStyle: FontStyle.italic,
+          fontFamily: 'serif',
         ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      badgeText.paint(
-        canvas,
-        Offset(
-          badgeCenter.dx - badgeText.width / 2,
-          badgeCenter.dy - badgeText.height / 2,
-        ),
-      );
-    }
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
 
-    // 6. Vẽ Khoảng cách
+    infoTextPainter.paint(
+      canvas,
+      Offset(
+        infoBtnCenter.dx - (infoTextPainter.width / 2),
+        infoBtnCenter.dy - (infoTextPainter.height / 2),
+      ),
+    );
+
+    // 8. Vẽ Khoảng cách
     double distanceY = padding + avatarDiameter + 2;
     distancePainter.paint(
       canvas,
       Offset((cardWidth - distancePainter.width) / 2, distanceY),
     );
 
+    // 🟢 9. VẼ BADGE MỐI QUAN HỆ ĐẶT ĐÈ CHÍNH GIỮA ĐƯỜNG VIỀN ĐÁY (BOTTOM-CENTER BORDER)
+    if (badgeTextPainter != null) {
+      // Đặt tâm Y của Badge trùng với đường viền đáy (cardHeight)
+      double badgeY = cardHeight - (badgeHeight / 2);
+      double badgeX = (cardWidth - badgeWidth) / 2;
+
+      Rect badgeRect = Rect.fromLTWH(badgeX, badgeY, badgeWidth, badgeHeight);
+      RRect badgeRRect = RRect.fromRectAndRadius(
+        badgeRect,
+        const Radius.circular(6),
+      );
+
+      // Nền Badge
+      Paint badgeBg = Paint()..color = primaryColor;
+      canvas.drawRRect(badgeRRect, badgeBg);
+
+      // Viền trắng bao quanh Badge để phân tách đẹp mắt với đường viền Marker
+      Paint badgeBorder = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+      canvas.drawRRect(badgeRRect, badgeBorder);
+
+      badgeTextPainter.paint(
+        canvas,
+        Offset(
+          badgeX + (badgeWidth - badgeTextPainter.width) / 2,
+          badgeY + (badgeHeight - badgeTextPainter.height) / 2,
+        ),
+      );
+    }
+
     final ui.Image renderedImage = await pictureRecorder.endRecording().toImage(
-      cardWidth.toInt() + 6,
-      cardHeight.toInt() + 6,
+      cardWidth.toInt() + 10,
+      totalCanvasHeight.toInt() + 10,
     );
     final ByteData? byteData = await renderedImage.toByteData(
       format: ui.ImageByteFormat.png,
@@ -322,12 +396,10 @@ class _MapSectionState extends State<MapSection> {
     return BitmapDescriptor.bytes(byteData!.buffer.asUint8List());
   }
 
-  // 🟢 5. BOTTOM SHEET HIỂN THỊ THÔNG TIN USER VÀ NGƯỜI THÂN
+  // 🟢 4. MODAL HIỂN THỊ THÔNG TIN CHI TIẾT NGƯỜI DÙNG
   void _showUserInfoModal(BuildContext context, Map<String, dynamic> user) {
     List<dynamic> danhSachNguoiThan = user['danhSachNguoiThan'] ?? [];
     bool coNguoiThan = danhSachNguoiThan.isNotEmpty;
-    int? groupId = user['groupId'];
-    Color groupColor = user['groupColor'] ?? const Color(0xFF0284C7);
 
     showModalBottomSheet(
       context: context,
@@ -342,50 +414,28 @@ class _MapSectionState extends State<MapSection> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- HEADER ---
               Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: groupColor.withOpacity(0.15),
+                  const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2FE),
                     radius: 26,
-                    child: Icon(Icons.person, color: groupColor, size: 30),
+                    child: Icon(
+                      Icons.person,
+                      color: Color(0xFF0284C7),
+                      size: 30,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              user['hoTen'] ?? 'Người dùng',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (groupId != null) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: groupColor,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  'Nhóm G$groupId',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
+                        Text(
+                          user['hoTen'] ?? 'Người dùng',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         Text(
                           'Trong phạm vi: ${user['distance']?.toStringAsFixed(1)}m',
@@ -401,8 +451,6 @@ class _MapSectionState extends State<MapSection> {
                 ],
               ),
               const Divider(height: 24),
-
-              // --- THÔNG TIN CƠ BẢN NẠN NHÂN ---
               Row(
                 children: [
                   const Icon(
@@ -432,45 +480,12 @@ class _MapSectionState extends State<MapSection> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
-
-              // --- THÔNG BÁO NẾU CÓ NGƯỜI THÂN Ở CÙNG TRONG PHẠM VI 10M ---
-              if (groupId != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: groupColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: groupColor.withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.people_alt, color: groupColor, size: 22),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Phát hiện người thân thuộc Nhóm G$groupId cũng đang ở gần trong bán kính 10m!',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: groupColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // --- HIỂN THỊ DANH SÁCH NGƯỜI THÂN ---
               const Text(
                 'Người thân liên hệ khẩn cấp:',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const SizedBox(height: 8),
-
               if (coNguoiThan)
                 Container(
                   constraints: const BoxConstraints(maxHeight: 180),
@@ -562,10 +577,7 @@ class _MapSectionState extends State<MapSection> {
                     ],
                   ),
                 ),
-
               const SizedBox(height: 20),
-
-              // NÚT CHỦ ĐỘNG HỖ TRỢ
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -577,9 +589,9 @@ class _MapSectionState extends State<MapSection> {
                     ),
                   ),
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.support_agent, color: Colors.white),
+                  icon: const Icon(Icons.phone_forwarded, color: Colors.white),
                   label: const Text(
-                    'Chủ động hỗ trợ',
+                    'Liên hệ với người cần hỗ trợ',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -622,22 +634,27 @@ class _MapSectionState extends State<MapSection> {
           ),
           initialCameraPosition: CameraPosition(
             target: widget.currentPosition!,
-            zoom: 20.0,
+            zoom: 18.2,
           ),
           onMapCreated: widget.onMapCreated,
           myLocationEnabled: false,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
-
-          // MARKER VÀ POLYLINES PHÂN NHÓM NGƯỜI THÂN
           markers: _userMarkers,
-          polylines: _familyPolylines,
+
+          // 🟢 Bấm ra ngoài bản đồ -> Hủy chọn & Đưa marker về màu trắng ngay lập tức
+          onTap: (_) async {
+            if (_selectedUserId != null) {
+              _selectedUserId = null;
+              await _generateCustomMarkers();
+            }
+          },
 
           circles: {
             Circle(
-              circleId: const CircleId('circle_10m_boundary'),
+              circleId: const CircleId('circle_100m_boundary'),
               center: widget.currentPosition!,
-              radius: 10.0,
+              radius: 100.0,
               fillColor:
                   (widget.isOnline
                           ? ColorCHV.tiep_nhan_yeu_cau
@@ -673,6 +690,8 @@ class _MapSectionState extends State<MapSection> {
             ),
           },
         ),
+
+        // Nút cập nhật vị trí
         Positioned(
           top: 12,
           right: 12,

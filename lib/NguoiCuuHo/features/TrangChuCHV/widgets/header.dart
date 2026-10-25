@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class LifeguardProfileHeader extends StatelessWidget {
   final bool isOnline;
@@ -92,7 +94,7 @@ class LifeguardProfileHeader extends StatelessWidget {
   void _showExitConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -113,7 +115,7 @@ class LifeguardProfileHeader extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
@@ -123,10 +125,32 @@ class LifeguardProfileHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-                if (onExitToUserMode != null) {
-                  onExitToUserMode!();
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+
+                // Gọi hàm cập nhật maVaiTro về 'vaitro_nguoidung' trong Controller
+                final controller = context.read<TrangChuController>();
+                bool success = await controller.chuyenVaiTroNguoiDung();
+
+                if (context.mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã chuyển sang vai trò Người dùng!'),
+                      ),
+                    );
+                    if (onExitToUserMode != null) {
+                      onExitToUserMode!();
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Chuyển vai trò thất bại. Vui lòng thử lại!',
+                        ),
+                      ),
+                    );
+                  }
                 }
               },
               child: const Text(
@@ -145,7 +169,6 @@ class LifeguardProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 Chuyển chuỗi Base64 sang dữ liệu Byte để dựng ảnh
     final Uint8List? imageBytes = _getDecodedImage(base64Image);
 
     return Container(
@@ -155,7 +178,6 @@ class LifeguardProfileHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              // 🟢 Kiểm tra và hiển thị ảnh đại diện từ Base64 bằng MemoryImage
               imageBytes != null
                   ? CircleAvatar(
                       radius: 24,
@@ -186,7 +208,6 @@ class LifeguardProfileHeader extends StatelessWidget {
                 ),
               ),
 
-              // 1. Nút Thông báo
               IconButton(
                 onPressed: () {
                   if (isOnline) {
@@ -217,7 +238,6 @@ class LifeguardProfileHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
 
-              // 2. Nút THOÁT CHẾ ĐỘ CỨU HỘ VIÊN
               IconButton(
                 tooltip: 'Thoát chế độ Cứu hộ viên',
                 onPressed: () {
@@ -251,7 +271,6 @@ class LifeguardProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Thanh trạng thái Online / Offline
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(

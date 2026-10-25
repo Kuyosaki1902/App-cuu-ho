@@ -8,12 +8,19 @@ import 'widgets/map_navigation_card.dart';
 import 'widgets/victim_info_card.dart';
 
 class Manhinhcho extends StatelessWidget {
-  const Manhinhcho({super.key});
+  final String currentUserId; // 🟢 Truyền mã cứu hộ viên vào màn hình
+
+  const Manhinhcho({super.key, this.currentUserId = 'nguoidung2'});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => EmergencyAlertController(),
+      create: (context) {
+        final controller = EmergencyAlertController();
+        // 🟢 Kích hoạt lắng nghe dữ liệu từ YeuCauCuuHo và ChiTietPhanCongCuuHo
+        controller.listenForNewAssignment(currentUserId, context);
+        return controller;
+      },
       child: Consumer<EmergencyAlertController>(
         builder: (context, controller, child) {
           return Scaffold(
@@ -24,7 +31,6 @@ class Manhinhcho extends StatelessWidget {
                   return SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
                     child: ConstrainedBox(
-                      // 🟢 Ép chiều cao tối thiểu bằng chính chiều cao màn hình khả dụng
                       constraints: BoxConstraints(
                         minHeight: constraints.maxHeight,
                       ),
@@ -34,23 +40,14 @@ class Manhinhcho extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // 1. Header Bác sĩ
                               const DoctorHeaderCard(),
                               const SizedBox(height: 10),
-
-                              // 2. Thẻ Cảnh Báo Nguy Kịch
                               const CriticalAlertCard(),
                               const SizedBox(height: 10),
-
-                              // 3. Khung Bản đồ & Địa chỉ (🟢 Tự co giãn để lấp đầy khoảng trống)
                               const Expanded(child: MapNavigationCard()),
                               const SizedBox(height: 10),
-
-                              // 4. Thông tin Nạn nhân & Video
                               const VictimInfoCard(),
                               const SizedBox(height: 12),
-
-                              // 5. Nút Dẫn Đường Ngay
                               SizedBox(
                                 width: double.infinity,
                                 height: 50,

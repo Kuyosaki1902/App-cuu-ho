@@ -85,13 +85,14 @@ class TrangChuController extends ChangeNotifier {
 
     if (_isOnline) {
       _startTimer();
+      listenToNearbyUsers(); // Bắt đầu lắng nghe quét người dùng khi Online
     } else {
       _stopTimer();
+      _usersNearbySubscription?.cancel(); // Dừng lắng nghe từ Firestore
+      _nearbyUsers = []; // 🟢 XÓA DANH SÁCH NGƯỜI DÙNG XUNG QUANH KHI OFFLINE
     }
 
-    // 🟢 CẬP NHẬT TRẠNG THÁI isOnline TRÊN BẢNG NguoiDung FIRESTORE
     _updateUserOnlineStatusInFirestore(_isOnline);
-
     notifyListeners();
   }
 
@@ -101,9 +102,9 @@ class TrangChuController extends ChangeNotifier {
       await _firestore.collection('NguoiDung').doc(_userID).update({
         'isOnline': status,
       });
-      debugPrint('🟢 Đã cập nhật isOnline = $status cho user $_userID');
+      debugPrint('Đã cập nhật isOnline = $status cho user $_userID');
     } catch (e) {
-      debugPrint('🔴 Lỗi cập nhật isOnline trên Firestore: $e');
+      debugPrint('Lỗi cập nhật isOnline trên Firestore: $e');
     }
   }
 
@@ -279,6 +280,34 @@ class TrangChuController extends ChangeNotifier {
     }
   }
 
+  /// 🟢 Phương thức thực hiện chuyển vai trò về 'vaitro_nguoidung'
+  Future<bool> chuyenVaiTroNguoiDung() async {
+    try {
+      _isLoadingLocation = true;
+      notifyListeners();
+
+      // 1. Cập nhật mã vai trò lên Firestore ở bảng NguoiDung
+      await _firestore.collection('NguoiDung').doc(_userID).update({
+        'maVaiTro': 'vaitro_nguoidung',
+      });
+
+      // 2. Cập nhật lại giá trị maVaiTro trong Controller
+      maVaiTro = 'vaitro_nguoidung';
+
+      // 3. Tải lại toàn bộ thông tin vai trò/hồ sơ tương ứng với maVaiTro mới
+      await fetchFullUserData(_userID);
+
+      debugPrint('Đã chuyển maVaiTro về vaitro_nguoidung thành công.');
+      return true;
+    } catch (e) {
+      debugPrint('Lỗi khi chuyển vai trò: $e');
+      return false;
+    } finally {
+      _isLoadingLocation = false;
+      notifyListeners();
+    }
+  }
+
   Future<String?> getAvatarBase64(String maNguoiDung) async {
     try {
       QuerySnapshot phanLoaiSnap = await _firestore
@@ -388,10 +417,16 @@ class TrangChuController extends ChangeNotifier {
   // Getter truyền danh sách người dùng xung quanh ra UI
   List<Map<String, dynamic>> get nearbyUsers => _nearbyUsers;
 
-  /// 🟢 Lắng nghe người dùng xung quanh và truy vấn thêm danh sách người thân
+  /// 🟢 Lắng nghe người dùng xung quanh và đọc danh sách người thân từ NguoiThan/{userId}/DanhSachNguoiThan
   void listenToNearbyUsers() {
     _usersNearbySubscription?.cancel();
 
+    // 🟢 Nếu Cứu hộ viên đang Offline thì không quét và xóa danh sách người dùng
+    if (!_isOnline) {
+      _nearbyUsers = [];
+      notifyListeners();
+      return;
+    }
     _usersNearbySubscription = _firestore
         .collection('NguoiDung')
         .where('isOnline', isEqualTo: true)
@@ -419,24 +454,26 @@ class TrangChuController extends ChangeNotifier {
               userLng,
             );
 
-            if (distanceInMeters <= 10.0) {
+            // Bán kính quét 100 mét
+            if (distanceInMeters <= 100.0) {
               String userId = doc.id;
 
-              // 🟢 1. TRUY VẤN BẢNG NguoiThan VỚI maNguoiDung = userId
+              // 🟢 1. TRUY VẤN SUB-COLLECTION DanhSachNguoiThan TỪ COLLECTION NguoiThan
               List<Map<String, dynamic>> listNguoiThan = [];
               try {
                 QuerySnapshot nguoiThanSnap = await _firestore
                     .collection('NguoiThan')
-                    .where('maNguoiDung', isEqualTo: userId)
+                    .doc(userId)
+                    .collection('DanhSachNguoiThan')
                     .get();
 
                 for (var ntDoc in nguoiThanSnap.docs) {
+                  String maNguoiThan = ntDoc.id;
                   Map<String, dynamic> ntData =
                       ntDoc.data() as Map<String, dynamic>;
-                  String maNguoiThan = ntData['maNguoiThan'] ?? '';
-                  String moiQuanHe = ntData['moiQuanHe'] ?? 'Người thân';
+                  String moiQuanHe = ntData['moiQuanHe'] ?? '';
+                  String trangThai = ntData['trangThai'] ?? '';
 
-                  // 🟢 2. ĐỌC THÔNG TIN CHI TIẾT NGƯỜI THÂN TỪ BẢNG NguoiDung
                   if (maNguoiThan.isNotEmpty) {
                     DocumentSnapshot userRelativeDoc = await _firestore
                         .collection('NguoiDung')
@@ -454,24 +491,28 @@ class TrangChuController extends ChangeNotifier {
                         'soDienThoai':
                             relativeData['soDienThoai'] ?? 'Chưa cập nhật',
                         'moiQuanHe': moiQuanHe,
+                        'trangThai': trangThai,
+                        'ngayTao': ntData['ngayTao'],
                       });
                     }
                   }
                 }
               } catch (e) {
-                debugPrint('Lỗi đọc người thân của $userId: $e');
+                debugPrint('Lỗi đọc NguoiThan/$userId/DanhSachNguoiThan: $e');
               }
 
-              // 🟢 3. ĐÓNG GÓI DỮ LIỆU ĐỂ TRUYỀN SANG MAP
+              // 🟢 2. MẶC ĐỊNH TẤT CẢ NGƯỜI DÙNG LÀ MÀU TRẮNG
               tempUsers.add({
                 'userId': userId,
                 'hoTen': data['hoTen'] ?? 'Người dùng',
                 'soDienThoai': data['soDienThoai'] ?? 'Chưa cập nhật',
                 'email': data['email'] ?? 'Chưa cập nhật',
                 'diaChi': data['diaChi'] ?? 'Chưa cập nhật',
-                'danhSachNguoiThan': listNguoiThan, // Danh sách n-n người thân
+                'danhSachNguoiThan': listNguoiThan,
                 'location': LatLng(userLat, userLng),
                 'distance': distanceInMeters,
+                'groupColor': Colors.white, // Mặc định màu trắng
+                'hasFamilyNearby': false,
               });
             }
           }
