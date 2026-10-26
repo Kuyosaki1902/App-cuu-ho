@@ -30,7 +30,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
   // 🟢 Nhớ import intl để lấy ngày định dạng yyyy-MM-dd
 
   void _listenForRescueAssignments() {
-    String currentUserId = 'nguoidung1'; // ID của cứu hộ viên hiện tại
+    String currentUserId = 'nguoidung2'; // ID của cứu hộ viên hiện tại
     String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     // 🟢 TRUY VẤN VÀO NÚT: ChiTietPhanCongCuuHo -> maNguoiDung -> DanhSachNgay -> yyyy-MM-dd -> DanhSachPhanCong

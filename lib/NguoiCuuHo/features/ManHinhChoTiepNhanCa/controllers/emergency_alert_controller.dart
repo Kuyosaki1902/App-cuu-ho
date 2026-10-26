@@ -1,24 +1,29 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:audioplayers/audioplayers.dart'; // 🟢 Import thư viện âm thanh
+import 'package:audioplayers/audioplayers.dart';
+import 'package:http/http.dart' as http;
+import 'package:dart_geohash/dart_geohash.dart';
 
 class EmergencyAlertController extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final AudioPlayer _audioPlayer = AudioPlayer(); // 🟢 Khởi tạo AudioPlayer
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
+  StreamSubscription<Position>? _positionStreamSubscription;
 
-  // Tọa độ Bác sĩ & Nạn nhân
-  LatLng myLocation = const LatLng(10.7326, 106.7180);
-  LatLng victimLocation = const LatLng(10.7350, 106.7230);
+  LatLng myLocation = const LatLng(0.0, 0.0);
+  LatLng victimLocation = const LatLng(0.0, 0.0);
 
   List<LatLng> polylineCoordinates = [];
   bool isLoadingRoute = true;
+
   final String googleApiKey = "AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps";
 
   Timer? _timer;
@@ -30,28 +35,79 @@ class EmergencyAlertController extends ChangeNotifier {
 
   GoogleMapController? mapController;
 
-  String doctorName = 'BS. Trần Minh Tuấn';
-  String doctorRole = 'BÁC SĨ SƠ CỨU T1';
+  String doctorName = 'Bác sĩ cứu hộ';
+  String doctorRole = 'CỨU HỘ VIÊN PHẢN ỨNG NHANH';
   String address = 'Đang tải địa chỉ...';
   String victimName = 'Đang tải...';
   String victimPhone = '...';
   String distanceText = '0m';
-  String bikeTime = '0 phút';
-  String walkTime = '0 phút';
+  String motoTime = '0 p';
+  String carTime = '0 p';
+  String walkTime = '0 p';
+
+  // 🟢 THÊM BIẾN LƯU TRẠNG THÁI PHƯƠNG TIỆN (Mặc định là xe máy/cycling)
+  String selectedTravelMode = 'cycling';
 
   EmergencyAlertController() {
     _startCountdown();
+    _startLocationTracking();
   }
 
-  // 🟢 LẮNG NGHE PHÂN CÔNG THEO NÚT: maNguoiDung -> DanhSachNgay (yyyy-MM-dd) -> DanhSachPhanCong (maYeuCau)
-  // 🟢 LẮNG NGHE PHÂN CÔNG: Lọc theo ngày hôm nay -> Duyệt toàn bộ maYeuCau kiểm tra field maTrangThaiTiepNhan
-  void listenForNewAssignment(String currentUserId, BuildContext context) {
+  // 🟢 HÀM ĐỔI PHƯƠNG TIỆN VÀ VẼ LẠI ĐƯỜNG
+  void changeTravelMode(String mode) {
+    if (selectedTravelMode == mode) return;
+    selectedTravelMode = mode;
+    notifyListeners();
+    fetchRealtimeRoute(shouldMoveCamera: false); // Gọi lại API để vẽ đường mới
+  }
+
+  Future<void> _startLocationTracking() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return;
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+    if (permission == LocationPermission.deniedForever) return;
+
+    const LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10, // Giảm xuống 10 để nhạy hơn khi di chuyển thực tế
+    );
+
+    _positionStreamSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (Position position) {
+            LatLng newLocation = LatLng(position.latitude, position.longitude);
+
+            myLocation = newLocation;
+            notifyListeners();
+
+            if (victimLocation.latitude != 0.0 &&
+                victimLocation.longitude != 0.0) {
+              fetchRealtimeRoute();
+            }
+          },
+        );
+  }
+
+  void setMapController(GoogleMapController controller) {
+    mapController = controller;
+    _moveCameraToFitPositions();
+  }
+
+  void listenForNewAssignment(
+    String currentUserId,
+    BuildContext context,
+  ) async {
     _assignmentSubscription?.cancel();
 
-    // 1. Lấy ngày hiện tại theo định dạng yyyy-MM-dd
+    await _fetchDoctorInfo(currentUserId);
+
     String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    // 2. Lắng nghe toàn bộ tài liệu trong sub-collection DanhSachPhanCong của ngày hôm nay
     _assignmentSubscription = _firestore
         .collection('ChiTietPhanCongCuuHo')
         .doc(currentUserId)
@@ -64,39 +120,60 @@ class EmergencyAlertController extends ChangeNotifier {
             DocumentSnapshot? targetDoc;
             String foundMaYeuCau = '';
 
-            // 🟢 Duyệt qua từng tài liệu maYeuCau trong sub-collection
             for (var doc in snapshot.docs) {
               Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
               String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
 
-              // Kiểm tra xem field maTrangThaiTiepNhan có bằng 'cuuho_trangthai_chophanhoi' không
-              if (trangThai == 'cuuho_trangthai_chophanhoi') {
+              if (trangThai == 'cuuho_trangthai_chophanhoi' ||
+                  trangThai.isEmpty) {
                 targetDoc = doc;
                 foundMaYeuCau =
                     data.containsKey('maYeuCau') &&
                         (data['maYeuCau'] ?? '').toString().isNotEmpty
                     ? data['maYeuCau'].toString()
-                    : doc.id; // Lấy ID tài liệu (chính là maYeuCau) nếu field trống
-                break; // Tìm thấy ca đầu tiên đang chờ phản hồi thì dừng vòng lặp
+                    : doc.id;
+                break;
               }
             }
 
-            // 🟢 Nếu tìm thấy yêu cầu ở trạng thái chờ phản hồi
-            if (targetDoc != null && foundMaYeuCau.isNotEmpty) {
-              // 1. Phát chuông cảnh báo khẩn cấp
+            if (foundMaYeuCau.isNotEmpty) {
               await _playEmergencySound();
-
-              // 2. Đọc thông tin nạn nhân từ bảng YeuCauCuuHo
               await _fetchVictimRequestDetails(foundMaYeuCau);
-
-              // 3. Cập nhật đường đi thực tế trên Google Maps
               fetchRealtimeRoute();
             }
           }
         });
   }
 
-  // 🟢 2. ĐỌC DỮ LIỆU CHUẨN TỪ BẢNG YeuCauCuuHo VÀ NguoiDung
+  Future<void> _fetchDoctorInfo(String doctorId) async {
+    try {
+      DocumentSnapshot doc = await _firestore
+          .collection('NguoiDung')
+          .doc(doctorId)
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        var data = doc.data() as Map<String, dynamic>;
+        doctorName = data['hoTen'] ?? 'Bác sĩ cứu hộ';
+
+        if (myLocation.latitude == 0.0) {
+          String? doctorGeohash = data['geoHash'] ?? data['geohash'];
+          if (doctorGeohash != null && doctorGeohash.isNotEmpty) {
+            myLocation = _getLatLngFromGeohash(doctorGeohash);
+          } else if (data['viDo'] != null && data['kinhDo'] != null) {
+            myLocation = LatLng(
+              (data['viDo'] as num).toDouble(),
+              (data['kinhDo'] as num).toDouble(),
+            );
+          }
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Lỗi đọc thông tin cứu hộ viên: $e');
+    }
+  }
+
   Future<void> _fetchVictimRequestDetails(String maYeuCau) async {
     try {
       DocumentSnapshot yeuCauDoc = await _firestore
@@ -105,18 +182,22 @@ class EmergencyAlertController extends ChangeNotifier {
           .get();
 
       if (yeuCauDoc.exists && yeuCauDoc.data() != null) {
-        var data = yeuCauDoc.data() as Map<String, dynamic>;
+        var yeuCauData = yeuCauDoc.data() as Map<String, dynamic>;
 
-        // 1. Đọc tọa độ GPS sự cố
-        if (data['viDo'] != null && data['kinhDo'] != null) {
+        String? ycGeohash = yeuCauData['geoHash'] ?? yeuCauData['geohash'];
+        if (ycGeohash != null && ycGeohash.isNotEmpty) {
+          victimLocation = _getLatLngFromGeohash(ycGeohash);
+        } else if (yeuCauData['viDo'] != null && yeuCauData['kinhDo'] != null) {
           victimLocation = LatLng(
-            (data['viDo'] as num).toDouble(),
-            (data['kinhDo'] as num).toDouble(),
+            (yeuCauData['viDo'] as num).toDouble(),
+            (yeuCauData['kinhDo'] as num).toDouble(),
           );
         }
 
-        // 2. Lấy mã người yêu cầu để truy vấn bảng NguoiDung lấy Tên & SĐT
-        String maNguoiYeuCau = data['maNguoiYeuCau'] ?? '';
+        String maNguoiYeuCau =
+            (yeuCauData['maNguoiYeuCau'] ?? yeuCauData['maNguoiDung'] ?? '')
+                .toString();
+
         if (maNguoiYeuCau.isNotEmpty) {
           DocumentSnapshot userDoc = await _firestore
               .collection('NguoiDung')
@@ -127,36 +208,195 @@ class EmergencyAlertController extends ChangeNotifier {
             var userData = userDoc.data() as Map<String, dynamic>;
             victimName = userData['hoTen'] ?? 'Nạn nhân khẩn cấp';
             victimPhone = userData['soDienThoai'] ?? 'Chưa cập nhật';
+
+            if (victimLocation.latitude == 0.0) {
+              String? userGeohash = userData['geoHash'] ?? userData['geohash'];
+              if (userGeohash != null && userGeohash.isNotEmpty) {
+                victimLocation = _getLatLngFromGeohash(userGeohash);
+              } else if (userData['viDo'] != null &&
+                  userData['kinhDo'] != null) {
+                victimLocation = LatLng(
+                  (userData['viDo'] as num).toDouble(),
+                  (userData['kinhDo'] as num).toDouble(),
+                );
+              }
+            }
           }
         }
 
-        // 3. Đọc số người cần cứu hộ và mức độ khẩn cấp (nếu cần hiển thị thêm)
-        int soNguoi = (data['soNguoiCanCuuHo'] as num?)?.toInt() ?? 1;
-        int mucDo = (data['mucDoKhanCap'] as num?)?.toInt() ?? 1;
-
-        debugPrint(
-          'Tải xong YeuCauCuuHo: $maYeuCau | Số người: $soNguoi | Mức độ: $mucDo',
-        );
         notifyListeners();
+
+        if (victimLocation.latitude != 0.0 && victimLocation.longitude != 0.0) {
+          address = await getAddressFromLatLng(
+            victimLocation.latitude,
+            victimLocation.longitude,
+          );
+          notifyListeners();
+        }
       }
     } catch (e) {
-      debugPrint('Lỗi đọc bảng YeuCauCuuHo: $e');
+      debugPrint('Lỗi đọc bảng YeuCauCuuHo & NguoiDung: $e');
     }
   }
 
-  // 🟢 HÀM PHÁT CHUÔNG BÁO LẶP LẠI
+  LatLng _getLatLngFromGeohash(String geohashStr) {
+    try {
+      GeoHash geoHash = GeoHash(geohashStr);
+      return LatLng(geoHash.latitude(), geoHash.longitude());
+    } catch (e) {
+      debugPrint('Lỗi giải mã Geohash: $e');
+      return const LatLng(0.0, 0.0);
+    }
+  }
+
+  Future<String> getAddressFromLatLng(double lat, double lng) async {
+    if (lat == 0.0 || lng == 0.0 || lat.isNaN || lng.isNaN) {
+      return 'Đang định vị...';
+    }
+
+    final url = Uri.parse(
+      'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$googleApiKey&language=vi',
+    );
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK' &&
+            data['results'] != null &&
+            (data['results'] as List).isNotEmpty) {
+          return data['results'][0]['formatted_address'] ??
+              'Vị trí sự cố thực tế';
+        }
+      }
+    } catch (e) {
+      debugPrint('Lỗi HTTP Geocoding API: $e');
+    }
+
+    return 'Vị trí sự cố thực tế';
+  }
+
+  Future<void> fetchRealtimeRoute({bool shouldMoveCamera = true}) async {
+    if (myLocation.latitude == 0.0 || victimLocation.latitude == 0.0) {
+      return;
+    }
+
+    isLoadingRoute = true;
+    notifyListeners();
+
+    try {
+      // 🟢 GỌI OSRM VỚI PHƯƠNG TIỆN ĐƯỢC CHỌN (driving / cycling / foot)
+      final url = Uri.parse(
+        'http://router.project-osrm.org/route/v1/$selectedTravelMode/${myLocation.longitude},${myLocation.latitude};${victimLocation.longitude},${victimLocation.latitude}?overview=full&geometries=polyline',
+      );
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['code'] == 'Ok' &&
+            data['routes'] != null &&
+            data['routes'].isNotEmpty) {
+          var route = data['routes'][0];
+
+          String encodedPolyline = route['geometry'];
+          List<PointLatLng> decodedPoints = PolylinePoints.decodePolyline(
+            encodedPolyline,
+          );
+
+          if (decodedPoints.isNotEmpty) {
+            polylineCoordinates.clear();
+            for (var point in decodedPoints) {
+              polylineCoordinates.add(LatLng(point.latitude, point.longitude));
+            }
+          } else {
+            _loadFallbackRoadWaypoints();
+          }
+
+          double distanceMeters = (route['distance'] as num).toDouble();
+          double durationSeconds = (route['duration'] as num).toDouble();
+
+          distanceText = distanceMeters >= 1000
+              ? '${(distanceMeters / 1000).toStringAsFixed(1)}km'
+              : '${distanceMeters.toInt()}m';
+
+          int carMinutes = (durationSeconds / 30).ceil();
+          carTime = '$carMinutes p';
+
+          int bikeMinutes = (durationSeconds / 40).ceil();
+          motoTime = '$bikeMinutes p';
+
+          int walkMinutes = (distanceMeters / 75).ceil();
+          walkTime = '$walkMinutes p';
+        } else {
+          debugPrint('Lỗi dữ liệu OSRM');
+          _loadFallbackRoadWaypoints();
+        }
+      } else {
+        debugPrint('Lỗi HTTP OSRM: ${response.statusCode}');
+        _loadFallbackRoadWaypoints();
+      }
+    } catch (e) {
+      debugPrint('Lỗi gọi API OSRM: $e');
+      _loadFallbackRoadWaypoints();
+    } finally {
+      isLoadingRoute = false;
+      notifyListeners();
+      // 🔴 CHỈ DI CHUYỂN CAMERA KHI ĐƯỢC PHÉP
+      if (shouldMoveCamera) {
+        _moveCameraToFitPositions();
+      }
+    }
+  }
+
+  void _moveCameraToFitPositions() {
+    if (mapController == null) return;
+
+    if (myLocation.latitude != 0.0 && victimLocation.latitude != 0.0) {
+      mapController!.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(
+              myLocation.latitude < victimLocation.latitude
+                  ? myLocation.latitude
+                  : victimLocation.latitude,
+              myLocation.longitude < victimLocation.longitude
+                  ? myLocation.longitude
+                  : victimLocation.longitude,
+            ),
+            northeast: LatLng(
+              myLocation.latitude > victimLocation.latitude
+                  ? myLocation.latitude
+                  : victimLocation.latitude,
+              myLocation.longitude > victimLocation.longitude
+                  ? myLocation.longitude
+                  : victimLocation.longitude,
+            ),
+          ),
+          80.0,
+        ),
+      );
+    } else if (victimLocation.latitude != 0.0) {
+      mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(victimLocation, 16.0),
+      );
+    }
+  }
+
+  void _loadFallbackRoadWaypoints() {
+    polylineCoordinates = [myLocation, victimLocation];
+  }
+
   Future<void> _playEmergencySound() async {
     try {
-      await _audioPlayer.setReleaseMode(
-        ReleaseMode.loop,
-      ); // Lặp liên tục chuông báo
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
       await _audioPlayer.play(AssetSource('sounds/emergency_alarm.mp3'));
     } catch (e) {
       debugPrint('Lỗi phát âm thanh chuông báo: $e');
     }
   }
 
-  // 🟢 HÀM TẮT CHUÔNG BÁO (GỌI KHI BẤM DẪN ĐƯỜNG HOẶC CHẤP NHẬN)
   Future<void> stopEmergencySound() async {
     try {
       await _audioPlayer.stop();
@@ -172,7 +412,7 @@ class EmergencyAlertController extends ChangeNotifier {
         _remainingSeconds--;
         notifyListeners();
       } else {
-        stopEmergencySound(); // Tắt chuông khi hết thời gian chờ
+        stopEmergencySound();
         _timer?.cancel();
       }
     });
@@ -184,41 +424,6 @@ class EmergencyAlertController extends ChangeNotifier {
     return '${minutes.toString().padLeft(2, '0')} : ${seconds.toString().padLeft(2, '0')}s';
   }
 
-  Future<void> fetchRealtimeRoute() async {
-    isLoadingRoute = true;
-    notifyListeners();
-
-    try {
-      PolylinePoints polylinePoints = PolylinePoints(apiKey: googleApiKey);
-
-      PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-        request: PolylineRequest(
-          origin: PointLatLng(myLocation.latitude, myLocation.longitude),
-          destination: PointLatLng(
-            victimLocation.latitude,
-            victimLocation.longitude,
-          ),
-          mode: TravelMode.driving,
-        ),
-      );
-
-      if (result.points.isNotEmpty) {
-        polylineCoordinates.clear();
-        for (var point in result.points) {
-          polylineCoordinates.add(LatLng(point.latitude, point.longitude));
-        }
-      } else {
-        _loadFallbackRoadWaypoints();
-      }
-    } catch (e) {
-      debugPrint('Lỗi lấy tuyến đường API: $e');
-      _loadFallbackRoadWaypoints();
-    } finally {
-      isLoadingRoute = false;
-      notifyListeners();
-    }
-  }
-
   Future<void> makePhoneCall() async {
     final Uri launchUri = Uri(scheme: 'tel', path: victimPhone);
     try {
@@ -228,19 +433,8 @@ class EmergencyAlertController extends ChangeNotifier {
     }
   }
 
-  void _loadFallbackRoadWaypoints() {
-    polylineCoordinates = [
-      myLocation,
-      const LatLng(10.7328, 106.7188),
-      const LatLng(10.7320, 106.7202),
-      const LatLng(10.7332, 106.7218),
-      const LatLng(10.7342, 106.7225),
-      victimLocation,
-    ];
-  }
-
   Future<void> startNavigation() async {
-    await stopEmergencySound(); // Tắt âm thanh khi bấm dẫn đường
+    await stopEmergencySound();
 
     final url = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&origin=${myLocation.latitude},${myLocation.longitude}&destination=${victimLocation.latitude},${victimLocation.longitude}&travelmode=driving',
@@ -256,6 +450,7 @@ class EmergencyAlertController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _positionStreamSubscription?.cancel();
     _assignmentSubscription?.cancel();
     stopEmergencySound();
     _timer?.cancel();
