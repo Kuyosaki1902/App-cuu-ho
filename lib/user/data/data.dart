@@ -276,11 +276,37 @@ final List<TinhTrangYeuCauModel> listTinhTrangYeuCau = [
 
 final List<TrangThaiModel> listTrangThai = [
   TrangThaiModel(
-    maTrangThai: "cuuho_trangthai_tiepnhan",
+    maTrangThai: "cuuho_trangthai_hoso_canbosung",
+    trangThai: "Cần Bổ Sung",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_hoso_daduyet",
+    trangThai: "Đã Duyệt",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_dahuy",
+    trangThai: "Đã Hủy",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_daphancong",
+    trangThai: "Đã Phân Công",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_hoanthanh",
+    trangThai: "Hoàn Thành",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_tuchoi",
+    trangThai: "Từ Chối",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_chotiepnhan",
+    trangThai: "Chờ Tiếp Nhận",
+  ),
+  TrangThaiModel(
+    maTrangThai: "cuuho_trangthai_phancong_tiepnhan",
     trangThai: "Tiếp Nhận",
   ),
-  TrangThaiModel(maTrangThai: "cuuho_trangthai_daduyet", trangThai: "Đã Duyệt"),
-  TrangThaiModel(maTrangThai: "cuuho_trangthai_tuchoi", trangThai: "Từ Chối"),
 ];
 final List<ChiTietMoTaHienTruongModel> ChiTietMoTaHienTruongList = [
   ChiTietMoTaHienTruongModel(
@@ -341,4 +367,4 @@ final List<PhanLoaiAnhModel> listPhanLoaiAnh = [
     tenLoai: 'Ảnh Hiện Trường Nạn Nhân',
   ),
 ];
-final List<List> ListAll = [listPhanLoaiAnh];
+final List<List> ListAll = [listTrangThai];

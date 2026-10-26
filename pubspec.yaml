@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   google_maps_flutter: ^2.10.0
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -38,12 +39,14 @@ dependencies:
   cloud_firestore: ^6.10.0
   geolocator: ^10.1.0
   widget_to_marker: ^1.0.0
+  google_generative_ai: ^0.4.7
+  firebase_database: ^12.6.1
 
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+ 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

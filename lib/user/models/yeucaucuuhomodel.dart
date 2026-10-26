@@ -8,6 +8,7 @@ class YeuCauCuuHoModel implements BaseModel {
   final double kinhDo;
   final int mucDoKhanCap;
   final int? soNguoiCanCuuHo;
+  final int soNguoiCuuHo;
   final String maNguoiYeuCau;
   final String? maAdminDieuPhoi;
   final DateTime? thoiGianPhanCong;
@@ -22,6 +23,7 @@ class YeuCauCuuHoModel implements BaseModel {
     required this.kinhDo,
     required this.mucDoKhanCap,
     this.soNguoiCanCuuHo,
+    this.soNguoiCuuHo = 0,
     required this.maNguoiYeuCau,
     this.maAdminDieuPhoi,
     this.thoiGianPhanCong,
@@ -29,6 +31,7 @@ class YeuCauCuuHoModel implements BaseModel {
     required this.maLoaiYeuCau,
     required this.maTinhTrangYeuCau,
   });
+
   @override
   String? get id => maYeuCau;
 
@@ -41,6 +44,7 @@ class YeuCauCuuHoModel implements BaseModel {
       'kinhDo': kinhDo,
       'mucDoKhanCap': mucDoKhanCap,
       'soNguoiCanCuuHo': soNguoiCanCuuHo,
+      'soNguoiCuuHo': soNguoiCuuHo, // 🌟 Lưu vào Firestore
       'maNguoiYeuCau': maNguoiYeuCau,
       'maAdminDieuPhoi': maAdminDieuPhoi,
       'thoiGianPhanCong': thoiGianPhanCong,
@@ -65,6 +69,9 @@ class YeuCauCuuHoModel implements BaseModel {
       kinhDo: (map['kinhDo'] as num?)?.toDouble() ?? 0.0,
       mucDoKhanCap: (map['mucDoKhanCap'] as num?)?.toInt() ?? 1,
       soNguoiCanCuuHo: (map['soNguoiCanCuuHo'] as num?)?.toInt(),
+      soNguoiCuuHo:
+          (map['soNguoiCuuHo'] as num?)?.toInt() ??
+          0, // 🌟 Đọc từ Firestore (mặc định 0)
       maNguoiYeuCau: map['maNguoiYeuCau'] ?? '',
       maAdminDieuPhoi: map['maAdminDieuPhoi'],
       thoiGianPhanCong: parseDateTime(map['thoiGianPhanCong']),

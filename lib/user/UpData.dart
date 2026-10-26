@@ -25,14 +25,10 @@ class _UpDataState extends State<UpData> {
   }) async {
     try {
       final firestore = FirebaseFirestore.instance;
-      final String todayStr = DateTime.now().toString().substring(
-        0,
-        10,
-      ); // Lấy "2026-10-25"
+      final String todayStr = DateTime.now().toString().substring(0, 10);
 
-      // Tạo mã phân công mẫu
       String maPhanCong =
-          'phancong_${maNguoiCuuHo}_test_${DateTime.now().millisecondsSinceEpoch}';
+          'phancong_${maNguoiCuuHo}_${DateTime.now().millisecondsSinceEpoch}';
 
       final samplePhanCong = ChiTietPhanCongCuuHoModel(
         maPhanCong: maPhanCong,
@@ -44,14 +40,14 @@ class _UpDataState extends State<UpData> {
         maTrangThaiTiepNhan: 'cuuho_trangthai_chophanhoi',
       );
 
-      // Path: NguoiDung/{maNguoiCuuHo}/DanhSachNgay/{2026-10-25}/DanhSachPhanCong/{maPhanCong}
+      // Path chuẩn: NguoiDung/{maNguoiCuuHo}/DanhSachNgay/{todayStr}/DanhSachPhanCong/{maPhanCong}
       await firestore
-          .collection('ChiTietPhanCongCuuHo')
+          .collection('NguoiDung')
           .doc(maNguoiCuuHo)
           .collection('DanhSachNgay')
           .doc(todayStr)
           .collection('DanhSachPhanCong')
-          .doc(maYeuCau)
+          .doc(maPhanCong)
           .set(samplePhanCong.toMap(), SetOptions(merge: true));
 
       debugPrint(
@@ -66,10 +62,114 @@ class _UpDataState extends State<UpData> {
     setState(() => _isLoading = true);
 
     try {
-      seedSamplePhanCongTheoNgay(
-        maNguoiCuuHo: 'nguoidung1', // Thay ID Cứu hộ viên của bạn
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      int addedCount = 0;
+
+      for (var item in ListAll) {
+        if (item.isEmpty) continue;
+
+        // Lấy tên class bỏ đuôi "Model" làm tên collection mặc định
+        var collectionName = item.first.runtimeType.toString();
+        if (collectionName.endsWith('Model')) {
+          collectionName = collectionName.substring(
+            0,
+            collectionName.length - 5,
+          );
+        }
+        final defaultCollectionRef = firestore.collection(collectionName);
+
+        for (var data in item) {
+          // -------------------------------------------------------------------
+          // LOẠI 1: Xử lý Subcollection NguoiThan
+          // -------------------------------------------------------------------
+          if (data is NguoiThanModel) {
+            final String docId = data.id ?? '';
+            if (docId.isNotEmpty) {
+              DocumentReference docRef = firestore
+                  .collection('NguoiThan')
+                  .doc(data.maNguoiDung)
+                  .collection('DanhSachNguoiThan')
+                  .doc(docId);
+
+              final docSnap = await docRef.get();
+              if (!docSnap.exists) {
+                batch.set(docRef, data.toMap());
+                addedCount++;
+              }
+            }
+          }
+          // -------------------------------------------------------------------
+          // LOẠI 2: Xử lý Subcollection ChiTietKyNang
+          // -------------------------------------------------------------------
+          else if (data is ChiTietKyNangModel) {
+            final String userId = data.maNguoiDung;
+            if (userId.isNotEmpty) {
+              // 1. Tạo document cha ChiTietKyNang/{userId}
+              DocumentReference parentDocRef = firestore
+                  .collection('ChiTietKyNang')
+                  .doc(userId);
+
+              batch.set(parentDocRef, data.toMap(), SetOptions(merge: true));
+
+              // 2. Lặp ghi các subcollection trong DanhSachKiNang
+              for (var kn in data.danhSachKiNang) {
+                DocumentReference subDocRef = parentDocRef
+                    .collection('DanhSachKiNang')
+                    .doc(kn.maKyNangCuuHo);
+
+                final subSnap = await subDocRef.get();
+                if (!subSnap.exists) {
+                  batch.set(subDocRef, kn.toMap());
+                  addedCount++;
+                }
+              }
+            }
+          }
+          // -------------------------------------------------------------------
+          // LOẠI 3: Xử lý các Root Collection thông thường còn lại
+          // -------------------------------------------------------------------
+          else {
+            final String docId = data.id ?? defaultCollectionRef.doc().id;
+            DocumentReference docRef = defaultCollectionRef.doc(docId);
+
+            final docSnap = await docRef.get();
+            if (!docSnap.exists) {
+              batch.set(docRef, data.toMap());
+              addedCount++;
+            }
+          }
+        }
+      }
+
+      // Nạp thêm phân công mẫu hôm nay
+      await seedSamplePhanCongTheoNgay(
+        maNguoiCuuHo: 'nguoidung2',
         maYeuCau: 'yeucau2',
       );
+
+      if (addedCount > 0) {
+        await batch.commit();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã thêm mới thành công $addedCount dữ liệu!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Tất cả dữ liệu Batch đã tồn tại, đã nạp đơn mẫu hôm nay.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,15 +1,18 @@
 // lib/GiaoDienDangTimKiem/controllers/tim_kiem_cuu_ho_controller.dart
 
 import 'dart:async';
-import 'package:cuhokhancap/firebase/firebase_service.dart';
-import 'package:cuhokhancap/user/models/chitietmotahientruongmodel.dart';
-import 'package:cuhokhancap/user/models/chitietphancongcuuhomodel%20.dart';
-import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
-import 'package:cuhokhancap/user/models/yeucaucuuhomodel.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:widget_to_marker/widget_to_marker.dart';
+
+import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/gemini/gemini_service.dart';
+import 'package:cuhokhancap/user/models/chitietmotahientruongmodel.dart';
+import 'package:cuhokhancap/user/models/chitietphancongcuuhomodel%20.dart';
+import 'package:cuhokhancap/user/models/luuanhmodel.dart';
+import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
+import 'package:cuhokhancap/user/models/yeucaucuuhomodel.dart';
 
 class _ArrowClipper extends CustomClipper<Path> {
   @override
@@ -27,34 +30,34 @@ class _ArrowClipper extends CustomClipper<Path> {
 
 class TimKiemCuuHoController {
   final FirebaseService _firebaseService = FirebaseService();
+  final GeminiService _geminiService = GeminiService();
 
   GoogleMapController? mapController;
   bool isLoading = true;
 
   YeuCauCuuHoModel? yeuCauCuuHo;
   ChiTietMoTaHienTruongModel? chiTietMoTa;
+  List<LuuAnhModel> danhSachAnhBase64 = [];
 
   LatLng currentDeviceLocation = const LatLng(10.7769, 106.6993);
 
   final Set<Circle> circles = {};
   final Set<Marker> markers = {};
 
+  // 🌟 Mở rộng bán kính: 1000m (1km) -> 3000m (3km) -> 5000m (5km)
   int currentScanStep = 0;
   final List<double> scanRadii = [1000, 3000, 5000];
-  final List<Duration> scanIntervals = [
-    const Duration(seconds: 10),
-    const Duration(seconds: 10),
-    const Duration(seconds: 10),
-  ];
 
-  Timer? _scanTimer;
+  Timer? _step15sTimer;
   Timer? _secondsTimer;
-  Timer? _timeoutTimer;
   StreamSubscription<List<ChiTietPhanCongCuuHoModel>>? _phanCongSubscription;
 
   int elapsedSeconds = 0;
-  List<Map<String, dynamic>> rescuerList = []; // Cứu hộ viên được đề xuất/quét
-  List<String> acceptedRescuerIds = []; // Danh sách CHV ĐÃ TIẾP NHẬN
+  List<Map<String, dynamic>> rescuerList = [];
+  List<String> acceptedRescuerIds = [];
+  Set<String> assignedRescuerIds = {};
+
+  Map<String, dynamic>? aiAnalysisResult;
 
   String get formattedElapsedTime {
     int minutes = elapsedSeconds ~/ 60;
@@ -81,14 +84,40 @@ class TimKiemCuuHoController {
       yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
       moveToCurrentLocation();
 
+      // 🌟 GIẢI QUYẾT BƯỚC 1: TRUY VẾT & BẮN THÔNG BÁO NGƯỜI THÂN QUA RTDB TRƯỚC
+      if (yeuCauCuuHo != null) {
+        await _firebaseService.notifyConnectedRelatives(
+          maNguoiYeuCau: yeuCauCuuHo!.maNguoiYeuCau,
+          maYeuCau: maYeuCau,
+          viDo: currentDeviceLocation.latitude,
+          kinhDo: currentDeviceLocation.longitude,
+        );
+      }
+
+      // 🌟 GIẢI QUYẾT BƯỚC 2: ĐỌC MÔ TẢ & ẢNH BASE64 ĐỂ GEMINI MULTIMODAL PHÂN TÍCH
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
+      if (chiTietMoTa != null) {
+        danhSachAnhBase64 = await _firebaseService.getImagesByMoTaId(
+          chiTietMoTa!.maYeuCau,
+        );
+
+        aiAnalysisResult = await _geminiService.analyzeSceneAndSuggestSkills(
+          moTa: chiTietMoTa!,
+          danhSachAnhBase64: danhSachAnhBase64,
+        );
+      }
+
       await updateMapOverlays();
 
-      // 🌟 1. Bật Stream Realtime lắng nghe bảng ChiTietPhanCongCuuHo
+      // 🌟 GIẢI QUYẾT BƯỚC 3: STREAM THEO DÕI CÁC BẢN GHI PHÂN CÔNG
       _listenToPhanCongChanges(maYeuCau, onUpdate);
 
-      // 🌟 2. Khởi tạo đếm ngược 5 phút (300s) timeout
-      _startTimeoutTimer(maYeuCau, onUpdate);
+      // Đếm thời gian nhảy từng giây
+      _secondsTimer?.cancel();
+      _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        elapsedSeconds++;
+        onUpdate();
+      });
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
@@ -96,230 +125,194 @@ class TimKiemCuuHoController {
       onUpdate();
     }
 
-    // 🌟 3. Tiến hành Quét AI & Gửi yêu cầu
-    startScanProcess(maYeuCau, onUpdate);
+    // 🌟 GIẢI QUYẾT BƯỚC 4: BẮT ĐẦU VÒNG QUÉT RADAR AI 15S
+    startAdaptiveAIRadar(maYeuCau, onUpdate);
   }
 
-  /// 🌟 REALTIME MONITORING: Lắng nghe liên tục thay đổi trạng thái phản hồi
+  /// 🌟 REALTIME MONITORING: LẮNG NGHE ĐƠN & QUẢN LÝ TRẠNG THÁI
   void _listenToPhanCongChanges(String maYeuCau, Function() onUpdate) {
     _phanCongSubscription?.cancel();
-    _phanCongSubscription = _firebaseService
-        .streamPhanCongByYeuCau(maYeuCau)
-        .listen((phanCongList) {
-          acceptedRescuerIds.clear();
+    _phanCongSubscription = _firebaseService.streamPhanCongByYeuCau(maYeuCau).listen((
+      phanCongList,
+    ) async {
+      acceptedRescuerIds.clear();
 
-          for (var pc in phanCongList) {
-            // Nếu chuyển trạng thái sang cuuho_trangthai_tiepnhan
-            if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_tiepnhan') {
-              if (!acceptedRescuerIds.contains(pc.maNguoiCuuHo)) {
-                acceptedRescuerIds.add(pc.maNguoiCuuHo);
-              }
-            }
-            // Nếu cuuho_trangthai_tuchoi thì tự động bỏ qua (không ghi nhận)
+      for (var pc in phanCongList) {
+        if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan') {
+          if (!acceptedRescuerIds.contains(pc.maNguoiCuuHo)) {
+            acceptedRescuerIds.add(pc.maNguoiCuuHo);
           }
+        }
+      }
 
-          // 🛑 ĐIỀU KIỆN CỐT LÕI 1: Có đủ 5 Cứu hộ viên tiếp nhận ca -> Dừng tìm kiếm ngay
-          if (acceptedRescuerIds.length >= 5) {
-            _stopAllTimersAndSearch();
-            _firebaseService.updateTinhTrangYeuCau(
-              maYeuCau,
-              'user_tinhtrang_daphancong',
-            );
-            debugPrint('🎯 Đã có đủ 5 Cứu hộ viên nhận đơn. Dừng tìm kiếm!');
-          }
-
-          onUpdate();
-        });
-  }
-
-  /// 🌟 TIMEOUT TIMER: Đếm ngược 5 phút (300 giây)
-  void _startTimeoutTimer(String maYeuCau, Function() onUpdate) {
-    _timeoutTimer?.cancel();
-    _timeoutTimer = Timer(const Duration(minutes: 5), () async {
-      _stopAllTimersAndSearch();
-
+      // 🛑 ĐIỀU KIỆN 1: Ít nhất 1 CHV chấp nhận -> NGỪNG QUÉT MỚI & đổi trạng thái sang user_tinhtrang_daphancong
       if (acceptedRescuerIds.isNotEmpty) {
-        // 🛑 ĐIỀU KIỆN CỐT LÕI 2: Quá 5 phút & Ít nhất 1 CHV nhận -> user_tinhtrang_daphancong
-        await _firebaseService.updateTinhTrangYeuCau(
-          maYeuCau,
-          'user_tinhtrang_daphancong',
-        );
-        debugPrint(
-          '⏱️ Hết 5 phút: Đã có ${acceptedRescuerIds.length} CHV nhận.',
-        );
-      } else {
-        // 🛑 ĐIỀU KIỆN CỐT LÕI 3: Quá 5 phút & KHÔNG có ai nhận -> user_tinhtrang_quahandieuphoi
-        await _firebaseService.updateTinhTrangYeuCau(
-          maYeuCau,
-          'user_tinhtrang_quahandieuphoi',
-        );
-        debugPrint('⏱️ Hết 5 phút: Không có CHV nào nhận đơn!');
-      }
-      onUpdate();
-    });
-  }
+        _stop15sRadarTimer(); // Tắt Timer 15s quét mở rộng ngay!
 
-  void startScanProcess(String maYeuCau, Function() onUpdate) {
-    currentScanStep = 0;
-    elapsedSeconds = 0;
-
-    _performScanWithAI(maYeuCau, onUpdate);
-
-    _secondsTimer?.cancel();
-    _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      elapsedSeconds++;
-      onUpdate();
-    });
-
-    _scheduleNextScanStep(maYeuCau, onUpdate);
-  }
-
-  void _scheduleNextScanStep(String maYeuCau, Function() onUpdate) {
-    _scanTimer?.cancel();
-    _scanTimer = Timer(scanIntervals[currentScanStep], () {
-      if (rescuerList.length < 5 && currentScanStep < scanRadii.length - 1) {
-        currentScanStep++;
-        updateMapOverlays();
-        _performScanWithAI(maYeuCau, onUpdate);
-        _scheduleNextScanStep(maYeuCau, onUpdate);
-      }
-    });
-  }
-
-  /// 🌟 PHÂN TÍCH TỪ KHÓA AI & MATCH HỒ SƠ
-  Future<void> _performScanWithAI(String maYeuCau, Function() onUpdate) async {
-    double currentRadiusMeters = scanRadii[currentScanStep];
-
-    try {
-      Set<String> rescuerUserIds = await _firebaseService
-          .getAllRescuerUserIds();
-      if (rescuerUserIds.isEmpty) return;
-
-      List<String> userIdsList = rescuerUserIds.toList();
-      List<NguoiDungModel> rescuerUsers = [];
-
-      for (var i = 0; i < userIdsList.length; i += 30) {
-        var chunk = userIdsList.sublist(
-          i,
-          i + 30 > userIdsList.length ? userIdsList.length : i + 30,
-        );
-        for (var userId in chunk) {
-          final user = await _firebaseService.getUserById(userId);
-          if (user != null) rescuerUsers.add(user);
-        }
-      }
-
-      // Trích xuất mô tả hiện trường từ màn hình trước
-      String keywordsText = '';
-      if (chiTietMoTa?.ghiChuText != null) {
-        keywordsText = chiTietMoTa!.ghiChuText.toString().toLowerCase();
-      }
-
-      String loaiYeuCau = yeuCauCuuHo?.maLoaiYeuCau ?? 'loaiyeucau_sos';
-
-      for (var user in rescuerUsers) {
-        if (rescuerList.length >= 5) break;
-
-        if (yeuCauCuuHo != null &&
-            user.maNguoiDung == yeuCauCuuHo!.maNguoiYeuCau) {
-          continue;
-        }
-
-        if (user.viDo == null || user.kinhDo == null) continue;
-
-        double distanceInMeters = Geolocator.distanceBetween(
-          currentDeviceLocation.latitude,
-          currentDeviceLocation.longitude,
-          user.viDo!,
-          user.kinhDo!,
-        );
-
-        if (distanceInMeters <= currentRadiusMeters) {
-          bool isExisted = rescuerList.any(
-            (r) => r['user'].maNguoiDung == user.maNguoiDung,
+        if (yeuCauCuuHo?.maTinhTrangYeuCau != 'user_tinhtrang_daphancong') {
+          await _firebaseService.updateTinhTrangYeuCau(
+            maYeuCau,
+            'user_tinhtrang_daphancong',
           );
-
-          if (!isExisted) {
-            // Lọc theo maLoaiYeuCau
-            bool isMatched = await _checkAIMatchProfile(
-              user.maNguoiDung!,
-              loaiYeuCau,
-              keywordsText,
-            );
-
-            if (isMatched) {
-              double distanceKm = (distanceInMeters / 1000);
-
-              rescuerList.add({
-                'user': user,
-                'distanceKm': distanceKm.toStringAsFixed(1),
-              });
-
-              _addRescuerMarker(user, distanceKm.toStringAsFixed(1));
-
-              // Gửi bản ghi phân công với trạng thái chờ phản hồi initial
-              await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
-            }
-          }
+          debugPrint(
+            '🎯 Đã có CHV chấp nhận -> Dừng quét mới & chuyển user_tinhtrang_daphancong',
+          );
         }
       }
 
+      // 🛑 ĐIỀU KIỆN 2: Đủ 5 CHV chấp nhận -> Dừng hẳn & Hủy tất cả các bản ghi chờ còn lại
+      if (acceptedRescuerIds.length >= 5) {
+        _stopAllTimers();
+        await _firebaseService.cancelRemainingAssignments(maYeuCau);
+        debugPrint('🎯 Đã đủ 5 CHV chấp nhận! Hủy các đơn chờ còn lại.');
+      }
+
       onUpdate();
-    } catch (e) {
-      debugPrint('Lỗi quét AI cứu hộ: $e');
-    }
+    });
   }
 
-  /// 🌟 KIỂM TRA MATCH HỒ SƠ DỰA VÀO LOẠI YÊU CẦU & AI KEYWORDS
-  Future<bool> _checkAIMatchProfile(
-    String userId,
-    String loaiYeuCau,
-    String keywords,
-  ) async {
-    // 1. loaiyeucau_timtudong: Chỉ tìm HoSoCuuHoCoCCHN
-    final hoSoCoCCHN = await _firebaseService.getHoSoCoCCHN(userId);
-    if (hoSoCoCCHN != null) {
-      if (keywords.isEmpty)
-        return true; // Không có mô tả -> Ghép mặc định theo vị trí
-      String chuyenNganh = hoSoCoCCHN.tenChuyenNganh.toLowerCase();
-      if (keywords.contains(chuyenNganh) || chuyenNganh.contains(keywords)) {
-        return true;
+  /// 🌟 RADAR 15S MỞ RỘNG BÁN KÍNH (1km -> 3km -> 5km)
+  void startAdaptiveAIRadar(String maYeuCau, Function() onUpdate) async {
+    currentScanStep = 0; // 1km
+    await _executeAIScanAndAssign(maYeuCau, onUpdate);
+
+    _schedule15sNextStep(maYeuCau, onUpdate);
+  }
+
+  void _schedule15sNextStep(String maYeuCau, Function() onUpdate) {
+    _step15sTimer?.cancel();
+    _step15sTimer = Timer(const Duration(seconds: 15), () async {
+      // Nếu CHƯA CÓ AI nhận đơn VÀ chưa đạt mức tối đa 5km (bước 2)
+      if (acceptedRescuerIds.isEmpty &&
+          currentScanStep < scanRadii.length - 1) {
+        currentScanStep++; // Tăng từ 1km (bước 0) -> 3km (bước 1) -> 5km (bước 2)
+        await updateMapOverlays();
+        await _executeAIScanAndAssign(maYeuCau, onUpdate);
+
+        _schedule15sNextStep(maYeuCau, onUpdate);
       }
-    }
+    });
+  }
 
-    if (loaiYeuCau == 'loaiyeucau_timtudong') {
-      return false; // Bỏ qua hồ sơ không CCHN nếu chọn tìm tự động chuẩn y tế
-    }
+  /// 🌟 QUÉT AI VÀ SẮP XẾP ƯU TIÊN PHÂN CÔNG
+  Future<void> _executeAIScanAndAssign(
+    String maYeuCau,
+    Function() onUpdate,
+  ) async {
+    double maxDistanceMeters = scanRadii[currentScanStep];
 
-    // 2. loaiyeucau_sos: Tìm cả 2 hồ sơ (Kiểm tra tiếp HoSoCuuHoKhongCCHN)
-    final hoSoKhongCCHN = await _firebaseService.getHoSoKhongCCHN(userId);
-    if (hoSoKhongCCHN != null) {
-      if (keywords.isEmpty) return true;
+    List<NguoiDungModel> onlineRescuers = await _firebaseService
+        .getOnlineRescuers();
+    if (onlineRescuers.isEmpty) return;
 
-      // 🌟 Truy vấn danh sách ID kỹ năng từ Subcollection ChiTietKiNang/{userId}/DanhSachKiNang
-      List<String> userSkillIds = await _firebaseService.getSkillIdsByUserId(
-        userId,
+    List<Map<String, dynamic>> scoredRescuers = [];
+
+    bool hasMoTa =
+        chiTietMoTa != null &&
+        chiTietMoTa!.ghiChuText != null &&
+        chiTietMoTa!.ghiChuText.toString().isNotEmpty;
+
+    String loaiYeuCau = yeuCauCuuHo?.maLoaiYeuCau ?? 'loaiyeucau_sos';
+
+    bool shouldAIControl =
+        (loaiYeuCau == 'loaiyeucau_choncuuhovien' ||
+        loaiYeuCau == 'loaiyeucau_timtudong');
+
+    for (var rescuer in onlineRescuers) {
+      if (rescuer.maNguoiDung == yeuCauCuuHo?.maNguoiYeuCau) continue;
+      if (assignedRescuerIds.contains(rescuer.maNguoiDung)) continue;
+      if (rescuer.viDo == null || rescuer.kinhDo == null) continue;
+
+      double distanceMeters = Geolocator.distanceBetween(
+        currentDeviceLocation.latitude,
+        currentDeviceLocation.longitude,
+        rescuer.viDo!,
+        rescuer.kinhDo!,
       );
 
-      if (userSkillIds.isNotEmpty) {
-        // Kiểm tra mã kỹ năng (vd: kn_bang_bo, kn_cpr) có nằm trong ghi chú mô tả không
-        bool isSkillIdMatched = userSkillIds.any(
-          (skId) => keywords.contains(skId.toLowerCase()),
-        );
-        if (isSkillIdMatched) return true;
+      if (distanceMeters <= maxDistanceMeters) {
+        double score = 0.0;
 
-        // Đọc tiếp tên / mô tả kỹ năng từ bảng KyNangCuuHo để so sánh từ khóa
-        List<String> skillDetails = await _firebaseService.getSkillNamesByIds(
-          userSkillIds,
-        );
-        bool isSkillDetailMatched = skillDetails.any(
-          (detail) => keywords.contains(detail) || detail.contains(keywords),
-        );
-        if (isSkillDetailMatched) return true;
+        if (hasMoTa && shouldAIControl) {
+          // Có mô tả + Chọn CHV/Tìm tự động -> AI tính điểm chuyên ngành/kỹ năng
+          score = await _calculateAIScore(rescuer, distanceMeters);
+        } else {
+          // Không mô tả hoặc SOS thường -> Ưu tiên khoảng cách gần nhất
+          score = 10000.0 - distanceMeters;
+        }
+
+        scoredRescuers.add({
+          'user': rescuer,
+          'distanceMeters': distanceMeters,
+          'score': score,
+        });
       }
     }
 
-    return true; // Mặc định hỗ trợ tìm rộng nếu chưa trùng khớp hoàn toàn từ khóa
+    // Sắp xếp giảm dần theo điểm số
+    scoredRescuers.sort(
+      (a, b) => (b['score'] as double).compareTo(a['score'] as double),
+    );
+
+    for (var item in scoredRescuers) {
+      if (acceptedRescuerIds.length >= 5) break;
+
+      NguoiDungModel user = item['user'];
+      double distanceKm = (item['distanceMeters'] as double) / 1000;
+
+      assignedRescuerIds.add(user.maNguoiDung!);
+      rescuerList.add({
+        'user': user,
+        'distanceKm': distanceKm.toStringAsFixed(1),
+      });
+
+      _addRescuerMarker(user, distanceKm.toStringAsFixed(1));
+
+      // 🌟 Tạo phân công (Lấy maYeuCau làm Key & Set nhanCaCuuHo = true)
+      await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
+    }
+
+    onUpdate();
+  }
+
+  Future<double> _calculateAIScore(
+    NguoiDungModel user,
+    double distanceMeters,
+  ) async {
+    double score = 0.0;
+    List<String> reqChuyenNganh = List<String>.from(
+      aiAnalysisResult?['chuyenNganhYeuCau'] ?? [],
+    );
+    List<String> reqKyNang = List<String>.from(
+      aiAnalysisResult?['kyNangYeuCau'] ?? [],
+    );
+
+    // 1. Khớp Hồ sơ CÓ CCHN
+    final hoSoCoCCHN = await _firebaseService.getHoSoCoCCHN(user.maNguoiDung!);
+    if (hoSoCoCCHN != null) {
+      String cn = hoSoCoCCHN.tenChuyenNganh.toLowerCase();
+      for (var req in reqChuyenNganh) {
+        if (cn.contains(req.toLowerCase())) {
+          score += 5000.0;
+        }
+      }
+    }
+
+    // 2. Khớp Kỹ năng Subcollection
+    List<String> userSkillIds = await _firebaseService.getSkillIdsByUserId(
+      user.maNguoiDung!,
+    );
+    for (var skId in userSkillIds) {
+      for (var req in reqKyNang) {
+        if (skId.toLowerCase().contains(req.toLowerCase())) {
+          score += 2000.0;
+        }
+      }
+    }
+
+    // 3. Phạt điểm nhẹ theo khoảng cách xa
+    score -= (distanceMeters * 0.5);
+    return score;
   }
 
   Future<void> _createAssignmentRecord(
@@ -330,8 +323,7 @@ class TimKiemCuuHoController {
       int previousCount = await _firebaseService.countAssignmentsByRescuer(
         maNguoiCuuHo,
       );
-      int soCaThamGia = previousCount + 1;
-      String maPhanCong = 'phancong_${maNguoiCuuHo}_$soCaThamGia';
+      String maPhanCong = 'phancong_${maNguoiCuuHo}_${previousCount + 1}';
 
       final phanCong = ChiTietPhanCongCuuHoModel(
         maPhanCong: maPhanCong,
@@ -340,10 +332,17 @@ class TimKiemCuuHoController {
         maNguoiCuuHo: maNguoiCuuHo,
         thoiGianGui: DateTime.now(),
         maLoaiPhanCong: 'phancong_hethongtudong',
-        maTrangThaiTiepNhan: 'cuuho_trangthai_chophanhoi', // Trạng thái ban đầu
+        maTrangThaiTiepNhan: 'cuuho_trangthai_phancong_chotiepnhan',
       );
 
+      // Ghi Root Collection
       await _firebaseService.createPhanCongCuuHo(phanCong);
+
+      // 🌟 Ghi Subcollection với Document ID là maYeuCau & Đổi nhanCaCuuHo = true
+      await _firebaseService.createPhanCongTheoNgay(
+        maNguoiCuuHo: maNguoiCuuHo,
+        phanCong: phanCong,
+      );
     } catch (e) {
       debugPrint('Lỗi tạo bản ghi phân công: $e');
     }
@@ -370,8 +369,6 @@ class TimKiemCuuHoController {
   }
 
   Future<void> _addRescuerMarker(NguoiDungModel user, String distanceKm) async {
-    double rating = 5.0;
-
     Widget rescuerMarkerWidget = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -381,13 +378,7 @@ class TimKiemCuuHoController {
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFF006A55), width: 2),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -411,26 +402,11 @@ class TimKiemCuuHoController {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
-                      color: Colors.black87,
                     ),
                   ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.star_rounded,
-                        color: Colors.amber,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 2),
-                      Text(
-                        '$rating • $distanceKm km',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    '$distanceKm km',
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
                   ),
                 ],
               ),
@@ -468,39 +444,15 @@ class TimKiemCuuHoController {
     circles.clear();
     markers.removeWhere((m) => m.markerId.value == 'current_device_marker');
 
-    String latStr = currentDeviceLocation.latitude.toStringAsFixed(4);
-    String lngStr = currentDeviceLocation.longitude.toStringAsFixed(4);
-
-    Widget victimMarkerWidget = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: const Color(0xFF006A55),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-          ),
-          child: const Icon(Icons.location_on, color: Colors.white, size: 20),
-        ),
-        const SizedBox(height: 3),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            '$latStr, $lngStr',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-            ),
-          ),
-        ),
-      ],
+    Widget victimMarkerWidget = Container(
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF006A55),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+      ),
+      child: const Icon(Icons.location_on, color: Colors.white, size: 20),
     );
 
     BitmapDescriptor victimIcon = await victimMarkerWidget.toBitmapDescriptor();
@@ -532,18 +484,20 @@ class TimKiemCuuHoController {
   }
 
   void moveToCurrentLocation() {
-    if (mapController == null) return;
     mapController?.animateCamera(CameraUpdate.newLatLng(currentDeviceLocation));
   }
 
-  void _stopAllTimersAndSearch() {
-    _scanTimer?.cancel();
+  void _stop15sRadarTimer() {
+    _step15sTimer?.cancel();
+  }
+
+  void _stopAllTimers() {
+    _step15sTimer?.cancel();
     _secondsTimer?.cancel();
-    _timeoutTimer?.cancel();
   }
 
   void dispose() {
-    _stopAllTimersAndSearch();
+    _stopAllTimers();
     _phanCongSubscription?.cancel();
   }
 }
