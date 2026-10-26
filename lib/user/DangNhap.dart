@@ -5,9 +5,13 @@ import 'package:cuhokhancap/user/TrangChuNguoiDung.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart'; 
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/QuenMatKhau.dart';
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
+import 'package:firebase_database/firebase_database.dart';
+
 
 class DangNhap extends StatefulWidget {
-  const DangNhap({super.key});
+  final bool hienThongBaoBiDaVang;
+  const DangNhap({super.key, this.hienThongBaoBiDaVang = false});
 
   @override
   State<DangNhap> createState() => _DangNhapState();
@@ -20,7 +24,17 @@ class _DangNhapState extends State<DangNhap> {
   
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  bool _isLoading = false; 
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.hienThongBaoBiDaVang) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showSnackBar('Tài khoản của bạn đã bị đăng xuất do đăng nhập ở nơi khác!', Colors.red);
+      });
+    }
+  } 
 
   Future<void> _handleLogin() async {
     String taiKhoan = _taiKhoanController.text.trim();
@@ -35,12 +49,14 @@ class _DangNhapState extends State<DangNhap> {
 
     NguoiDungModel? user = await _firebaseService.dangNhap(taiKhoan, matKhau);
 
-    if (mounted) setState(() => _isLoading = false);
-
     if (user != null && user.maNguoiDung != null) {
       // 1. KIỂM TRA ĐANG HOẠT ĐỘNG Ở MÁY KHÁC KHÔNG
       bool dangOnline = await _firebaseService.kiemTraDangOnlineRealtime(user.maNguoiDung!);
+      String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
+
       if (dangOnline && mounted) {
+        setState(() => _isLoading = false); // Tạm tắt loading để hiện bảng hỏi
+        
         bool? xacNhan = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -59,13 +75,24 @@ class _DangNhapState extends State<DangNhap> {
             ],
           ),
         );
+
         if (xacNhan != true) return; // Nếu chọn Hủy thì thoát, không đăng nhập nữa
+
+        setState(() => _isLoading = true); // Bật lại vòng xoay loading
+
+        // 2. GHI ĐÈ MÃ THIẾT BỊ MỚI LÊN SERVER NGAY LẬP TỨC ĐỂ ĐÁ MÁY 1
+        final rtdb = FirebaseDatabase.instanceFor(
+          app: Firebase.app(),
+          databaseURL: 'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
+        );
+        await rtdb.ref('NguoiDung/${user.maNguoiDung!}/maThietBi').set(maThietBiMoi);
+
+        // 3. TẠO ĐỘ TRỄ 2 GIÂY (Cho máy 1 kịp văng và báo isOnline = false)
+        await Future.delayed(const Duration(seconds: 4));
       }
 
+      if (mounted) setState(() => _isLoading = false);
       _showSnackBar('Đăng nhập thành công!', Colors.green);
-      
-      // 2. SINH MÃ THIẾT BỊ MỚI DÀNH CHO PHIÊN ĐĂNG NHẬP NÀY
-      String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
 
       if (_rememberMe) {
         final prefs = await SharedPreferences.getInstance();
@@ -78,12 +105,13 @@ class _DangNhapState extends State<DangNhap> {
           MaterialPageRoute(
             builder: (context) => TrangChuNguoiDung(
               maNguoiDung: user.maNguoiDung!,
-              maThietBi: maThietBiMoi, // Truyền mã thiết bị sang Trang chủ
+              maThietBi: maThietBiMoi, 
             ),
           ),
         );
       }
     } else {
+      if (mounted) setState(() => _isLoading = false);
       _showSnackBar('Sai tài khoản hoặc mật khẩu. Vui lòng thử lại!', Colors.red);
     }
   }
