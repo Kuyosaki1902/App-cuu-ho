@@ -11,6 +11,7 @@ import 'MenuNguoiDung.dart';
 import 'package:cuhokhancap/user/MoTaTinhTrang.dart'; 
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
+import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart'; // Import service vẽ cứu hộ
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -36,9 +37,17 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
   
   bool _hasLocationPermission = false;
   bool _isKickedOut = false; 
-  
-  // Biến điều khiển trạng thái đóng/mở của bảng thông tin bên dưới
   bool _isPanelExpanded = true;
+
+  // BIẾN QUẢN LÝ NGƯỜI CỨU HỘ
+  final NguoiCuuHoService _cuuHoService = NguoiCuuHoService();
+  StreamSubscription<ThongTinCuuHoData>? _cuuHoSubscription;
+  ThongTinCuuHoData _duLieuCuuHo = ThongTinCuuHoData(
+    markers: {}, 
+    soLuong: 0, 
+    thongBaoTrangThai: "Đang quét khu vực...", 
+    thoiGianUocTinh: ""
+  );
 
   @override
   void initState() {
@@ -72,7 +81,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     
     _kickOutSubscription = rtdb.ref('NguoiDung/${widget.maNguoiDung}/maThietBi').onValue.listen((event) {
       final thietBiTrenServer = event.snapshot.value?.toString();
-      
       if (thietBiTrenServer != null && thietBiTrenServer != widget.maThietBi) {
         _hienThiThongBaoBiDaVang();
       }
@@ -81,10 +89,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
 
   void _hienThiThongBaoBiDaVang() {
     if (!mounted) return;
-    
     _isKickedOut = true; 
     _firebaseService.huyOnDisconnect(widget.maNguoiDung); 
-
     _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
 
     Navigator.pushAndRemoveUntil(
@@ -107,11 +113,11 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     _positionStreamSubscription?.cancel(); 
     _serviceStatusStreamSubscription?.cancel();
     _kickOutSubscription?.cancel();
+    _cuuHoSubscription?.cancel(); // Hủy lắng nghe cứu hộ khi thoát
     
     if (!_isKickedOut) {
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false); 
     }
-    
     super.dispose();
   }
   
@@ -144,7 +150,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     });
 
     Position initialPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-    _processAndUpdateLocation(initialPosition);
+    _processAndUpdateLocation(initialPosition, animateCamera: true);
 
     _positionStreamSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -165,23 +171,32 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     });
   }
 
-  void _processAndUpdateLocation(Position position) {
+  // Sửa lại hàm này để gọi lắng nghe dữ liệu cứu hộ theo bán kính
+  void _processAndUpdateLocation(Position position, {bool animateCamera = false}) {
     if (!mounted) return;
     
     setState(() {
       _currentPosition = LatLng(position.latitude, position.longitude);
     });
-    _recenterCamera();
+    
+    if (animateCamera) {
+      _recenterCamera();
+    }
 
     String geohash = GeoHash.encode(position.latitude, position.longitude).hash;
-
     _firebaseService.capNhatViTriVaTrangThai(
-      widget.maNguoiDung,
-      position.latitude,
-      position.longitude,
-      geohash,
-      true, 
+      widget.maNguoiDung, position.latitude, position.longitude, geohash, true, 
     );
+
+    // Kích hoạt lắng nghe người cứu hộ Realtime với bán kính hiện tại
+    _cuuHoSubscription?.cancel();
+    _cuuHoSubscription = _cuuHoService.langNgheNguoiCuuHo(_currentPosition, _currentRadius).listen((data) {
+      if (mounted) {
+        setState(() {
+          _duLieuCuuHo = data;
+        });
+      }
+    });
   }
 
   void _showErrorAndExit(String message) {
@@ -198,10 +213,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
       double targetZoom = 13.5;
       if (_currentRadius == 1000) targetZoom = 14.5;
       if (_currentRadius == 5000) targetZoom = 12.5;
-
-      _mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPosition, targetZoom),
-      );
+      _mapController!.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition, targetZoom));
     }
   }
 
@@ -219,6 +231,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
             myLocationButtonEnabled: false, 
             myLocationEnabled: _hasLocationPermission, 
             onMapCreated: (controller) => _mapController = controller,
+            
+            // GẮN DANH SÁCH MARKER NGƯỜI CỨU HỘ VÀO BẢN ĐỒ
+            markers: _duLieuCuuHo.markers,
+            
             circles: {
               Circle(
                 circleId: const CircleId('radius_circle'),
@@ -278,7 +294,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
             child: _buildCircularButton(icon: Icons.center_focus_strong, onTap: _recenterCamera),
           ),
           
-          // GIAO DIỆN BẢNG THÔNG TIN CÓ THỂ KÉO LÊN XUỐNG ĐƯỢC CHỈNH SỬA Ở ĐÂY
+          // BẢNG THÔNG TIN BOTTOM SHEET
           Positioned(
             bottom: 0,
             left: 0,
@@ -286,7 +302,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Nút SOS (Thu nhỏ một chút khi bảng đóng lại để không cản trở map)
                 AnimatedScale(
                   scale: _isPanelExpanded ? 1.0 : 0.85,
                   duration: const Duration(milliseconds: 300),
@@ -312,19 +327,18 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
                 ),
                 const SizedBox(height: 20),
                 
-                // Khối Bottom Panel bọc trong GestureDetector để bắt sự kiện vuốt
                 GestureDetector(
                   onVerticalDragEnd: (details) {
                     if (details.primaryVelocity != null) {
                       if (details.primaryVelocity! > 0) {
-                        setState(() => _isPanelExpanded = false); // Vuốt xuống -> Đóng
+                        setState(() => _isPanelExpanded = false); 
                       } else if (details.primaryVelocity! < 0) {
-                        setState(() => _isPanelExpanded = true); // Vuốt lên -> Mở
+                        setState(() => _isPanelExpanded = true); 
                       }
                     }
                   },
                   onTap: () {
-                    setState(() => _isPanelExpanded = !_isPanelExpanded); // Bấm vào để đổi trạng thái
+                    setState(() => _isPanelExpanded = !_isPanelExpanded); 
                   },
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -337,7 +351,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Thanh gạt 
                         Center(
                           child: Container(
                             width: 40,
@@ -346,26 +359,40 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
                             decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
-                        // Hàng thông báo số lượng bác sĩ (Luôn luôn hiển thị)
+
+                        // LIÊN KẾT ĐỘNG VỚI DỮ LIỆU CỨU HỘ
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.circle, color: Color(0xFF00C853), size: 12),
-                                SizedBox(width: 8),
-                                Text("6 bác sĩ sẵn sàng nhận", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              ],
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Icon(Icons.circle, color: _duLieuCuuHo.soLuong > 0 ? const Color(0xFF00C853) : Colors.red, size: 12),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _duLieuCuuHo.thongBaoTrangThai, 
+                                      style: TextStyle(
+                                        fontSize: _duLieuCuuHo.soLuong > 0 ? 18 : 15, 
+                                        fontWeight: FontWeight.bold, 
+                                        color: _duLieuCuuHo.soLuong > 0 ? Colors.black : Colors.red
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(20)),
-                              child: const Text("Tốc độ 8-15p", style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 12)),
-                            ),
+                            if (_duLieuCuuHo.soLuong > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(20)),
+                                child: Text(_duLieuCuuHo.thoiGianUocTinh, style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold, fontSize: 12)),
+                              ),
                           ],
                         ),
                         
-                        // Hiệu ứng CrossFade để ẩn / hiện phần thông tin chi tiết
                         AnimatedCrossFade(
                           firstChild: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -478,17 +505,21 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     );
   }
 
+  // LẮNG NGHE ĐỔI BÁN KÍNH
   Widget _buildRadiusOption(String text, double radiusValue) {
     bool isSelected = _currentRadius == radiusValue;
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         setState(() {
           _currentRadius = radiusValue;
         });
-        double targetZoom = 13.0;
-        if (radiusValue == 1000) targetZoom = 14.5;
-        if (radiusValue == 5000) targetZoom = 12.5;
-        _mapController?.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition, targetZoom));
+        
+        // Cập nhật lại khung nhìn Camera
+        _recenterCamera();
+        
+        // Gọi lại hàm quét để load người cứu hộ theo bán kính mới
+        Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        _processAndUpdateLocation(pos, animateCamera: false);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
