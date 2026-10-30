@@ -67,31 +67,15 @@ class NguoiThanCuaBanTab extends StatelessWidget {
 
     if (confirm == true) {
       try {
-        // Gọi controller xóa sạch bản ghi ở cả 2 bên
-        await controller.rejectOrCancelRequest(userId, relativeId);
+        // Thay vì xóa ngay lập tức, chuyển trạng thái thành Yêu Cầu Hủy (sẽ nhảy sang Tab Đã Gửi)
+        await controller.requestCancelRelation(userId, relativeId);
 
-        // 2. Dùng trực tiếp `messenger` đã lưu để hiện SnackBar (Không sợ mất Context)
         messenger.showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF2E7D32), // Xanh lá
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Đã xóa mối quan hệ với $relativeName thành công!',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+            content: Text(
+              'Đã gửi yêu cầu hủy kết nối tới $relativeName!',
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         );
@@ -181,6 +165,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
               email: item['email'],
               relation: item['relation'],
               avatarUrl: item['avatarUrl'],
+              trangThai: item['trangThai'], // <--- Bổ sung
             );
           },
         );
@@ -197,7 +182,9 @@ class NguoiThanCuaBanTab extends StatelessWidget {
     required String email,
     required String relation,
     required String avatarUrl,
+    required String trangThai, // <--- Bổ sung
   }) {
+    bool isPendingCancel = trangThai == 'user_trangthai_nguoithan_dongyhuy';
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),

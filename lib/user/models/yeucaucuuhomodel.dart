@@ -16,6 +16,10 @@ class YeuCauCuuHoModel implements BaseModel {
   final String maLoaiYeuCau;
   final String maTinhTrangYeuCau;
 
+  // 🌟 Trường mới: Lưu danh sách cứu hộ viên đã quét/phân công kèm trạng thái
+  // Ví dụ: {"nguoidung1": "chotiepnhan", "nguoidung2": "datuchoi", "nguoidung3": "tiepnhan"}
+  final Map<String, String> danhSachPhanCongVien;
+
   YeuCauCuuHoModel({
     required this.maYeuCau,
     required this.thoiGianTao,
@@ -30,6 +34,7 @@ class YeuCauCuuHoModel implements BaseModel {
     this.thoiGianHoanThanh,
     required this.maLoaiYeuCau,
     required this.maTinhTrangYeuCau,
+    this.danhSachPhanCongVien = const {}, // Mặc định là map rỗng
   });
 
   @override
@@ -44,13 +49,15 @@ class YeuCauCuuHoModel implements BaseModel {
       'kinhDo': kinhDo,
       'mucDoKhanCap': mucDoKhanCap,
       'soNguoiCanCuuHo': soNguoiCanCuuHo,
-      'soNguoiCuuHo': soNguoiCuuHo, // 🌟 Lưu vào Firestore
+      'soNguoiCuuHo': soNguoiCuuHo,
       'maNguoiYeuCau': maNguoiYeuCau,
       'maAdminDieuPhoi': maAdminDieuPhoi,
       'thoiGianPhanCong': thoiGianPhanCong,
       'thoiGianHoanThanh': thoiGianHoanThanh,
       'maLoaiYeuCau': maLoaiYeuCau,
       'maTinhTrangYeuCau': maTinhTrangYeuCau,
+      'danhSachPhanCongVien':
+          danhSachPhanCongVien, // 🌟 Lưu Map này lên Firestore
     };
   }
 
@@ -62,6 +69,12 @@ class YeuCauCuuHoModel implements BaseModel {
       return null;
     }
 
+    // Xử lý parse an toàn cho Map<String, String> từ Firestore
+    Map<String, String> parseDanhSach(dynamic value) {
+      if (value == null || value is! Map) return {};
+      return value.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
     return YeuCauCuuHoModel(
       maYeuCau: map['maYeuCau'] ?? id ?? '',
       thoiGianTao: parseDateTime(map['thoiGianTao']) ?? DateTime.now(),
@@ -69,15 +82,16 @@ class YeuCauCuuHoModel implements BaseModel {
       kinhDo: (map['kinhDo'] as num?)?.toDouble() ?? 0.0,
       mucDoKhanCap: (map['mucDoKhanCap'] as num?)?.toInt() ?? 1,
       soNguoiCanCuuHo: (map['soNguoiCanCuuHo'] as num?)?.toInt(),
-      soNguoiCuuHo:
-          (map['soNguoiCuuHo'] as num?)?.toInt() ??
-          0, // 🌟 Đọc từ Firestore (mặc định 0)
+      soNguoiCuuHo: (map['soNguoiCuuHo'] as num?)?.toInt() ?? 0,
       maNguoiYeuCau: map['maNguoiYeuCau'] ?? '',
       maAdminDieuPhoi: map['maAdminDieuPhoi'],
       thoiGianPhanCong: parseDateTime(map['thoiGianPhanCong']),
       thoiGianHoanThanh: parseDateTime(map['thoiGianHoanThanh']),
       maLoaiYeuCau: map['maLoaiYeuCau'] ?? '',
       maTinhTrangYeuCau: map['maTinhTrangYeuCau'] ?? '',
+      danhSachPhanCongVien: parseDanhSach(
+        map['danhSachPhanCongVien'],
+      ), // 🌟 Đọc từ Firestore
     );
   }
 }

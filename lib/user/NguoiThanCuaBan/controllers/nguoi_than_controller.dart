@@ -16,84 +16,39 @@ class SearchUserResult {
 class BottomSheetGuiYeuCauController extends ChangeNotifier {
   String myRelation = 'Con';
   String targetRelation = 'Cha';
+  String selectedPairLabel = 'Cha / Con';
 
-  // Danh sách đầy đủ các mối quan hệ phía "Bạn là"
-  final List<String> myRelationOptions = [
-    'Con',
-    'Cha',
-    'Mẹ',
-    'Anh',
-    'Chị',
-    'Em',
-    'Chồng',
-    'Vợ',
-    'Cháu',
-    'Ông',
-    'Bà',
-    'Bạn bè',
-    'Khác',
+  // Danh sách các cặp mối quan hệ hiển thị ở Dropdown phía trên
+  final List<String> pairOptions = [
+    'Cha / Con',
+    'Mẹ / Con',
+    'Anh / Em',
+    'Chị / Em',
+    'Chồng / Vợ',
+    'Ông / Cháu',
+    'Bà / Cháu',
+    'Bạn bè / Bạn bè',
+    'Khác / Khác',
   ];
 
-  // Logic lọc danh sách đối ứng vế phải
-  List<String> getTargetOptions() {
-    switch (myRelation) {
-      case 'Con':
-        return ['Cha', 'Mẹ'];
-      case 'Cha':
-      case 'Mẹ':
-        return ['Con'];
-      case 'Anh':
-      case 'Chị':
-        return ['Em'];
-      case 'Em':
-        return ['Anh', 'Chị'];
-      case 'Chồng':
-        return ['Vợ'];
-      case 'Vợ':
-        return ['Chồng'];
-      case 'Cháu':
-        return ['Ông', 'Bà'];
-      case 'Ông':
-      case 'Bà':
-        return ['Cháu'];
-      case 'Bạn bè':
-        return ['Bạn bè'];
-      default:
-        return ['Khác'];
-    }
-  }
+  // Cắt chuỗi theo ký tự "/" để gán trực tiếp vai trò
+  void updatePair(String pairLabel) {
+    selectedPairLabel = pairLabel;
+    List<String> parts = pairLabel.split('/');
 
-  // Xử lý chọn quan hệ phía mình
-  void updateMyRelation(String newMyRel) {
-    myRelation = newMyRel;
-    List<String> targetOpts = getTargetOptions();
-    if (!targetOpts.contains(targetRelation)) {
-      targetRelation = targetOpts.first;
+    if (parts.length == 2) {
+      targetRelation = parts[0].trim(); // Phía đối phương
+      myRelation = parts[1].trim(); // Phía bạn
     }
+
     notifyListeners();
   }
 
-  // Xử lý chọn quan hệ phía đối phương
-  void updateTargetRelation(String newTargetRel) {
-    targetRelation = newTargetRel;
-    notifyListeners();
-  }
-
-  // Xử lý hoán đổi 2 chiều (Swap)
+  // Hoán đổi 2 chiều (Swap)
   void swapRelations() {
-    String tempMy = targetRelation;
-    String tempTarget = myRelation;
-
-    if (!myRelationOptions.contains(tempMy)) {
-      tempMy = 'Khác';
-    }
-
-    myRelation = tempMy;
-    List<String> targetOpts = getTargetOptions();
-    if (!targetOpts.contains(tempTarget)) {
-      tempTarget = targetOpts.first;
-    }
-    targetRelation = tempTarget;
+    String temp = myRelation;
+    myRelation = targetRelation;
+    targetRelation = temp;
 
     notifyListeners();
   }
@@ -172,12 +127,19 @@ class NguoiThanController {
           ? (targetDoc.data()?['trangThai'] ?? '')
           : '';
 
-      if (myStatus == 'trangthai2' && targetStatus == 'trangthai2') {
-        status = 'connected'; // Đã là người thân
-      } else if (myStatus == 'trangthai2' && targetStatus == 'trangthai1') {
-        status = 'pending'; // Đã gửi yêu cầu
-      } else if (myStatus == 'trangthai1') {
-        status = 'received'; // Đã nhận yêu cầu từ đối phương
+      // Đã là người thân (Cả 2 đều đồng ý hoặc đang trong quá trình yêu cầu hủy)
+      if ((myStatus == 'user_trangthai_nguoithan_dongy' && targetStatus == 'user_trangthai_nguoithan_dongy') ||
+          (myStatus == 'user_trangthai_nguoithan_dongyhuy' && targetStatus == 'user_trangthai_nguoithan_huynguoithan') ||
+          (myStatus == 'user_trangthai_nguoithan_huynguoithan' && targetStatus == 'user_trangthai_nguoithan_dongyhuy')) {
+        status = 'connected'; 
+      } 
+      // Đã gửi yêu cầu kết nối
+      else if (myStatus == 'user_trangthai_nguoithan_dongy' && targetStatus == 'user_trangthai_nguoithan_choketnoi') {
+        status = 'pending'; 
+      } 
+      // Đã nhận yêu cầu kết nối
+      else if (myStatus == 'user_trangthai_nguoithan_choketnoi' && targetStatus == 'user_trangthai_nguoithan_dongy') {
+        status = 'received'; 
       }
     }
 
@@ -201,7 +163,7 @@ class NguoiThanController {
 
     batch.set(senderRef, {
       'moiQuanHe': myRelation,
-      'trangThai': 'trangthai2',
+      'trangThai': 'user_trangthai_nguoithan_dongy',
       'ngayTao': FieldValue.serverTimestamp(),
     });
 
@@ -213,52 +175,49 @@ class NguoiThanController {
 
     batch.set(receiverRef, {
       'moiQuanHe': targetRelation,
-      'trangThai': 'trangthai1',
+      'trangThai': 'user_trangthai_nguoithan_choketnoi',
       'ngayTao': FieldValue.serverTimestamp(),
     });
 
     await batch.commit();
   }
 
-  // 3. STREAM LẤY DANH SÁCH NGƯỜI THÂN ĐÃ KẾT NỐI
-  Stream<List<Map<String, dynamic>>> getRelativesStream(String currentUserID) {
-    if (currentUserID.trim().isEmpty) return Stream.value([]);
+ // 3. STREAM LẤY DANH SÁCH NGƯỜI THÂN ĐÃ KẾT NỐI
+  Stream<List>> getRelativesStream(String currentUserID) {
+    if (currentUserID.trim().isEmpty) {
+      return Stream<List>>.value([]);
+    }
 
     return _firestore
         .collection('NguoiThan')
         .doc(currentUserID)
         .collection('DanhSachNguoiThan')
-        .where('trangThai', isEqualTo: 'trangthai2')
+        .where('trangThai', whereIn: [
+          'user_trangthai_nguoithan_dongy',
+          'user_trangthai_nguoithan_dongyhuy',
+          'user_trangthai_nguoithan_huynguoithan'
+        ])
         .snapshots()
         .asyncMap((snapshot) async {
-          if (snapshot.docs.isEmpty) return [];
+          if (snapshot.docs.isEmpty) {
+            return >[];
+          }
 
-          final fetchFutures = snapshot.docs.map((doc) async {
+          List<Future?>> fetchFutures = snapshot.docs.map((doc) async {
             try {
-              final data = doc.data();
-              final String maNguoiThan = doc.id;
-              final String moiQuanHe = data['moiQuanHe'] ?? 'Chưa xác định';
+              Map<String, dynamic> data = doc.data();
+              String maNguoiThan = doc.id;
+              String moiQuanHe = data['moiQuanHe'] ?? 'Chưa xác định';
+              String trangThai = data['trangThai'] ?? '';
 
-              final otherDoc = await _firestore
-                  .collection('NguoiThan')
-                  .doc(maNguoiThan)
-                  .collection('DanhSachNguoiThan')
-                  .doc(currentUserID)
-                  .get();
-
-              if (!otherDoc.exists ||
-                  otherDoc.data()?['trangThai'] != 'trangthai2') {
-                return null;
-              }
-
-              final userDoc = await _firestore
+              var userDoc = await _firestore
                   .collection('NguoiDung')
                   .doc(maNguoiThan)
                   .get();
 
               if (userDoc.exists && userDoc.data() != null) {
-                final userData = NguoiDungModel.fromMap(userDoc.data()!);
-                return {
+                NguoiDungModel userData = NguoiDungModel.fromMap(userDoc.data()!);
+                return <String, dynamic>{
                   'relation': moiQuanHe,
                   'id': userData.maNguoiDung,
                   'name': userData.hoTen,
@@ -266,6 +225,7 @@ class NguoiThanController {
                   'phone': userData.soDienThoai,
                   'email': userData.email,
                   'avatarUrl': 'https://i.pravatar.cc/150',
+                  'trangThai': trangThai,
                 };
               }
             } catch (e) {
@@ -274,16 +234,24 @@ class NguoiThanController {
             return null;
           }).toList();
 
-          final results = await Future.wait(fetchFutures);
-          return results.whereType<Map<String, dynamic>>().toList();
+          List?> results = await Future.wait(fetchFutures);
+          
+          List> validResults = >[];
+          for (var item in results) {
+            if (item != null) {
+              validResults.add(item);
+            }
+          }
+
+          return validResults;
         });
   }
-
-  // 4. STREAM LẤY DANH SÁCH YÊU CẦU PENDING
   Stream<List<Map<String, dynamic>>> getPendingRequestsStream(
     String currentUserId,
   ) {
-    if (currentUserId.trim().isEmpty) return Stream.value([]);
+    if (currentUserId.trim().isEmpty) {
+      return Stream.value([]);
+    }
 
     return _firestore
         .collection('NguoiThan')
@@ -291,28 +259,25 @@ class NguoiThanController {
         .collection('DanhSachNguoiThan')
         .snapshots()
         .asyncMap((mySnapshot) async {
-          List<Map<String, dynamic>> requestsList = [];
-
-          try {
-            for (var doc in mySnapshot.docs) {
+          final futures = mySnapshot.docs.map((doc) async {
+            final otherUserId;
+            try {
               final data = doc.data();
-              final String otherUserId = doc.id;
+              final otherUserId = doc.id;
+              final trangThai = data['trangThai'] ?? '';
 
-              if (data['trangThai'] == 'trangthai1') {
-                final userDoc = await _firestore
-                    .collection('NguoiDung')
-                    .doc(otherUserId)
-                    .get();
+              String? type;
+              String? subType;
+              String? idField;
 
-                if (userDoc.exists && userDoc.data() != null) {
-                  requestsList.add({
-                    'type': 'received',
-                    'user': NguoiDungModel.fromMap(userDoc.data()!),
-                    'moiQuanHe': data['moiQuanHe'] ?? '',
-                    'senderId': otherUserId,
-                  });
-                }
-              } else if (data['trangThai'] == 'trangthai2') {
+              // 1. Nhận yêu cầu kết nối
+              if (trangThai == 'user_trangthai_nguoithan_choketnoi') {
+                type = 'received';
+                subType = 'connect';
+                idField = 'senderId';
+              }
+              // 2. Đã gửi yêu cầu kết nối
+              else if (trangThai == 'user_trangthai_nguoithan_dongy') {
                 final otherDoc = await _firestore
                     .collection('NguoiThan')
                     .doc(otherUserId)
@@ -320,62 +285,230 @@ class NguoiThanController {
                     .doc(currentUserId)
                     .get();
 
-                if (otherDoc.exists &&
-                    otherDoc.data()?['trangThai'] == 'trangthai1') {
-                  final userDoc = await _firestore
-                      .collection('NguoiDung')
-                      .doc(otherUserId)
-                      .get();
-
-                  if (userDoc.exists && userDoc.data() != null) {
-                    requestsList.add({
-                      'type': 'sent',
-                      'user': NguoiDungModel.fromMap(userDoc.data()!),
-                      'moiQuanHe': data['moiQuanHe'] ?? '',
-                      'targetId': otherUserId,
-                    });
-                  }
+                if (!otherDoc.exists ||
+                    otherDoc.data()?['trangThai'] !=
+                        'user_trangthai_nguoithan_choketnoi') {
+                  return null;
                 }
-              }
-            }
-          } catch (e) {
-            print('Lỗi query pending requests: $e');
-          }
 
-          return requestsList;
+                type = 'sent';
+                subType = 'connect';
+                idField = 'targetId';
+              }
+              // 3. Mình gửi yêu cầu hủy
+              else if (trangThai == 'user_trangthai_nguoithan_dongyhuy') {
+                final otherDoc = await _firestore
+                    .collection('NguoiThan')
+                    .doc(otherUserId)
+                    .collection('DanhSachNguoiThan')
+                    .doc(currentUserId)
+                    .get();
+
+                if (!otherDoc.exists ||
+                    otherDoc.data()?['trangThai'] !=
+                        'user_trangthai_nguoithan_huynguoithan') {
+                  return null;
+                }
+
+                type = 'sent';
+                subType = 'cancel';
+                idField = 'targetId';
+              }
+              // 4. Nhận yêu cầu hủy
+              else if (trangThai == 'user_trangthai_nguoithan_huynguoithan') {
+                type = 'received';
+                subType = 'cancel';
+                idField = 'senderId';
+              }
+              // Không thuộc danh sách yêu cầu
+              else {
+                return null;
+              }
+
+              // Lấy thông tin người dùng
+              final userDoc = await _firestore
+                  .collection('NguoiDung')
+                  .doc(otherUserId)
+                  .get();
+
+              if (!userDoc.exists || userDoc.data() == null) {
+                return null;
+              }
+
+              final result = <String, dynamic>{
+                'type': type,
+                'subType': subType,
+                'user': NguoiDungModel.fromMap(userDoc.data()!),
+                'moiQuanHe': data['moiQuanHe'] ?? '',
+              };
+
+              result[idField] = otherUserId;
+
+              return result;
+            } catch (e) {
+              debugPrint('Lỗi lấy yêu cầu từ $currentUserId: $e');
+              return null;
+            }
+          }).toList();
+
+          final results = await Future.wait(futures);
+
+          return results.whereType<Map<String, dynamic>>().toList();
         });
   }
 
-  // 5. CHẤP NHẬN YÊU CẦU
-  Future<void> acceptRequest(String currentUserId, String senderId) async {
+  // ===========================================================================
+  // CÁC HÀM XỬ LÝ TRẠNG THÁI (ĐỒNG BỘ MÃ CHUẨN)
+  // ===========================================================================
+
+  // 5. CHẤP NHẬN YÊU CẦU KẾT NỐI
+  Future<void> acceptConnectRequest(
+    String currentUserId,
+    String senderId,
+  ) async {
+    final batch = _firestore.batch();
+    final ref1 = _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(senderId);
+    final ref2 = _firestore
+        .collection('NguoiThan')
+        .doc(senderId)
+        .collection('DanhSachNguoiThan')
+        .doc(currentUserId);
+
+    batch.update(ref1, {'trangThai': 'user_trangthai_nguoithan_dongy'});
+    batch.update(ref2, {'trangThai': 'user_trangthai_nguoithan_dongy'});
+    await batch.commit();
+  }
+
+  // 6. TỪ CHỐI YÊU CẦU KẾT NỐI
+  Future<void> rejectConnectRequest(
+    String currentUserId,
+    String senderId,
+  ) async {
+    final batch = _firestore.batch();
+    final ref1 = _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(senderId);
+    final ref2 = _firestore
+        .collection('NguoiThan')
+        .doc(senderId)
+        .collection('DanhSachNguoiThan')
+        .doc(currentUserId);
+
+    // Cập nhật trạng thái từ chối trước để lưu vết
+    batch.update(ref1, {'trangThai': 'user_trangthai_nguoithan_tuchoi'});
+    batch.update(ref2, {'trangThai': 'user_trangthai_nguoithan_tuchoi'});
+
+    // Sau đó xóa để dọn dẹp danh sách chờ
+    batch.delete(ref1);
+    batch.delete(ref2);
+    await batch.commit();
+  }
+
+  // 7. THU HỒI YÊU CẦU KẾT NỐI ĐÃ GỬI
+  Future<void> cancelConnectRequest(
+    String currentUserId,
+    String targetId,
+  ) async {
+    final batch = _firestore.batch();
+    final ref1 = _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(targetId);
+    final ref2 = _firestore
+        .collection('NguoiThan')
+        .doc(targetId)
+        .collection('DanhSachNguoiThan')
+        .doc(currentUserId);
+    batch.delete(ref1);
+    batch.delete(ref2);
+    await batch.commit();
+  }
+
+  // 8. GỬI YÊU CẦU HỦY NGƯỜI THÂN (Bấm xóa từ tab Người thân)
+  Future<void> requestCancelRelation(
+    String currentUserId,
+    String targetId,
+  ) async {
     await _firestore
         .collection('NguoiThan')
         .doc(currentUserId)
         .collection('DanhSachNguoiThan')
-        .doc(senderId)
-        .update({'trangThai': 'trangthai2'});
+        .doc(targetId)
+        .update({'trangThai': 'user_trangthai_nguoithan_huynguoithan'});
   }
 
-  // 6. TỪ CHỐI / THU HỒI -> XÓA 2 BÊN
-  Future<void> rejectOrCancelRequest(String user1, String user2) async {
+  // 9. ĐỒNG Ý HỦY KẾT NỐI NGƯỜI THÂN
+  Future<void> acceptCancelRelation(
+    String currentUserId,
+    String senderId,
+  ) async {
     final batch = _firestore.batch();
-
     final ref1 = _firestore
         .collection('NguoiThan')
-        .doc(user1)
+        .doc(currentUserId)
         .collection('DanhSachNguoiThan')
-        .doc(user2);
-
+        .doc(senderId);
     final ref2 = _firestore
         .collection('NguoiThan')
-        .doc(user2)
+        .doc(senderId)
         .collection('DanhSachNguoiThan')
-        .doc(user1);
+        .doc(currentUserId);
 
+    // Cập nhật trạng thái đồng ý hủy
+    batch.update(ref1, {'trangThai': 'user_trangthai_nguoithan_dongyhuy'});
+    batch.update(ref2, {'trangThai': 'user_trangthai_nguoithan_dongyhuy'});
+
+    // Xóa sạch để biến mất khỏi danh sách người thân
     batch.delete(ref1);
     batch.delete(ref2);
-
     await batch.commit();
+  }
+
+  // 10. TỪ CHỐI YÊU CẦU HỦY (Bỏ qua/Giữ lại làm người thân)
+  Future<void> rejectCancelRelation(
+    String currentUserId,
+    String senderId,
+  ) async {
+    final batch = _firestore.batch();
+    final ref1 = _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(senderId);
+    final ref2 = _firestore
+        .collection('NguoiThan')
+        .doc(senderId)
+        .collection('DanhSachNguoiThan')
+        .doc(currentUserId);
+
+    // Lưu vết từ chối hủy
+    batch.update(ref1, {'trangThai': 'user_trangthai_nguoithan_tuchoihuy'});
+    batch.update(ref2, {'trangThai': 'user_trangthai_nguoithan_tuchoihuy'});
+
+    // Khôi phục lại trạng thái đồng ý để tiếp tục hiển thị ở Tab Người thân
+    batch.update(ref1, {'trangThai': 'user_trangthai_nguoithan_dongy'});
+    batch.update(ref2, {'trangThai': 'user_trangthai_nguoithan_dongy'});
+    await batch.commit();
+  }
+
+  // 11. HỦY BỎ YÊU CẦU HỦY (Mình đổi ý, không muốn xóa người thân nữa)
+  Future<void> cancelCancelRequest(
+    String currentUserId,
+    String targetId,
+  ) async {
+    await _firestore
+        .collection('NguoiThan')
+        .doc(currentUserId)
+        .collection('DanhSachNguoiThan')
+        .doc(targetId)
+        .update({'trangThai': 'user_trangthai_nguoithan_dongy'});
   }
 
   int tinhTuoi(DateTime ngaySinh) {

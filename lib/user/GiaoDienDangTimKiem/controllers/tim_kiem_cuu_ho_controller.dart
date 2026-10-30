@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:widget_to_marker/widget_to_marker.dart';
-
+import 'dart:convert';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/gemini/gemini_service.dart';
 import 'package:cuhokhancap/user/models/chitietmotahientruongmodel.dart';
@@ -161,7 +161,7 @@ class TimKiemCuuHoController {
       }
 
       // 🛑 ĐIỀU KIỆN 2: Đủ 5 CHV chấp nhận -> Dừng hẳn & Hủy tất cả các bản ghi chờ còn lại
-      if (acceptedRescuerIds.length >= 5) {
+      if (acceptedRescuerIds.length >= 3) {
         _stopAllTimers();
         await _firebaseService.cancelRemainingAssignments(maYeuCau);
         debugPrint('🎯 Đã đủ 5 CHV chấp nhận! Hủy các đơn chờ còn lại.');
@@ -194,7 +194,7 @@ class TimKiemCuuHoController {
     });
   }
 
-  /// 🌟 QUÉT AI VÀ SẮP XẾP ƯU TIÊN PHÂN CÔNG
+  /// 🌟 QUÉT AI VÀ SẮP XẾP ƯU TIÊN PHÂN CÔNG (Đã tích hợp kiểm tra danhSachPhanCongVien có sẵn)
   Future<void> _executeAIScanAndAssign(
     String maYeuCau,
     Function() onUpdate,
@@ -255,21 +255,38 @@ class TimKiemCuuHoController {
     );
 
     for (var item in scoredRescuers) {
-      if (acceptedRescuerIds.length >= 5) break;
+      // 🌟 Giới hạn dừng lại khi đủ 3 người nhận
+      if (acceptedRescuerIds.length >= 3) break;
 
       NguoiDungModel user = item['user'];
+      String maNguoiCuuHo = user.maNguoiDung!;
+
+      // 🌟 Lấy trạng thái từ danhSachPhanCongVien đã có sẵn trong model yêu cầu cứu hộ
+      String? trangThaiCu = yeuCauCuuHo?.danhSachPhanCongVien[maNguoiCuuHo];
+
+      // Nếu người này ĐÃ TỪ CHỐI trước đó -> Chặn hoàn toàn, không quét/phân công lại
+      if (trangThaiCu == 'cuuho_trangthai_phancong_tuchoi' ||
+          trangThaiCu == 'tuchoi') {
+        continue;
+      }
+
+      // Nếu đã có trong danh sách với bất kỳ trạng thái nào khác (đang chờ, đã nhận...) -> Bỏ qua không cấp phát trùng
+      if (trangThaiCu != null && trangThaiCu.isNotEmpty) {
+        continue;
+      }
+
       double distanceKm = (item['distanceMeters'] as double) / 1000;
 
-      assignedRescuerIds.add(user.maNguoiDung!);
+      assignedRescuerIds.add(maNguoiCuuHo);
       rescuerList.add({
         'user': user,
         'distanceKm': distanceKm.toStringAsFixed(1),
       });
 
-      _addRescuerMarker(user, distanceKm.toStringAsFixed(1));
+      _addRescuerMarker(user, (item['distanceMeters'] as double));
 
-      // 🌟 Tạo phân công (Lấy maYeuCau làm Key & Set nhanCaCuuHo = true)
-      await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
+      // 🌟 Tạo phân công và cập nhật trực tiếp vào danhSachPhanCongVien
+      await _createAssignmentRecord(maYeuCau, maNguoiCuuHo);
     }
 
     onUpdate();
@@ -320,10 +337,8 @@ class TimKiemCuuHoController {
     String maNguoiCuuHo,
   ) async {
     try {
-      int previousCount = await _firebaseService.countAssignmentsByRescuer(
-        maNguoiCuuHo,
-      );
-      String maPhanCong = 'phancong_${maNguoiCuuHo}_${previousCount + 1}';
+      String maPhanCong =
+          'phancong_${maNguoiCuuHo}_${DateTime.now().millisecondsSinceEpoch}';
 
       final phanCong = ChiTietPhanCongCuuHoModel(
         maPhanCong: maPhanCong,
@@ -335,14 +350,22 @@ class TimKiemCuuHoController {
         maTrangThaiTiepNhan: 'cuuho_trangthai_phancong_chotiepnhan',
       );
 
-      // Ghi Root Collection
-      await _firebaseService.createPhanCongCuuHo(phanCong);
-
-      // 🌟 Ghi Subcollection với Document ID là maYeuCau & Đổi nhanCaCuuHo = true
+      // 1. Ghi Subcollection theo ngày
       await _firebaseService.createPhanCongTheoNgay(
         maNguoiCuuHo: maNguoiCuuHo,
         phanCong: phanCong,
       );
+
+      // 2. Cập nhật trực tiếp qua FirebaseService
+      await _firebaseService.updateDanhSachPhanCongVien(
+        maYeuCau: maYeuCau,
+        maNguoiCuuHo: maNguoiCuuHo,
+        trangThai: 'cuuho_trangthai_phancong_chotiepnhan',
+      );
+
+      // Cập nhật local model
+      yeuCauCuuHo?.danhSachPhanCongVien[maNguoiCuuHo] =
+          'cuuho_trangthai_phancong_chotiepnhan';
     } catch (e) {
       debugPrint('Lỗi tạo bản ghi phân công: $e');
     }
@@ -368,65 +391,137 @@ class TimKiemCuuHoController {
     }
   }
 
-  Future<void> _addRescuerMarker(NguoiDungModel user, String distanceKm) async {
-    Widget rescuerMarkerWidget = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF006A55), width: 2),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircleAvatar(
-                radius: 12,
-                backgroundColor: Color(0xFF006A55),
-                child: Icon(
-                  Icons.medical_services,
-                  size: 14,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.hoTen,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  Text(
-                    '$distanceKm km',
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+  // 🌟 Hàm cắt lấy 2 chữ cái đầu/cuối của tên (Ví dụ: "Phạm Nhật Động" -> "PĐ")
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return '?';
+    List<String> words = name.trim().split(RegExp(r'\s+'));
+    if (words.length == 1) {
+      return words[0].substring(0, 1).toUpperCase();
+    }
+    return '${words.first[0]}${words.last[0]}'.toUpperCase();
+  }
+
+  // 🌟 Tạo Marker Cứu hộ viên với Avatar hoặc Chữ viết tắt
+  Future<void> _addRescuerMarker(
+    NguoiDungModel user,
+    double distanceMeters,
+  ) async {
+    // 1. Lấy dữ liệu Avatar từ Firebase
+    String? avatarData = await _firebaseService.getUserAvatarUrl(
+      user.maNguoiDung!,
+    );
+
+    ImageProvider? avatarProvider;
+    if (avatarData != null && avatarData.isNotEmpty) {
+      if (avatarData.startsWith('http')) {
+        avatarProvider = NetworkImage(avatarData);
+      } else {
+        // Giải mã chuỗi Base64
+        String base64Str = avatarData.contains(',')
+            ? avatarData.split(',').last
+            : avatarData;
+        try {
+          avatarProvider = MemoryImage(base64Decode(base64Str));
+        } catch (e) {
+          debugPrint('Lỗi decode Base64 avatar: $e');
+        }
+      }
+    }
+
+    // 2. Định dạng khoảng cách (Dưới 1km hiện mét "m", trên 1km hiện "km")
+    String distanceText = distanceMeters < 1000
+        ? '${distanceMeters.toStringAsFixed(0)} m'
+        : '${(distanceMeters / 1000).toStringAsFixed(1)} km';
+
+    // 3. Lấy chữ cái viết tắt tên nạn nhân/bác sĩ
+    String initials = _getInitials(user.hoTen);
+
+    // 4. Dựng Widget Custom Marker
+    Widget rescuerMarkerWidget = Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- KHUNG AVATAR ---
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF006A55), width: 2.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-        Transform.translate(
-          offset: const Offset(0, -2),
-          child: ClipPath(
-            clipper: _ArrowClipper(),
-            child: Container(
-              width: 14,
-              height: 10,
-              color: const Color(0xFF006A55),
+              child: CircleAvatar(
+                radius: 20,
+                // Có ảnh -> Nền trắng chứa ảnh; Không ảnh -> Nền xanh chứa chữ viết tắt
+                backgroundColor: avatarProvider != null
+                    ? Colors.white
+                    : const Color(0xFF006A55),
+                backgroundImage: avatarProvider,
+                child: avatarProvider == null
+                    ? Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      )
+                    : null,
+              ),
             ),
-          ),
+
+            const SizedBox(height: 4),
+
+            // --- THẺ KHẢNG CÁCH SỐ MẾT / KM BÊN DƯỚI ---
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF006A55), width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 3,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                distanceText,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Color(0xFF006A55),
+                ),
+              ),
+            ),
+
+            // --- MŨI TÊN CHỈ XUỐNG VỊ TRÍ MAP ---
+            Transform.translate(
+              offset: const Offset(0, -1),
+              child: ClipPath(
+                clipper: _ArrowClipper(),
+                child: Container(
+                  width: 14,
+                  height: 8,
+                  color: const Color(0xFF006A55),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
 
+    // Chuyển Widget thành Bitmap để hiển thị trên Google Maps
     BitmapDescriptor customIcon = await rescuerMarkerWidget
         .toBitmapDescriptor();
 
@@ -444,28 +539,103 @@ class TimKiemCuuHoController {
     circles.clear();
     markers.removeWhere((m) => m.markerId.value == 'current_device_marker');
 
-    Widget victimMarkerWidget = Container(
-      padding: const EdgeInsets.all(7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF006A55),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+    // 🌟 1. TẠO MARKER NẠN NHÂN (MÀU ĐỎ + SOS)
+    Widget victimMarkerWidget = Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- 1. ICON NẠN NHÂN (Tròn, màu đỏ khẩn cấp) ---
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC81E1E), // Đỏ khẩn cấp
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_pin_circle_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+
+            // --- 2. MŨI TÊN ĐỎ ---
+            Transform.translate(
+              offset: const Offset(0, -1),
+              child: ClipPath(
+                clipper: _ArrowClipper(),
+                child: Container(
+                  width: 14,
+                  height: 8,
+                  color: const Color(0xFFC81E1E),
+                ),
+              ),
+            ),
+
+            // --- 3. THẺ CHỮ "SOS" NẰM DƯỚI MŨI TÊN ---
+            Transform.translate(
+              offset: const Offset(0, -2), // Kéo sát vào mũi tên
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFC81E1E),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 3,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'SOS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Color(0xFFC81E1E),
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      child: const Icon(Icons.location_on, color: Colors.white, size: 20),
     );
 
+    // Chuyển đổi Widget thành hình ảnh Bitmap
     BitmapDescriptor victimIcon = await victimMarkerWidget.toBitmapDescriptor();
 
+    // 🌟 2. THÊM MARKER NẠN NHÂN LÊN BẢN ĐỒ
     markers.add(
       Marker(
         markerId: const MarkerId('current_device_marker'),
         position: currentDeviceLocation,
         icon: victimIcon,
-        anchor: const Offset(0.5, 0.5),
+        // Dời tâm mỏ neo xuống khoảng 75% chiều cao widget để mũi tên chỉ đúng tọa độ
+        anchor: const Offset(0.5, 0.75),
       ),
     );
 
+    // 🌟 3. VẼ VÒNG TRÒN RADAR QUÉT (Giữ nguyên màu xanh thương hiệu)
     circles.add(
       Circle(
         circleId: const CircleId('scan_radius_outer'),
@@ -499,5 +669,40 @@ class TimKiemCuuHoController {
   void dispose() {
     _stopAllTimers();
     _phanCongSubscription?.cancel();
+  }
+
+  /// 🌟 HỦY TÌM KIẾM CỨU HỘ & DỌN DẸP DỮ LIỆU
+  Future<void> cancelSearch(String maYeuCau) async {
+    try {
+      isLoading = true; // Hiện loading nếu cần
+
+      // 1. Dừng mọi luồng quét và bộ đếm thời gian
+      _stopAllTimers();
+      _phanCongSubscription?.cancel();
+
+      // 2. Lấy mã nạn nhân hiện tại
+      String? maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
+
+      if (maNanNhan != null) {
+        // 3. Gọi FirebaseService để xóa thông báo khẩn cấp trên Realtime DB của người thân
+        await _firebaseService.removeEmergencyNotification(
+          maNanNhan: maNanNhan,
+        );
+      }
+
+      // 4. Đổi trạng thái các đơn phân công đang chờ thành "Đã hủy"
+      await _firebaseService.cancelRemainingAssignments(maYeuCau);
+
+      // 5. Đổi trạng thái tổng của Yêu cầu cứu hộ thành Hủy (nếu có mã trạng thái hủy)
+      // await _firebaseService.updateTinhTrangYeuCau(maYeuCau, 'user_tinhtrang_dahuy');
+
+      debugPrint(
+        '✅ Đã hủy tìm kiếm, thu hồi đơn và xóa thông báo RTDB thành công!',
+      );
+    } catch (e) {
+      debugPrint('❌ Lỗi khi hủy tìm kiếm: $e');
+    } finally {
+      isLoading = false;
+    }
   }
 }

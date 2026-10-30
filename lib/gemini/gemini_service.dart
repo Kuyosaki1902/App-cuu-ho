@@ -18,7 +18,7 @@ class GeminiService {
 
   GeminiService._internal() {
     _model = GenerativeModel(
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.7-flash',
       apiKey: _apiKey,
       generationConfig: GenerationConfig(
         responseMimeType: 'application/json', // Ép Gemini trả JSON chuẩn

@@ -7,6 +7,7 @@ import 'package:cuhokhancap/user/models/gioitinhmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/models/hosocuuhokhongcchnmodel.dart';
 import 'package:cuhokhancap/user/models/loaiyeucaumodel.dart';
+import 'package:cuhokhancap/user/models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/models/moiquanhe.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/models/nguoithanmodel.dart';
@@ -89,23 +90,6 @@ final List<VaiTroModel> VaiTroList = [
 
 final List<HoSoCuuHoCoCCHNModel> HoSoCuuHoCoCCHNList = [
   HoSoCuuHoCoCCHNModel(
-    maNguoiDung: 'nguoidung6',
-    soCanCuoc: '079188009999',
-    ngayCapCanCuoc: DateTime(2020, 5, 10),
-    ngayHetHanCanCuoc: DateTime(2038, 9, 20),
-    coQuanCapCanCuoc: 'Cục Cảnh sát QLHC về TTXH',
-    maCCHN: 'CCHN-YTE-2022-555',
-    ngayCapCCHN: DateTime(2022, 1, 15),
-    coQuanCapCCHN: 'Sở Y tế Bà Rịa - Vũng Tàu',
-    maTheChuyenNganh: 'TCN-CH-005',
-    tenChuyenNganh: 'Chấn thương Chỉnh hình',
-    chucDanh: 'Bác sĩ Cấp cứu Ngoại khoa',
-    donViCongTac: 'Bệnh viện Đa khoa Vũng Tàu',
-    diemDanhGia: 5.0,
-    tongLuotDanhGia: 42,
-    maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
-  ),
-  HoSoCuuHoCoCCHNModel(
     maNguoiDung: 'nguoidung7',
     soCanCuoc: '079185007777',
     ngayCapCanCuoc: DateTime(2019, 8, 20),
@@ -177,30 +161,17 @@ final List<YeuCauCuuHoModel> listYeuCauCuuHo = [
   YeuCauCuuHoModel(
     maYeuCau: 'yeucau1',
     thoiGianTao: DateTime.now(),
-    viDo: 10.85232,
-    kinhDo: 106.75841,
-    mucDoKhanCap: 3,
-    soNguoiCanCuuHo: 2,
-    maNguoiYeuCau: 'nguoidung1',
-    maAdminDieuPhoi: 'admin1',
-    thoiGianPhanCong: DateTime.now(),
-    thoiGianHoanThanh: null,
-    maLoaiYeuCau: 'loaiyeucau_sos', // 🛠 Đã cập nhật
-    maTinhTrangYeuCau: 'user_tinhtrang_chotiepnhan', // 🛠 Đã cập nhật
-  ),
-  YeuCauCuuHoModel(
-    maYeuCau: 'yeucau2',
-    thoiGianTao: DateTime.now(),
-    viDo: 10.3394,
-    kinhDo: 107.0835,
+    viDo: 10.8523626,
+    kinhDo: 106.7577727,
     mucDoKhanCap: 1,
-    soNguoiCanCuuHo: 1,
-    maNguoiYeuCau: 'nguoidung4',
+    soNguoiCanCuuHo: 3,
+    maNguoiYeuCau: 'nguoidung3',
     maAdminDieuPhoi: null,
     thoiGianPhanCong: null,
     thoiGianHoanThanh: null,
     maLoaiYeuCau: 'loaiyeucau_sos',
     maTinhTrangYeuCau: 'user_tinhtrang_chotiepnhan',
+    soNguoiCuuHo: 0,
   ),
 ];
 
@@ -307,6 +278,30 @@ final List<TrangThaiModel> listTrangThai = [
     maTrangThai: "cuuho_trangthai_phancong_tiepnhan",
     trangThai: "Tiếp Nhận",
   ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_choketnoi",
+    trangThai: "Chờ Kết Nối",
+  ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_tuchoi",
+    trangThai: "Từ Chối",
+  ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_dongy",
+    trangThai: "Đồng ý",
+  ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_huynguoithan",
+    trangThai: "Hủy Người Thân",
+  ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_tuchoihuy",
+    trangThai: "Từ Chối Hủy",
+  ),
+  TrangThaiModel(
+    maTrangThai: "user_trangthai_nguoithan_dongyhuy",
+    trangThai: "Đồng ý Hủy",
+  ),
 ];
 final List<ChiTietMoTaHienTruongModel> ChiTietMoTaHienTruongList = [
   ChiTietMoTaHienTruongModel(
@@ -367,4 +362,20 @@ final List<PhanLoaiAnhModel> listPhanLoaiAnh = [
     tenLoai: 'Ảnh Hiện Trường Nạn Nhân',
   ),
 ];
-final List<List> ListAll = [listTrangThai];
+final List<LuuAnhModel> listLuuAnh = [];
+
+// 2. Danh sách bản ghi Chi Tiết Mô Tả Hiện Trường
+final List<ChiTietMoTaHienTruongModel> listChiTietMoTa = [
+  ChiTietMoTaHienTruongModel(
+    maYeuCau: 'yeucau1',
+    videoUrl: null,
+    ghiAmUrl: null,
+    ghiChuText: {
+      'trieuChung': ["Mất Máu", "Chóng Mặt"],
+      'moTaChiTiet': "Người Bệnh Bị Hoa Mắt Vì Mất Máu",
+    },
+    thoiGianTao: DateTime.now(),
+  ),
+];
+
+final List<List> ListAll = [listYeuCauCuuHo];

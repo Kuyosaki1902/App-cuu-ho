@@ -5,14 +5,14 @@ class LuuAnhModel implements BaseModel {
   final String? anhURL;
   final String maNguoiDung;
   final String maPhanLoaiAnh;
-  final String? maMoTa;
+  final String? maYeuCau;
 
   LuuAnhModel({
     required this.maAnh,
     this.anhURL,
     required this.maNguoiDung,
     required this.maPhanLoaiAnh,
-    this.maMoTa,
+    this.maYeuCau,
   });
 
   @override
@@ -25,7 +25,7 @@ class LuuAnhModel implements BaseModel {
       'anhURL': anhURL,
       'maNguoiDung': maNguoiDung,
       'maPhanLoaiAnh': maPhanLoaiAnh,
-      'maMoTa': maMoTa,
+      'maYeuCau': maYeuCau,
     };
   }
 
@@ -35,7 +35,7 @@ class LuuAnhModel implements BaseModel {
       anhURL: map['anhURL'],
       maNguoiDung: map['maNguoiDung'] ?? '',
       maPhanLoaiAnh: map['maPhanLoaiAnh'] ?? '',
-      maMoTa: map['maMoTa'],
+      maYeuCau: map['maYeuCau'],
     );
   }
 }

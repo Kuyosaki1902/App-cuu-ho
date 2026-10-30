@@ -4,9 +4,12 @@ import 'package:cuhokhancap/user/data/data.dart';
 import 'package:cuhokhancap/user/models/basemodel.dart';
 import 'package:cuhokhancap/user/models/chitietkynangmodel.dart';
 import 'package:cuhokhancap/user/models/chitietphancongcuuhomodel%20.dart';
+import 'package:cuhokhancap/user/models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/models/nguoithanmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
 
 class UpData extends StatefulWidget {
   const UpData({super.key});
@@ -37,12 +40,12 @@ class _UpDataState extends State<UpData> {
         maNguoiCuuHo: maNguoiCuuHo,
         thoiGianGui: DateTime.now(),
         maLoaiPhanCong: 'phancong_hethongtudong',
-        maTrangThaiTiepNhan: 'cuuho_trangthai_chophanhoi',
+        maTrangThaiTiepNhan: 'cuuho_trangthai_phancong_chotiepnhan',
       );
 
       // Path chuẩn: NguoiDung/{maNguoiCuuHo}/DanhSachNgay/{todayStr}/DanhSachPhanCong/{maPhanCong}
       await firestore
-          .collection('NguoiDung')
+          .collection('ChiTietPhanCongCuuHo')
           .doc(maNguoiCuuHo)
           .collection('DanhSachNgay')
           .doc(todayStr)
@@ -58,6 +61,69 @@ class _UpDataState extends State<UpData> {
     }
   }
 
+  // Hàm chọn ảnh, mã hóa Base64 và đẩy lên Firebase
+  Future<void> _chonAnhVaUploadBatch() async {
+    final ImagePicker picker = ImagePicker();
+
+    try {
+      // 1. Mở thư viện và cho phép người dùng chọn nhiều ảnh
+      final List<XFile>? pickedImages = await picker.pickMultiImage();
+
+      if (pickedImages == null || pickedImages.isEmpty) {
+        // Người dùng hủy chọn ảnh
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      List<LuuAnhModel> listAnhMoi = [];
+
+      // 2. Lặp qua từng ảnh, chuyển sang byte và mã hóa Base64
+      for (int i = 0; i < pickedImages.length; i++) {
+        final XFile image = pickedImages[i];
+        final bytes = await image.readAsBytes();
+        final String base64Image = base64Encode(bytes);
+
+        // Tạo mã ảnh ngẫu nhiên hoặc theo timestamp để không bị trùng lặp
+        final String maAnhMoi =
+            'anh_${DateTime.now().millisecondsSinceEpoch}_$i';
+
+        // 3. Truyền dữ liệu vào LuuAnhModel
+        listAnhMoi.add(
+          LuuAnhModel(
+            maAnh: maAnhMoi,
+            maNguoiDung:
+                'nguoidung3', // Thay bằng biến id người dùng hiện tại của bạn
+            maPhanLoaiAnh: 'phanloaianh_hientruong',
+            maYeuCau: 'yeucau1',
+            anhURL: base64Image, // Thay bằng biến id yêu cầu thực tế
+            // Giả định bạn đã thêm trường này vào LuuAnhModel để lưu dữ liệu ảnh
+            // duLieuBase64: base64Image,
+          ),
+        );
+      }
+
+      // 4. Thêm danh sách ảnh vừa tạo vào biến listLuuAnh (biến nằm trong ListAll của bạn)
+      setState(() {
+        // listLuuAnh là danh sách bạn đã khai báo bên ngoài và có đưa vào ListAll
+        listLuuAnh.addAll(listAnhMoi);
+      });
+
+      // 5. Chạy hàm upload hàng loạt (Nó sẽ duyệt qua ListAll và up các ảnh này cùng các danh sách khác)
+      await _uploadBatchData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi khi xử lý ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _uploadBatchData() async {
     setState(() => _isLoading = true);
 
@@ -68,7 +134,6 @@ class _UpDataState extends State<UpData> {
 
       for (var item in ListAll) {
         if (item.isEmpty) continue;
-
         // Lấy tên class bỏ đuôi "Model" làm tên collection mặc định
         var collectionName = item.first.runtimeType.toString();
         if (collectionName.endsWith('Model')) {
@@ -141,12 +206,6 @@ class _UpDataState extends State<UpData> {
           }
         }
       }
-
-      // Nạp thêm phân công mẫu hôm nay
-      await seedSamplePhanCongTheoNgay(
-        maNguoiCuuHo: 'nguoidung2',
-        maYeuCau: 'yeucau2',
-      );
 
       if (addedCount > 0) {
         await batch.commit();

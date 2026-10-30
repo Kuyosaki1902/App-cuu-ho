@@ -6,7 +6,7 @@ import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controll
 
 class DanhSachYeuCauWidget extends StatelessWidget {
   final String currentUserId;
-  final int selectedFilterIndex; // 0: Tất cả, 1: Đã nhận, 2: Đã gửi
+  final int selectedFilterIndex;
   final Color primaryColor;
   final NguoiThanController controller;
 
@@ -17,10 +17,9 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     required this.primaryColor,
     required this.controller,
   });
-
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
+    return StreamBuilder<List>(
       stream: controller.getPendingRequestsStream(currentUserId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -35,7 +34,6 @@ class DanhSachYeuCauWidget extends StatelessWidget {
             .where((req) => req['type'] == 'sent')
             .toList();
 
-        // 🌟 XÁC ĐỊNH DANH SÁCH LỌC DỰA TRÊN SELECTEDFILTERINDEX
         bool showReceived =
             (selectedFilterIndex == 0 || selectedFilterIndex == 1) &&
             receivedRequests.isNotEmpty;
@@ -43,13 +41,12 @@ class DanhSachYeuCauWidget extends StatelessWidget {
             (selectedFilterIndex == 0 || selectedFilterIndex == 2) &&
             sentRequests.isNotEmpty;
 
-        // 🌟 KIỂM TRA NẾU TAB HIỆN TẠI KHÔNG CÓ YÊU CẦU NÀO ĐỂ HIỂN THỊ
         bool isFilterEmpty = false;
         String emptyMessage = 'Không có yêu cầu kết nối nào';
 
         if (selectedFilterIndex == 0 && allRequests.isEmpty) {
           isFilterEmpty = true;
-          emptyMessage = 'Không có yêu cầu kết nối nào';
+          emptyMessage = 'Không có yêu cầu nào';
         } else if (selectedFilterIndex == 1 && receivedRequests.isEmpty) {
           isFilterEmpty = true;
           emptyMessage = 'Không có yêu cầu đã nhận nào';
@@ -85,7 +82,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // 1. Khối Yêu cầu đã nhận
+            // ================= KHỐI YÊU CẦU ĐÃ NHẬN =================
             if (showReceived) ...[
               Text(
                 'Yêu cầu đã nhận (${receivedRequests.length})',
@@ -96,19 +93,24 @@ class DanhSachYeuCauWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ...receivedRequests.map(
-                (req) => _buildReceivedCard(
-                  context,
-                  user: req['user'],
-                  relation: req['moiQuanHe'],
-                  senderId: req['senderId'],
-                ),
+                (req) => req['subType'] == 'cancel'
+                    ? _buildReceivedCancelCard(
+                        context,
+                        user: req['user'],
+                        senderId: req['senderId'],
+                      )
+                    : _buildReceivedCard(
+                        context,
+                        user: req['user'],
+                        relation: req['moiQuanHe'],
+                        senderId: req['senderId'],
+                      ),
               ),
             ],
 
-            // Khoảng cách giữa 2 nhóm nếu cùng hiển thị ở Tab "Tất cả"
             if (showReceived && showSent) const SizedBox(height: 16),
 
-            // 2. Khối Yêu cầu đã gửi
+            // ================= KHỐI YÊU CẦU ĐÃ GỬI =================
             if (showSent) ...[
               Text(
                 'Yêu cầu đã gửi (${sentRequests.length})',
@@ -119,12 +121,18 @@ class DanhSachYeuCauWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ...sentRequests.map(
-                (req) => _buildSentCard(
-                  context,
-                  user: req['user'],
-                  relation: req['moiQuanHe'],
-                  targetId: req['targetId'],
-                ),
+                (req) => req['subType'] == 'cancel'
+                    ? _buildSentCancelCard(
+                        context,
+                        user: req['user'],
+                        targetId: req['targetId'],
+                      )
+                    : _buildSentCard(
+                        context,
+                        user: req['user'],
+                        relation: req['moiQuanHe'],
+                        targetId: req['targetId'],
+                      ),
               ),
             ],
           ],
@@ -133,6 +141,9 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // CÁC THẺ UI DÀNH CHO YÊU CẦU KẾT NỐI
+  // ---------------------------------------------------------------------------
   Widget _buildReceivedCard(
     BuildContext context, {
     required NguoiDungModel user,
@@ -192,13 +203,15 @@ class DanhSachYeuCauWidget extends StatelessWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () async {
-                    await controller.rejectOrCancelRequest(
-                      senderId,
+                    await controller.rejectConnectRequest(
                       currentUserId,
+                      senderId,
                     );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã từ chối yêu cầu!')),
+                        const SnackBar(
+                          content: Text('Đã từ chối yêu cầu kết nối!'),
+                        ),
                       );
                     }
                   },
@@ -215,7 +228,10 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                     backgroundColor: primaryColor,
                   ),
                   onPressed: () async {
-                    await controller.acceptRequest(currentUserId, senderId);
+                    await controller.acceptConnectRequest(
+                      currentUserId,
+                      senderId,
+                    );
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Đã chấp nhận kết nối!')),
@@ -305,7 +321,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
               ),
               TextButton(
                 onPressed: () async {
-                  await controller.rejectOrCancelRequest(
+                  await controller.cancelConnectRequest(
                     currentUserId,
                     targetId,
                   );
@@ -321,6 +337,172 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CÁC THẺ UI DÀNH CHO YÊU CẦU HỦY KẾT NỐI
+  // ---------------------------------------------------------------------------
+  Widget _buildReceivedCancelCard(
+    BuildContext context, {
+    required NguoiDungModel user,
+    required String senderId,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const CircleAvatar(
+                radius: 24,
+                backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.hoTen,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Text(
+                      'Đã gửi yêu cầu hủy kết nối',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () async {
+                    await controller.rejectCancelRelation(
+                      currentUserId,
+                      senderId,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Đã từ chối hủy kết nối!'),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text(
+                    'Giữ lại',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () async {
+                    await controller.acceptCancelRelation(
+                      currentUserId,
+                      senderId,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Đã đồng ý hủy kết nối!')),
+                      );
+                    }
+                  },
+                  child: const Text(
+                    'Đồng ý hủy',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSentCancelCard(
+    BuildContext context, {
+    required NguoiDungModel user,
+    required String targetId,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 24,
+            backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.hoTen,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Chờ đối phương xác nhận hủy',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await controller.cancelCancelRequest(currentUserId, targetId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Đã thu hồi yêu cầu hủy kết nối!'),
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Hủy bỏ',
+              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
