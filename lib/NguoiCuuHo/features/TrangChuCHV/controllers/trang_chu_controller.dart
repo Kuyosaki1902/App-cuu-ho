@@ -1,17 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:typed_data';
 
 class TrangChuController extends ChangeNotifier {
   GoogleMapController? mapController;
   StreamSubscription<Position>? _positionStreamSubscription;
+  StreamSubscription<QuerySnapshot>? _usersNearbySubscription;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // --- NƠI LƯU TRỮ TRẠNG THÁI (STATE) ---
@@ -23,12 +24,17 @@ class TrangChuController extends ChangeNotifier {
   String? image;
   String maVaiTro = '';
   Timer? _timer;
-  final String _userID = 'nguoidung2';
+
+  // Lấy UID động từ FirebaseAuth, nếu chưa đăng nhập mới dùng ID mặc định
+  String get _userID => FirebaseAuth.instance.currentUser?.uid ?? 'nguoidung2';
   final int _soLuongCaTiepNhan = 0;
 
-  // 🟢 QUẢN LÝ THỜI GIAN THEO NGÀY
+  // Quản lý thời gian theo ngày
   int _onlineSeconds = 0;
   String _todayDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+  // Danh sách người dùng xung quanh
+  List<Map<String, dynamic>> _nearbyUsers = [];
 
   // Getters cho UI đọc dữ liệu
   LatLng? get currentPosition => _currentPosition;
@@ -38,6 +44,7 @@ class TrangChuController extends ChangeNotifier {
   int get soLuongCaTiepNhan => _soLuongCaTiepNhan;
   String get userID => _userID;
   int get onlineSeconds => _onlineSeconds;
+  List<Map<String, dynamic>> get nearbyUsers => _nearbyUsers;
 
   TrangChuController() {
     initLocationService();
@@ -48,9 +55,9 @@ class TrangChuController extends ChangeNotifier {
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _usersNearbySubscription?.cancel();
     mapController?.dispose();
     _timer?.cancel();
-    _usersNearbySubscription?.cancel();
     super.dispose();
   }
 
@@ -90,19 +97,19 @@ class TrangChuController extends ChangeNotifier {
     } else {
       _stopTimer();
       _usersNearbySubscription?.cancel(); // Dừng lắng nghe từ Firestore
-      _nearbyUsers = []; // 🟢 XÓA DANH SÁCH NGƯỜI DÙNG XUNG QUANH KHI OFFLINE
+      _nearbyUsers = []; // Xóa danh sách người dùng xung quanh khi Offline
     }
 
     _updateUserOnlineStatusInFirestore(_isOnline);
     notifyListeners();
   }
 
-  /// 🟢 Cập nhật thuộc tính isOnline vào Firestore NguoiDung
+  /// Cập nhật thuộc tính isOnline vào Firestore NguoiDung
   Future<void> _updateUserOnlineStatusInFirestore(bool status) async {
     try {
-      await _firestore.collection('NguoiDung').doc(_userID).update({
+      await _firestore.collection('NguoiDung').doc(_userID).set({
         'isOnline': status,
-      });
+      }, SetOptions(merge: true));
       debugPrint('Đã cập nhật isOnline = $status cho user $_userID');
     } catch (e) {
       debugPrint('Lỗi cập nhật isOnline trên Firestore: $e');
@@ -203,7 +210,7 @@ class TrangChuController extends ChangeNotifier {
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            distanceFilter: 1, // 🟢 Giảm distanceFilter xuống 5m để nhạy hơn
           ),
         ).listen((Position position) {
           _updateLocationOnMap(LatLng(position.latitude, position.longitude));
@@ -226,11 +233,9 @@ class TrangChuController extends ChangeNotifier {
         name = userData['hoTen'] ?? 'Chưa cập nhật';
         maVaiTro = userData['maVaiTro'] ?? '';
 
-        // 🟢 Đọc trạng thái isOnline từ Firestore nếu có
         if (userData.containsKey('isOnline')) {
           _isOnline = userData['isOnline'] ?? true;
         } else {
-          // Nếu chưa có thuộc tính isOnline thì khởi tạo mặc định là true
           _updateUserOnlineStatusInFirestore(_isOnline);
         }
       }
@@ -281,21 +286,54 @@ class TrangChuController extends ChangeNotifier {
     }
   }
 
-  /// 🟢 Phương thức thực hiện chuyển vai trò về 'vaitro_nguoidung'
+  // 🟢 KÍCH HOẠT VÀ LƯU CUỘC GỌI KHẨN CẤP LỒNG NHAU TRÊN FIRESTORE
+  Future<void> triggerEmergencyCallToRelative({
+    required String victimUserId,
+    required List<dynamic> danhSachNguoiThan,
+    required String victimName,
+  }) async {
+    try {
+      for (var nt in danhSachNguoiThan) {
+        String callId = _firestore.collection('CuocGoiKhoanCap').doc().id;
+        String maNguoiThan = (nt['maNguoiThan'] ?? '').toString();
+        debugPrint('👉 [Controller] Đang ghi cho maNguoiThan: $maNguoiThan');
+
+        if (maNguoiThan.isNotEmpty) {
+          await _firestore
+              .collection('CuocGoiKhoanCap')
+              .doc(victimUserId)
+              .collection('DanhSachNguoiThan')
+              .doc(maNguoiThan)
+              .set({
+                'idCuocGoi': callId,
+                'maNguoiDung': victimUserId,
+                'maNguoiThan': maNguoiThan,
+                'noiDungDoc':
+                    'Xin chào, đây là cuộc gọi tự động khẩn cấp. Người thân của bạn là $victimName đang cần sự trợ giúp gấp.',
+                'trangThai': 'dangGoi',
+                'thoiGianTao': FieldValue.serverTimestamp(),
+              });
+          debugPrint(
+            '✅ [Controller] Đã ghi thành công cho người thân: $maNguoiThan',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ [Controller] Lỗi Firestore: $e');
+    }
+  }
+
+  /// Phương thức chuyển vai trò về 'vaitro_nguoidung'
   Future<bool> chuyenVaiTroNguoiDung() async {
     try {
       _isLoadingLocation = true;
       notifyListeners();
 
-      // 1. Cập nhật mã vai trò lên Firestore ở bảng NguoiDung
       await _firestore.collection('NguoiDung').doc(_userID).update({
         'maVaiTro': 'vaitro_nguoidung',
       });
 
-      // 2. Cập nhật lại giá trị maVaiTro trong Controller
       maVaiTro = 'vaitro_nguoidung';
-
-      // 3. Tải lại toàn bộ thông tin vai trò/hồ sơ tương ứng với maVaiTro mới
       await fetchFullUserData(_userID);
 
       debugPrint('Đã chuyển maVaiTro về vaitro_nguoidung thành công.');
@@ -351,111 +389,34 @@ class TrangChuController extends ChangeNotifier {
     }
   }
 
-  // Bảng màu dành riêng cho các nhóm người thân
-  final List<Color> _familyColorPalette = [
-    Colors.orange,
-    Colors.purple,
-    Colors.teal,
-    Colors.pink,
-    Colors.indigo,
-  ];
+  //--------- Quét người dùng xung quanh (ĐÃ ĐƯỢC TỐI ƯU REALTIME TỐC ĐỘ CAO) -------------//
 
-  void _processFamilyGroups(List<Map<String, dynamic>> users) {
-    int groupCounter = 1;
-    // Map lưu userId -> groupId
-    Map<String, int> userGroupMap = {};
-
-    for (int i = 0; i < users.length; i++) {
-      String u1Id = users[i]['userId'];
-      List<dynamic> listNT1 = users[i]['danhSachNguoiThan'] ?? [];
-
-      for (int j = i + 1; j < users.length; j++) {
-        String u2Id = users[j]['userId'];
-
-        // Kiểm tra xem u2Id có nằm trong danh sách người thân của u1Id không
-        bool isRelative = listNT1.any((nt) => nt['maNguoiThan'] == u2Id);
-
-        if (isRelative) {
-          int assignedGroup;
-
-          // Nếu 1 trong 2 đã có group thì lấy group đó, chưa có thì tạo group mới
-          if (userGroupMap.containsKey(u1Id)) {
-            assignedGroup = userGroupMap[u1Id]!;
-          } else if (userGroupMap.containsKey(u2Id)) {
-            assignedGroup = userGroupMap[u2Id]!;
-          } else {
-            assignedGroup = groupCounter++;
-          }
-
-          userGroupMap[u1Id] = assignedGroup;
-          userGroupMap[u2Id] = assignedGroup;
-        }
-      }
-    }
-
-    // Gán thông tin màu sắc và groupId vào từng user
-    for (var user in users) {
-      String uId = user['userId'];
-      if (userGroupMap.containsKey(uId)) {
-        int gId = userGroupMap[uId]!;
-        user['groupId'] = gId;
-        // Chọn màu theo thuật toán xoay vòng trong Bảng màu
-        user['groupColor'] =
-            _familyColorPalette[(gId - 1) % _familyColorPalette.length];
-        user['hasFamilyNearby'] = true;
-      } else {
-        user['groupId'] = null;
-        user['groupColor'] = const Color(0xFF0284C7); // Màu xanh lam mặc định
-        user['hasFamilyNearby'] = false;
-      }
-    }
-  }
-
-  //---------Quét người dùng xung quanh-------------//
-  StreamSubscription<QuerySnapshot>? _usersNearbySubscription;
-  List<Map<String, dynamic>> _nearbyUsers = [];
-
-  // Getter truyền danh sách người dùng xung quanh ra UI
-  List<Map<String, dynamic>> get nearbyUsers => _nearbyUsers;
-
-  ///Lắng nghe người dùng xung quanh và đọc danh sách người thân từ NguoiThan/{userId}/DanhSachNguoiThan
-
-  void listenToNearbyUsers() {
+  /// Lắng nghe người dùng xung quanh và đọc danh sách người thân
+  void listenToNearbyUsers({double maxRadiusInMeters = 100.0}) {
     _usersNearbySubscription?.cancel();
 
-    if (!_isOnline || _currentPosition == null) {
+    // 🟢 Nếu Cứu hộ viên đang Offline hoặc chưa có tọa độ GPS -> Dừng quét
+    if (!_isOnline) {
       _nearbyUsers = [];
       notifyListeners();
       return;
     }
 
-    final String currentAuthUserId =
-        FirebaseAuth.instance.currentUser?.uid ?? _userID;
-
-    // 1. TÍNH KHOẢNG RANH GIỚI VĨ ĐỘ SƠ BỘ (~100m tương đương 0.0009 độ)
-    double currentLat = _currentPosition!.latitude;
-    double deltaLat = 0.1 / 111.0; // 0.1km ~ 100m
-    double minLat = currentLat - deltaLat;
-    double maxLat = currentLat + deltaLat;
-
-    // 2. TRUY VẤN LỌC NGUYÊN KHỐI TỪ FIRESTORE
     _usersNearbySubscription = _firestore
         .collection('NguoiDung')
         .where('isOnline', isEqualTo: true)
-        .where('maVaiTro', isEqualTo: 'vaitro_nguoidung')
-        .where('viDo', isGreaterThanOrEqualTo: minLat)
-        .where('viDo', isLessThanOrEqualTo: maxLat)
         .snapshots()
         .listen((snapshot) async {
           if (_currentPosition == null) return;
 
-          // Lọc danh sách ứng viên nằm trong bán kính 100m thực tế
-          List<Map<String, dynamic>> validUsers = [];
+          List<Map<String, dynamic>> tempUsers = [];
 
           for (var doc in snapshot.docs) {
-            if (doc.id == currentAuthUserId || doc.id == _userID) continue;
+            if (doc.id == _userID) continue;
 
             final data = doc.data() as Map<String, dynamic>;
+
+            if (data['maVaiTro'] != 'vaitro_nguoidung') continue;
             if (data['viDo'] == null || data['kinhDo'] == null) continue;
 
             double userLat = (data['viDo'] as num).toDouble();
@@ -468,87 +429,73 @@ class TrangChuController extends ChangeNotifier {
               userLng,
             );
 
-            // Đúng bán kính <= 100m mới đưa vào xử lý tiếp
-            if (distanceInMeters <= 100.0) {
-              validUsers.add({
-                'doc': doc,
-                'data': data,
-                'userLat': userLat,
-                'userLng': userLng,
+            // 🟢 Lọc bán kính linh hoạt (Khuyên dùng 200m để bù trừ sai số GPS)
+            if (distanceInMeters <= maxRadiusInMeters) {
+              String userId = doc.id;
+
+              // 🟢 TRUY VẤN NGUỜI THÂN SONG SONG (DÙNG FUTURE.WAIT ĐỂ TRÁNH NGHẼN STREAM)
+              List<Map<String, dynamic>> listNguoiThan = [];
+              try {
+                QuerySnapshot nguoiThanSnap = await _firestore
+                    .collection('NguoiThan')
+                    .doc(userId)
+                    .collection('DanhSachNguoiThan')
+                    .get();
+
+                List<Future<Map<String, dynamic>?>> relativeFutures =
+                    nguoiThanSnap.docs.map((ntDoc) async {
+                      String maNguoiThan = ntDoc.id;
+                      Map<String, dynamic> ntData =
+                          ntDoc.data() as Map<String, dynamic>;
+
+                      if (maNguoiThan.isNotEmpty) {
+                        DocumentSnapshot userRelativeDoc = await _firestore
+                            .collection('NguoiDung')
+                            .doc(maNguoiThan)
+                            .get();
+
+                        if (userRelativeDoc.exists &&
+                            userRelativeDoc.data() != null) {
+                          Map<String, dynamic> relativeData =
+                              userRelativeDoc.data() as Map<String, dynamic>;
+                          return {
+                            'maNguoiThan': maNguoiThan,
+                            'hoTen': relativeData['hoTen'] ?? 'Chưa cập nhật',
+                            'soDienThoai':
+                                relativeData['soDienThoai'] ?? 'Chưa cập nhật',
+                            'moiQuanHe': ntData['moiQuanHe'] ?? '',
+                            'trangThai': ntData['trangThai'] ?? '',
+                            'ngayTao': ntData['ngayTao'],
+                          };
+                        }
+                      }
+                      return null;
+                    }).toList();
+
+                var results = await Future.wait(relativeFutures);
+                listNguoiThan = results
+                    .whereType<Map<String, dynamic>>()
+                    .toList();
+              } catch (e) {
+                debugPrint('Lỗi đọc NguoiThan/$userId/DanhSachNguoiThan: $e');
+              }
+
+              tempUsers.add({
+                'userId': userId,
+                'hoTen': data['hoTen'] ?? 'Người dùng',
+                'soDienThoai': data['soDienThoai'] ?? 'Chưa cập nhật',
+                'email': data['email'] ?? 'Chưa cập nhật',
+                'diaChi': data['diaChi'] ?? 'Chưa cập nhật',
+                'danhSachNguoiThan': listNguoiThan,
+                'location': LatLng(userLat, userLng),
                 'distance': distanceInMeters,
+                'groupColor': Colors.white,
+                'hasFamilyNearby': false,
               });
             }
           }
 
-          // 3. TỐI ƯU: CHẠY SONG SONG (PARALLEL) TẤT CẢ TRUY VẤN NGƯỜI THÂN BẰNG Future.wait
-          List<Future<Map<String, dynamic>>> tasks = validUsers.map((
-            item,
-          ) async {
-            String userId = item['doc'].id;
-            Map<String, dynamic> data = item['data'];
-            List<Map<String, dynamic>> listNguoiThan = [];
-
-            try {
-              QuerySnapshot nguoiThanSnap = await _firestore
-                  .collection('NguoiThan')
-                  .doc(userId)
-                  .collection('DanhSachNguoiThan')
-                  .get();
-
-              // Gom các yêu cầu đọc thông tin người thân để chạy song song
-              List<Future<DocumentSnapshot>> relativeRequests = nguoiThanSnap
-                  .docs
-                  .map(
-                    (ntDoc) =>
-                        _firestore.collection('NguoiDung').doc(ntDoc.id).get(),
-                  )
-                  .toList();
-
-              List<DocumentSnapshot> relativeDocs = await Future.wait(
-                relativeRequests,
-              );
-
-              for (int i = 0; i < nguoiThanSnap.docs.length; i++) {
-                var ntDoc = nguoiThanSnap.docs[i];
-                var userRelativeDoc = relativeDocs[i];
-
-                if (userRelativeDoc.exists && userRelativeDoc.data() != null) {
-                  Map<String, dynamic> ntData =
-                      ntDoc.data() as Map<String, dynamic>;
-                  Map<String, dynamic> relativeData =
-                      userRelativeDoc.data() as Map<String, dynamic>;
-
-                  listNguoiThan.add({
-                    'maNguoiThan': ntDoc.id,
-                    'hoTen': relativeData['hoTen'] ?? 'Chưa cập nhật',
-                    'soDienThoai':
-                        relativeData['soDienThoai'] ?? 'Chưa cập nhật',
-                    'moiQuanHe': ntData['moiQuanHe'] ?? '',
-                    'trangThai': ntData['trangThai'] ?? '',
-                    'ngayTao': ntData['ngayTao'],
-                  });
-                }
-              }
-            } catch (e) {
-              debugPrint('Lỗi đọc NguoiThan/$userId: $e');
-            }
-
-            return {
-              'userId': userId,
-              'hoTen': data['hoTen'] ?? 'Người dùng',
-              'soDienThoai': data['soDienThoai'] ?? 'Chưa cập nhật',
-              'email': data['email'] ?? 'Chưa cập nhật',
-              'diaChi': data['diaChi'] ?? 'Chưa cập nhật',
-              'danhSachNguoiThan': listNguoiThan,
-              'location': LatLng(item['userLat'], item['userLng']),
-              'distance': item['distance'],
-              'groupColor': Colors.white,
-              'hasFamilyNearby': false,
-            };
-          }).toList();
-
-          // Chờ toàn bộ danh sách xử lý xong đồng thời
-          _nearbyUsers = await Future.wait(tasks);
+          _nearbyUsers = tempUsers;
           notifyListeners();
         });
   }
@@ -558,20 +505,22 @@ class TrangChuController extends ChangeNotifier {
     _currentPosition = newPos;
     _isLoadingLocation = false;
 
-    // 🟢 Đồng bộ vị trí thực tế của Cứu hộ viên lên Firestore NguoiDung
+    // Đồng bộ vị trí thực tế của Cứu hộ viên lên Firestore NguoiDung
     try {
-      await _firestore.collection('NguoiDung').doc(_userID).update({
+      await _firestore.collection('NguoiDung').doc(_userID).set({
         'viDo': newPos.latitude,
         'kinhDo': newPos.longitude,
         'isOnline': _isOnline,
-      });
+      }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Lỗi cập nhật vị trí Cứu hộ viên lên Firestore: $e');
     }
 
-    // Bắt đầu quét người dùng xung quanh
-    if (_usersNearbySubscription == null) {
-      listenToNearbyUsers();
+    // 🟢 TỰ ĐỘNG KHỞI CHẠY/TÍNH TOÁN LẠI QUÉT XUNG QUANH MỖI KHI CỨU HỘ VIÊN DI CHUYỂN
+    if (_isOnline) {
+      if (_usersNearbySubscription == null) {
+        listenToNearbyUsers();
+      }
     }
 
     notifyListeners();

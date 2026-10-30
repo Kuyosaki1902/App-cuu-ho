@@ -51,7 +51,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
               String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
 
               // Kiểm tra xem có ca nào đang ở trạng thái chờ phản hồi không
-              if (trangThai == 'cuuho_trangthai_chophanhoi') {
+              if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan') {
                 coCaChoPhanHoi = true;
                 break; // Tìm thấy ca đầu tiên thì dừng vòng lặp
               }
@@ -121,6 +121,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                   ),
 
                   // 2. Map Section
+                  // 2. Map Section
                   Expanded(
                     child: MapSection(
                       currentPosition: controller.currentPosition,
@@ -129,6 +130,48 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                       isOnline: controller.isOnline,
                       RefreshLocation: controller.initLocationService,
                       nearbyUsers: controller.nearbyUsers,
+
+                      // 🟢 THÊM DEBUG PRINT ĐỂ KIỂM TRA LUỒNG CHẠY
+                      onCallAllRelatives: (user, danhSachNguoiThan) async {
+                        debugPrint(
+                          '👉 [TrangChu] Đã nhận callback onCallAllRelatives!',
+                        );
+
+                        String victimUserId =
+                            user['userId'] ?? ''; // maNguoiDung
+                        String victimName = user['hoTen'] ?? 'Người dùng';
+
+                        debugPrint(
+                          '👉 [TrangChu] victimUserId: $victimUserId, victimName: $victimName',
+                        );
+
+                        if (victimUserId.isEmpty) {
+                          debugPrint('❌ Lỗi: victimUserId bị trống!');
+                          return;
+                        }
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Đang kích hoạt cuộc gọi khẩn cấp tới toàn bộ người thân...',
+                            ),
+                          ),
+                        );
+
+                        // Gọi trực tiếp hàm trong controller của bạn
+                        try {
+                          await controller.triggerEmergencyCallToRelative(
+                            victimUserId: victimUserId,
+                            danhSachNguoiThan: danhSachNguoiThan,
+                            victimName: victimName,
+                          );
+                          debugPrint(
+                            '✅ [TrangChu] Đã gọi xong triggerEmergencyCallToRelative từ controller!',
+                          );
+                        } catch (e) {
+                          debugPrint('❌ [TrangChu] Lỗi khi gọi controller: $e');
+                        }
+                      },
                     ),
                   ),
 

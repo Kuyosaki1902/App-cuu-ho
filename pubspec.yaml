@@ -51,6 +51,10 @@ dependencies:
   firebase_auth: ^6.7.1
   geocoding: ^5.0.0
   dart_geohash: ^2.1.0
+  flutter_tts: ^4.2.5
+  flutter_background_service: ^5.0.6 # Thư viện quản lý Foreground Service
+  flutter_local_notifications: ^17.0.0 # Thư viện hiển thị Notification
+  device_info_plus: ^10.1.0
 
 
 dev_dependencies:

@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class MapSection extends StatefulWidget {
   final LatLng? currentPosition;
@@ -12,6 +12,8 @@ class MapSection extends StatefulWidget {
   final List<Map<String, dynamic>> nearbyUsers;
   final Function(GoogleMapController) onMapCreated;
   final VoidCallback RefreshLocation;
+  final Function(Map<String, dynamic> user, List<dynamic> danhSachNguoiThan)
+  onCallAllRelatives;
 
   const MapSection({
     super.key,
@@ -20,6 +22,7 @@ class MapSection extends StatefulWidget {
     required this.onMapCreated,
     required this.RefreshLocation,
     required this.isOnline,
+    required this.onCallAllRelatives,
     this.nearbyUsers = const [],
   });
 
@@ -397,6 +400,7 @@ class _MapSectionState extends State<MapSection> {
   }
 
   // 🟢 4. MODAL HIỂN THỊ THÔNG TIN CHI TIẾT NGƯỜI DÙNG
+  // 🟢 4. MODAL HIỂN THỊ THÔNG TIN CHI TIẾT NGƯỜI DÙNG
   void _showUserInfoModal(BuildContext context, Map<String, dynamic> user) {
     List<dynamic> danhSachNguoiThan = user['danhSachNguoiThan'] ?? [];
     bool coNguoiThan = danhSachNguoiThan.isNotEmpty;
@@ -482,7 +486,7 @@ class _MapSectionState extends State<MapSection> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Người thân liên hệ khẩn cấp:',
+                'Danh sách người thân liên hệ khẩn cấp:',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const SizedBox(height: 8),
@@ -496,6 +500,7 @@ class _MapSectionState extends State<MapSection> {
                         const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       var nt = danhSachNguoiThan[index];
+                      // 🟢 ĐÃ XÓA NÚT GỌI RIÊNG LẺ Ở TỪNG DÒNG NGƯỜI THÂN
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -535,24 +540,6 @@ class _MapSectionState extends State<MapSection> {
                                 ],
                               ),
                             ),
-                            IconButton(
-                              constraints: const BoxConstraints(),
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(
-                                Icons.phone_forwarded,
-                                color: Colors.orange,
-                                size: 22,
-                              ),
-                              onPressed: () async {
-                                final Uri launchUri = Uri(
-                                  scheme: 'tel',
-                                  path: nt['soDienThoai'],
-                                );
-                                if (await canLaunchUrl(launchUri)) {
-                                  await launchUrl(launchUri);
-                                }
-                              },
-                            ),
                           ],
                         ),
                       );
@@ -578,6 +565,8 @@ class _MapSectionState extends State<MapSection> {
                   ),
                 ),
               const SizedBox(height: 20),
+
+              // 🟢 NÚT LIÊN HỆ GỌI CHO TOÀN BỘ NGƯỜI THÂN
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -588,10 +577,31 @@ class _MapSectionState extends State<MapSection> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    debugPrint(
+                      '🟢 ĐÃ BẤM VÀO NÚT LIÊN HỆ TRÊN MODAL!',
+                    ); // Thêm dòng này để test
+                    debugPrint(
+                      '🟢 Số lượng người thân hiện tại: ${danhSachNguoiThan.length}',
+                    );
+                    if (!coNguoiThan) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Người dùng này không có người thân để liên hệ!',
+                          ),
+                        ),
+                      );
+                      return; // 🔴 Nó bị dừng ở đây nếu không có người thân!
+                    }
+                    // Đóng modal chi tiết
+                    Navigator.pop(context);
+                    // Gọi callback truyền ra màn hình chính / controller xử lý
+                    widget.onCallAllRelatives(user, danhSachNguoiThan);
+                  },
                   icon: const Icon(Icons.phone_forwarded, color: Colors.white),
                   label: const Text(
-                    'Liên hệ với người cần hỗ trợ',
+                    'Liên hệ với toàn bộ người thân',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

@@ -1,3 +1,4 @@
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -59,14 +60,21 @@ class Manhinhcho extends StatelessWidget {
                                     ),
                                     elevation: 2,
                                   ),
-                                  onPressed: () => controller.startNavigation(),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => TienTrinhCuuHo(),
+                                      ),
+                                    );
+                                  },
                                   icon: const Icon(
                                     Icons.navigation,
                                     color: Colors.white,
                                     size: 20,
                                   ),
                                   label: const Text(
-                                    'DẪN ĐƯỜNG NGAY',
+                                    'NHẬN CỨU HỘ',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,

@@ -26,9 +26,10 @@ class EmergencyAlertController extends ChangeNotifier {
 
   final String googleApiKey = "AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps";
 
+  // 🟢 1. ĐỔI THỜI GIAN ĐẾM NGƯỢC THÀNH 3 PHÚT (180 GIÂY)
   Timer? _timer;
-  int _remainingSeconds = 60;
-  final int _totalSeconds = 60;
+  int _remainingSeconds = 180;
+  final int _totalSeconds = 180;
 
   int get remainingSeconds => _remainingSeconds;
   double get progressValue => _remainingSeconds / _totalSeconds;
@@ -45,20 +46,21 @@ class EmergencyAlertController extends ChangeNotifier {
   String carTime = '0 p';
   String walkTime = '0 p';
 
-  // 🟢 THÊM BIẾN LƯU TRẠNG THÁI PHƯƠNG TIỆN (Mặc định là xe máy/cycling)
+  String currentDoctorId = '';
+  String currentMaYeuCau = '';
+  BuildContext? currentContext;
+
   String selectedTravelMode = 'cycling';
 
   EmergencyAlertController() {
-    _startCountdown();
     _startLocationTracking();
   }
 
-  // 🟢 HÀM ĐỔI PHƯƠNG TIỆN VÀ VẼ LẠI ĐƯỜNG
   void changeTravelMode(String mode) {
     if (selectedTravelMode == mode) return;
     selectedTravelMode = mode;
     notifyListeners();
-    fetchRealtimeRoute(shouldMoveCamera: false); // Gọi lại API để vẽ đường mới
+    fetchRealtimeRoute(shouldMoveCamera: false);
   }
 
   Future<void> _startLocationTracking() async {
@@ -72,22 +74,36 @@ class EmergencyAlertController extends ChangeNotifier {
     }
     if (permission == LocationPermission.deniedForever) return;
 
+    try {
+      Position currentPos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+      myLocation = LatLng(currentPos.latitude, currentPos.longitude);
+      notifyListeners();
+
+      if (victimLocation.latitude != 0.0 && victimLocation.longitude != 0.0) {
+        fetchRealtimeRoute();
+      }
+    } catch (e) {
+      debugPrint('Lỗi lấy vị trí ban đầu của Cứu hộ viên: $e');
+    }
+
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // Giảm xuống 10 để nhạy hơn khi di chuyển thực tế
+      distanceFilter: 5,
     );
 
     _positionStreamSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (Position position) {
             LatLng newLocation = LatLng(position.latitude, position.longitude);
-
             myLocation = newLocation;
             notifyListeners();
 
             if (victimLocation.latitude != 0.0 &&
                 victimLocation.longitude != 0.0) {
-              fetchRealtimeRoute();
+              fetchRealtimeRoute(shouldMoveCamera: false);
             }
           },
         );
@@ -103,6 +119,8 @@ class EmergencyAlertController extends ChangeNotifier {
     BuildContext context,
   ) async {
     _assignmentSubscription?.cancel();
+    currentDoctorId = currentUserId;
+    currentContext = context;
 
     await _fetchDoctorInfo(currentUserId);
 
@@ -124,7 +142,7 @@ class EmergencyAlertController extends ChangeNotifier {
               Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
               String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
 
-              if (trangThai == 'cuuho_trangthai_chophanhoi' ||
+              if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
                   trangThai.isEmpty) {
                 targetDoc = doc;
                 foundMaYeuCau =
@@ -137,12 +155,112 @@ class EmergencyAlertController extends ChangeNotifier {
             }
 
             if (foundMaYeuCau.isNotEmpty) {
+              currentMaYeuCau = foundMaYeuCau;
               await _playEmergencySound();
               await _fetchVictimRequestDetails(foundMaYeuCau);
               fetchRealtimeRoute();
+
+              // 🟢 Bắt đầu đếm ngược 3 phút khi nhận ca thành công
+              _startCountdown();
             }
           }
         });
+  }
+
+  // 🟢 2. BỘ ĐẾM NGƯỢC 3 PHÚT & XỬ LÝ KHI HẾT GIỜ TỰ ĐỘNG TỪ CHỐI
+  void _startCountdown() {
+    _timer?.cancel();
+    _remainingSeconds = _totalSeconds; // Reset về 180 giây
+    notifyListeners();
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (_remainingSeconds > 0) {
+        _remainingSeconds--;
+        notifyListeners();
+      } else {
+        // HẾT 3 PHÚT KHÔNG THAO TÁC -> TỰ TỪ CHỐI & QUAY VỀ MÀN HÌNH CHÍNH
+        _timer?.cancel();
+        await stopEmergencySound();
+        await _handleTimeoutReject();
+      }
+    });
+  }
+
+  // 🟢 3. XỬ LÝ HẾT 3 PHÚT: CẬP NHẬT TỪ CHỐI & BẬT NHANCA=TRUE TRÊN NGUOIDUNG
+  Future<void> _handleTimeoutReject() async {
+    if (currentDoctorId.isEmpty || currentMaYeuCau.isEmpty) return;
+
+    try {
+      String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // a. Cập nhật maTrangThaiTiepNhan = cuuho_trangthai_phancong_tuchoi
+      await _firestore
+          .collection('ChiTietPhanCongCuuHo')
+          .doc(currentDoctorId)
+          .collection('DanhSachNgay')
+          .doc(todayStr)
+          .collection('DanhSachPhanCong')
+          .doc(currentMaYeuCau)
+          .set({
+            'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_tuchoi',
+          }, SetOptions(merge: true));
+
+      // b. Cập nhật nhanCaCuuHo = true trên bảng NguoiDung
+      await _firestore.collection('NguoiDung').doc(currentDoctorId).set({
+        'nhanCaCuuHo': true,
+      }, SetOptions(merge: true));
+
+      debugPrint('Đã tự động từ chối ca do hết 3 phút');
+
+      // c. Tự động chuyển về màn hình chính
+      if (currentContext != null && Navigator.canPop(currentContext!)) {
+        Navigator.pop(currentContext!);
+      }
+    } catch (e) {
+      debugPrint('Lỗi xử lý tự động từ chối hết giờ: $e');
+    }
+  }
+
+  // 🟢 4. KHI BẤM NÚT DẪN ĐƯỜNG: CẬP NHẬT CHẤP NHẬN TIEPNHAN
+  Future<void> startNavigation() async {
+    await stopEmergencySound();
+    _timer?.cancel();
+
+    // Cập nhật trạng thái Firestore nếu có ca phân công
+    if (currentDoctorId.isNotEmpty && currentMaYeuCau.isNotEmpty) {
+      try {
+        String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+        // a. Cập nhật maTrangThaiTiepNhan = cuuho_trangthai_phancong_tiepnhan
+        await _firestore
+            .collection('ChiTietPhanCongCuuHo')
+            .doc(currentDoctorId)
+            .collection('DanhSachNgay')
+            .doc(todayStr)
+            .collection('DanhSachPhanCong')
+            .doc(currentMaYeuCau)
+            .set({
+              'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_tiepnhan',
+            }, SetOptions(merge: true));
+
+        // b. Cập nhật nhanCaCuuHo = false trong bảng NguoiDung (Đang trong ca)
+        await _firestore.collection('NguoiDung').doc(currentDoctorId).set({
+          'nhanCaCuuHo': false,
+        }, SetOptions(merge: true));
+
+        debugPrint('Đã cập nhật tiếp nhận ca thành công');
+      } catch (e) {
+        debugPrint('Lỗi cập nhật tiếp nhận ca: $e');
+      }
+    }
+
+    // Mở Google Maps điều hướng ngoài
+    final url = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&origin=${myLocation.latitude},${myLocation.longitude}&destination=${victimLocation.latitude},${victimLocation.longitude}&travelmode=driving',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _fetchDoctorInfo(String doctorId) async {
@@ -285,7 +403,6 @@ class EmergencyAlertController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 🟢 GỌI OSRM VỚI PHƯƠNG TIỆN ĐƯỢC CHỌN (driving / cycling / foot)
       final url = Uri.parse(
         'http://router.project-osrm.org/route/v1/$selectedTravelMode/${myLocation.longitude},${myLocation.latitude};${victimLocation.longitude},${victimLocation.latitude}?overview=full&geometries=polyline',
       );
@@ -330,11 +447,9 @@ class EmergencyAlertController extends ChangeNotifier {
           int walkMinutes = (distanceMeters / 75).ceil();
           walkTime = '$walkMinutes p';
         } else {
-          debugPrint('Lỗi dữ liệu OSRM');
           _loadFallbackRoadWaypoints();
         }
       } else {
-        debugPrint('Lỗi HTTP OSRM: ${response.statusCode}');
         _loadFallbackRoadWaypoints();
       }
     } catch (e) {
@@ -343,7 +458,6 @@ class EmergencyAlertController extends ChangeNotifier {
     } finally {
       isLoadingRoute = false;
       notifyListeners();
-      // 🔴 CHỈ DI CHUYỂN CAMERA KHI ĐƯỢC PHÉP
       if (shouldMoveCamera) {
         _moveCameraToFitPositions();
       }
@@ -405,19 +519,7 @@ class EmergencyAlertController extends ChangeNotifier {
     }
   }
 
-  void _startCountdown() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        _remainingSeconds--;
-        notifyListeners();
-      } else {
-        stopEmergencySound();
-        _timer?.cancel();
-      }
-    });
-  }
-
+  // 🟢 Định dạng hiển thị phút : giây (Ví dụ: 02 : 59s)
   String get formattedTimer {
     int minutes = _remainingSeconds ~/ 60;
     int seconds = _remainingSeconds % 60;
@@ -430,17 +532,6 @@ class EmergencyAlertController extends ChangeNotifier {
       await launchUrl(launchUri, mode: LaunchMode.externalApplication);
     } catch (e) {
       debugPrint('Lỗi gọi điện: $e');
-    }
-  }
-
-  Future<void> startNavigation() async {
-    await stopEmergencySound();
-
-    final url = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&origin=${myLocation.latitude},${myLocation.longitude}&destination=${victimLocation.latitude},${victimLocation.longitude}&travelmode=driving',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 

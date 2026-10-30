@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     
     <!-- Cho Android 13 (API level 33) trở lên -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
@@ -20,6 +25,12 @@
         android:label="cuhokhancap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Khai báo Service cho Foreground Service -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="true"
+            android:tools:ignore="Instantiatable" />
         <meta-data 
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps"/>
