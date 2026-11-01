@@ -5,6 +5,8 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -242,5 +244,142 @@ class FirebaseService {
       );
       await rtdb.ref('NguoiDung/$maNguoiDung/isOnline').onDisconnect().cancel();
     } catch (e) {}
+  }
+
+
+  // ==================== CÁC HÀM TẠO YÊU CẦU CỨU HỘ TỰ ĐỘNG ====================
+  Future<bool> taoYeuCauTimBacSiTuDong({
+    required String maNguoiYeuCau,
+    required double viDo,
+    required double kinhDo,
+    List<String>? trieuChung,
+    String? moTaChiTiet,
+    File? fileAnh,
+    File? fileGhiAm,
+  }) async {
+    try {
+      // 1. TÍNH MÃ YÊU CẦU TỰ TĂNG (yeucau1, yeucau2, yeucau3...)
+      QuerySnapshot yeuCauSnapshot = await _firestore.collection('YeuCauCuuHo').get();
+      int maxIndex = 0;
+
+      for (var doc in yeuCauSnapshot.docs) {
+        String docId = doc.id;
+        if (docId.startsWith('yeucau')) {
+          int? numVal = int.tryParse(docId.replaceFirst('yeucau', ''));
+          if (numVal != null && numVal > maxIndex) {
+            maxIndex = numVal;
+          }
+        }
+      }
+
+      int nextIndex = maxIndex > 0 ? maxIndex + 1 : yeuCauSnapshot.docs.length + 1;
+      String maYeuCau = 'yeucau$nextIndex'; // Đơn tiếp theo sẽ là yeucau6...
+
+      WriteBatch batch = _firestore.batch();
+      DocumentReference yeuCauRef = _firestore.collection('YeuCauCuuHo').doc(maYeuCau);
+
+      String? anhDownloadUrl;
+      String? ghiAmDownloadUrl;
+
+      // 2. UPLOAD ẢNH LÊN FIREBASE STORAGE
+      if (fileAnh != null && await fileAnh.exists()) {
+        try {
+          print("👉 Đang upload ảnh lên Firebase Storage...");
+          final String fileName = '${maYeuCau}_anh_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final Reference ref = FirebaseStorage.instance.ref().child('LuuAnh/$fileName');
+          
+          final UploadTask uploadTask = ref.putFile(
+            fileAnh,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+          final TaskSnapshot snapshot = await uploadTask;
+          anhDownloadUrl = await snapshot.ref.getDownloadURL();
+          print("✅ Upload ảnh thành công! URL: $anhDownloadUrl");
+        } catch (e) {
+          print('❌ Lỗi upload ảnh lên Storage: $e');
+        }
+      } else {
+        print("⚠️ Không tìm thấy file ảnh hoặc người dùng không chụp ảnh.");
+      }
+
+      // 3. UPLOAD GHI ÂM LÊN FIREBASE STORAGE
+      if (fileGhiAm != null && await fileGhiAm.exists()) {
+        try {
+          print("👉 Đang upload ghi âm lên Firebase Storage...");
+          final String fileName = '${maYeuCau}_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          final Reference ref = FirebaseStorage.instance.ref().child('GhiAm/$fileName');
+          
+          final UploadTask uploadTask = ref.putFile(
+            fileGhiAm,
+            SettableMetadata(contentType: 'audio/m4a'),
+          );
+          final TaskSnapshot snapshot = await uploadTask;
+          ghiAmDownloadUrl = await snapshot.ref.getDownloadURL();
+          print("✅ Upload ghi âm thành công! URL: $ghiAmDownloadUrl");
+        } catch (e) {
+          print('❌ Lỗi upload ghi âm lên Storage: $e');
+        }
+      } else {
+        print("⚠️ Không tìm thấy file ghi âm hoặc người dùng không ghi âm.");
+      }
+
+      // 4. LƯU BẢNG YeuCauCuuHo
+      batch.set(yeuCauRef, {
+        'maYeuCau': maYeuCau,
+        'thoiGianTao': FieldValue.serverTimestamp(),
+        'viDo': viDo,
+        'kinhDo': kinhDo,
+        'mucDoKhanCap': 2,
+        'soNguoiCanCuuHo': 3,
+        'soNguoiCuuHo': 0,
+        'maNguoiYeuCau': maNguoiYeuCau,
+        'maAdminDieuPhoi': null,
+        'thoiGianPhanCong': null,
+        'thoiGianHoanThanh': null,
+        'maLoaiYeuCau': 'loaiyeucau_timtudong',
+        'maTinhTrangYeuCau': 'user_tinhtrang_chotiepnhan',
+        'danhSachPhanCongVien': {},
+      });
+
+      // 5. LƯU BẢNG ChiTietMoTaHienTruong VỚI DOCUMENT ID LÀ maYeuCau
+      bool hasMoTa = (trieuChung != null && trieuChung.isNotEmpty) ||
+                     (moTaChiTiet != null && moTaChiTiet.isNotEmpty) ||
+                     anhDownloadUrl != null ||
+                     ghiAmDownloadUrl != null;
+
+      if (hasMoTa) {
+        DocumentReference moTaRef = _firestore.collection('ChiTietMoTaHienTruong').doc(maYeuCau);
+        batch.set(moTaRef, {
+          'maYeuCau': maYeuCau,
+          'thoiGianTao': FieldValue.serverTimestamp(),
+          'videoUrl': anhDownloadUrl, // Lưu URL ảnh vào trường videoUrl
+          'ghiAmUrl': ghiAmDownloadUrl, // Lưu URL ghi âm
+          'ghiChuText': {
+            'trieuChung': trieuChung ?? [],
+            'moTaChiTiet': moTaChiTiet ?? "",
+          }
+        });
+
+        // 6. LƯU BẢNG LuuAnh VÀO COLLECTION LuuAnh
+        if (anhDownloadUrl != null) {
+          String idLuuAnh = 'anh_${DateTime.now().millisecondsSinceEpoch}_0';
+          DocumentReference luuAnhRef = _firestore.collection('LuuAnh').doc(idLuuAnh);
+          batch.set(luuAnhRef, {
+            'maAnh': idLuuAnh,
+            'anhURL': anhDownloadUrl,
+            'maNguoiDung': maNguoiYeuCau,
+            'maPhanLoaiAnh': 'phanloaianh_hientruong',
+            'maYeuCau': maYeuCau,
+          });
+        }
+      }
+
+      await batch.commit();
+      print("🎉 Đã tạo thành công đơn: $maYeuCau");
+      return true;
+    } catch (e) {
+      print("❌ Lỗi tạo đơn cứu hộ: $e");
+      return false;
+    }
   }
 }

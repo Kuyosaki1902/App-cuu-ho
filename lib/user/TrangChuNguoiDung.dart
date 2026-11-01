@@ -11,7 +11,10 @@ import 'MenuNguoiDung.dart';
 import 'package:cuhokhancap/user/MoTaTinhTrang.dart'; 
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
-import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart'; // Import service vẽ cứu hộ
+import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
+import 'package:cuhokhancap/user/Design/chi_tiet_nguoi_cuu_ho_card.dart'; // Import file card vừa tạo
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
+import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart'; 
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -39,7 +42,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
   bool _isKickedOut = false; 
   bool _isPanelExpanded = true;
 
-  // BIẾN QUẢN LÝ NGƯỜI CỨU HỘ
+  // BIẾN QUẢN LÝ NGƯỜI CỨU HỘ VÀ THẺ HIỂN THỊ CHI TIẾT
   final NguoiCuuHoService _cuuHoService = NguoiCuuHoService();
   StreamSubscription<ThongTinCuuHoData>? _cuuHoSubscription;
   ThongTinCuuHoData _duLieuCuuHo = ThongTinCuuHoData(
@@ -48,6 +51,9 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     thongBaoTrangThai: "Đang quét khu vực...", 
     thoiGianUocTinh: ""
   );
+
+  NguoiDungModel? _selectedRescuer;
+  String _selectedRescuerDistance = '';
 
   @override
   void initState() {
@@ -113,7 +119,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     _positionStreamSubscription?.cancel(); 
     _serviceStatusStreamSubscription?.cancel();
     _kickOutSubscription?.cancel();
-    _cuuHoSubscription?.cancel(); // Hủy lắng nghe cứu hộ khi thoát
+    _cuuHoSubscription?.cancel();
     
     if (!_isKickedOut) {
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false); 
@@ -171,7 +177,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     });
   }
 
-  // Sửa lại hàm này để gọi lắng nghe dữ liệu cứu hộ theo bán kính
   void _processAndUpdateLocation(Position position, {bool animateCamera = false}) {
     if (!mounted) return;
     
@@ -188,9 +193,25 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
       widget.maNguoiDung, position.latitude, position.longitude, geohash, true, 
     );
 
-    // Kích hoạt lắng nghe người cứu hộ Realtime với bán kính hiện tại
+    // Kích hoạt lắng nghe người cứu hộ Realtime & xử lý khi nhấn Marker
     _cuuHoSubscription?.cancel();
-    _cuuHoSubscription = _cuuHoService.langNgheNguoiCuuHo(_currentPosition, _currentRadius).listen((data) {
+    _cuuHoSubscription = _cuuHoService.langNgheNguoiCuuHo(
+      _currentPosition, 
+      _currentRadius,
+      onMarkerSelect: (rescuer, distanceStr) {
+        setState(() {
+          _selectedRescuer = rescuer;
+          _selectedRescuerDistance = distanceStr;
+        });
+
+        // Di chuyển camera đến vị trí người cứu hộ
+        if (rescuer.viDo != null && rescuer.kinhDo != null && _mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLng(LatLng(rescuer.viDo!, rescuer.kinhDo!)),
+          );
+        }
+      },
+    ).listen((data) {
       if (mounted) {
         setState(() {
           _duLieuCuuHo = data;
@@ -232,7 +253,15 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
             myLocationEnabled: _hasLocationPermission, 
             onMapCreated: (controller) => _mapController = controller,
             
-            // GẮN DANH SÁCH MARKER NGƯỜI CỨU HỘ VÀO BẢN ĐỒ
+            // XỬ LÝ NHẤN VÀO BẢN ĐỒ ĐỂ TẮT THẺ THÔNG TIN
+            onTap: (_) {
+              if (_selectedRescuer != null) {
+                setState(() {
+                  _selectedRescuer = null;
+                });
+              }
+            },
+            
             markers: _duLieuCuuHo.markers,
             
             circles: {
@@ -246,6 +275,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
               ),
             },
           ),
+          
+          // Thanh công cụ trên cùng
           Positioned(
             top: 50,
             left: 16,
@@ -294,6 +325,31 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
             child: _buildCircularButton(icon: Icons.center_focus_strong, onTap: _recenterCamera),
           ),
           
+          // THẺ CHI TIẾT NGƯỜI CỨU HỘ XỔ RA KHI NHẤN VÀO BIỂU TƯỢNG
+          if (_selectedRescuer != null)
+            Positioned(
+              top: 115,
+              left: 0,
+              right: 0,
+              child: ChiTietNguoiCuuHoCard(
+                rescuer: _selectedRescuer!,
+                distanceText: _selectedRescuerDistance,
+                onClose: () {
+                  setState(() {
+                    _selectedRescuer = null;
+                  });
+                },
+                onSendRequest: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Đã gửi yêu cầu ứng cứu tới ${_selectedRescuer!.hoTen}'),
+                      backgroundColor: const Color(0xFF00695C),
+                    ),
+                  );
+                },
+              ),
+            ),
+
           // BẢNG THÔNG TIN BOTTOM SHEET
           Positioned(
             bottom: 0,
@@ -360,7 +416,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
                           ),
                         ),
 
-                        // LIÊN KẾT ĐỘNG VỚI DỮ LIỆU CỨU HỘ
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -440,7 +495,43 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
                               ),
                               const SizedBox(height: 16),
                               ElevatedButton(
-                                onPressed: () {},
+                                onPressed: () async {
+                                  // Hiển thị loading
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (BuildContext context) {
+                                      return const Center(child: CircularProgressIndicator());
+                                    },
+                                  );
+
+                                  // Gọi hàm từ FirebaseService
+                                  bool success = await _firebaseService.taoYeuCauTimBacSiTuDong(
+                                    maNguoiYeuCau: widget.maNguoiDung,
+                                    viDo: _currentPosition.latitude,
+                                    kinhDo: _currentPosition.longitude,
+                                    // Truyền dữ liệu từ RAM vào
+                                    trieuChung: MoTaTamThoi.trieuChung,
+                                    moTaChiTiet: MoTaTamThoi.moTaChiTiet,
+                                    fileAnh: MoTaTamThoi.fileAnh,
+                                    fileGhiAm: MoTaTamThoi.fileGhiAm,
+                                  );
+
+                                  // Tắt loading
+                                  Navigator.pop(context);
+
+                                  if (success) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Tạo yêu cầu tìm bác sĩ tự động thành công!')),
+                                    );
+                                    // Xóa dữ liệu tạm sau khi gửi thành công
+                                    MoTaTamThoi.clear();
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại.')),
+                                    );
+                                  }
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF004D40),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -505,19 +596,16 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     );
   }
 
-  // LẮNG NGHE ĐỔI BÁN KÍNH
   Widget _buildRadiusOption(String text, double radiusValue) {
     bool isSelected = _currentRadius == radiusValue;
     return GestureDetector(
       onTap: () async {
         setState(() {
           _currentRadius = radiusValue;
+          _selectedRescuer = null; // Đóng card khi đổi bán kính
         });
         
-        // Cập nhật lại khung nhìn Camera
         _recenterCamera();
-        
-        // Gọi lại hàm quét để load người cứu hộ theo bán kính mới
         Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
         _processAndUpdateLocation(pos, animateCamera: false);
       },

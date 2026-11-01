@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart';
 
 class VictimConditionSheet extends StatefulWidget {
   const VictimConditionSheet({super.key});
@@ -14,12 +15,26 @@ class VictimConditionSheet extends StatefulWidget {
 class _VictimConditionSheetState extends State<VictimConditionSheet> {
   // Lưu trữ các triệu chứng được chọn
   final Set<String> _selectedSymptoms = {};
-  
+
   // --- BIẾN TRẠNG THÁI HÌNH ẢNH & ÂM THANH ---
   File? _capturedImage;
   String? _audioPath;
   bool _isRecording = false;
   final AudioRecorder _audioRecorder = AudioRecorder();
+
+  final TextEditingController _moTaController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Khôi phục dữ liệu đã lưu từ RAM lên giao diện
+    _selectedSymptoms.addAll(MoTaTamThoi.trieuChung);
+    _moTaController.text = MoTaTamThoi.moTaChiTiet;
+    _capturedImage = MoTaTamThoi.fileAnh;
+    if (MoTaTamThoi.fileGhiAm != null) {
+      _audioPath = MoTaTamThoi.fileGhiAm!.path;
+    }
+  }
 
   final List<Map<String, dynamic>> _symptoms = [
     {'name': 'Khó thở', 'color': Colors.red},
@@ -33,8 +48,11 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
   Future<void> _takePhoto() async {
     final picker = ImagePicker();
     // imageQuality giúp giảm dung lượng ảnh ngay từ lúc chụp
-    final XFile? photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
-    
+    final XFile? photo = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 70,
+    );
+
     if (photo != null) {
       final file = File(photo.path);
       final sizeInBytes = file.lengthSync();
@@ -43,7 +61,9 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
       if (sizeInMb > 10) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Kích thước ảnh vượt quá 10MB. Vui lòng chụp lại.')),
+            const SnackBar(
+              content: Text('Kích thước ảnh vượt quá 10MB. Vui lòng chụp lại.'),
+            ),
           );
         }
         return;
@@ -70,7 +90,11 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
           if (sizeInMb > 15) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('File ghi âm vượt quá 15MB. Vui lòng ghi âm ngắn hơn.')),
+                const SnackBar(
+                  content: Text(
+                    'File ghi âm vượt quá 15MB. Vui lòng ghi âm ngắn hơn.',
+                  ),
+                ),
               );
             }
             file.deleteSync(); // Xóa file quá dung lượng
@@ -87,12 +111,12 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
         // Kiểm tra quyền và bắt đầu ghi âm
         if (await _audioRecorder.hasPermission()) {
           setState(() => _isRecording = true);
-          
+
           // --- THAY ĐỔI ĐƯỜNG DẪN TẠI ĐÂY ---
           // Sử dụng path_provider để lấy thư mục cache chuẩn xác
           final Directory tempDir = await getTemporaryDirectory();
-          final String tempPath = '${tempDir.path}/temp_audio.m4a'; 
-          
+          final String tempPath = '${tempDir.path}/temp_audio.m4a';
+
           await _audioRecorder.start(const RecordConfig(), path: tempPath);
         }
       }
@@ -105,6 +129,8 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
   @override
   void dispose() {
     _audioRecorder.dispose();
+    _moTaController.dispose();
+
     super.dispose();
   }
 
@@ -150,8 +176,17 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Tình trạng người bị nạn", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text("Cập nhật ngay để bác sĩ chuẩn bị trước", style: TextStyle(fontSize: 13, color: Colors.grey)),
+                      Text(
+                        "Tình trạng người bị nạn",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        "Cập nhật ngay để bác sĩ chuẩn bị trước",
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),
@@ -163,7 +198,11 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                       color: Colors.grey.shade100,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close, color: Colors.black54, size: 20),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.black54,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -174,8 +213,18 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
             const Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("CHỌN NHANH TRIỆU CHỨNG", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
-                Text("Có thể chọn nhiều", style: TextStyle(fontSize: 11, color: Color(0xFF00695C))),
+                Text(
+                  "CHỌN NHANH TRIỆU CHỨNG",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
+                ),
+                Text(
+                  "Có thể chọn nhiều",
+                  style: TextStyle(fontSize: 11, color: Color(0xFF00695C)),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -195,12 +244,19 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFF004D40) : Colors.white,
+                      color: isSelected
+                          ? const Color(0xFF004D40)
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: isSelected ? const Color(0xFF004D40) : Colors.grey.shade300,
+                        color: isSelected
+                            ? const Color(0xFF004D40)
+                            : Colors.grey.shade300,
                       ),
                     ),
                     child: Row(
@@ -225,7 +281,14 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
             const SizedBox(height: 24),
 
             // Mô tả chi tiết bổ sung
-            const Text("MÔ TẢ CHI TIẾT BỔ SUNG", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+            const Text(
+              "MÔ TẢ CHI TIẾT BỔ SUNG",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54,
+              ),
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -237,10 +300,12 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const TextField(
+                  TextField(
+                    controller: _moTaController,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      hintText: "Mô tả cụ thể biểu hiện: nạn nhân còn tỉnh hay mê man, vị trí vết thương hở, nhịp thở...",
+                      hintText:
+                          "Mô tả cụ thể biểu hiện: nạn nhân còn tỉnh hay mê man, vị trí vết thương hở, nhịp thở...",
                       hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
@@ -252,21 +317,45 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.check_circle, color: Color(0xFF00695C), size: 16),
+                          Icon(
+                            Icons.check_circle,
+                            color: Color(0xFF00695C),
+                            size: 16,
+                          ),
                           SizedBox(width: 4),
-                          Text("Chia sẻ trực tiếp tới 6 bác sĩ lân cận", style: TextStyle(color: Color(0xFF00695C), fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text(
+                            "Chia sẻ trực tiếp tới 6 bác sĩ lân cận",
+                            style: TextStyle(
+                              color: Color(0xFF00695C),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
-                      Text("Tùy chọn", style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                      Text(
+                        "Tùy chọn",
+                        style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
 
             // Chứng cứ hình ảnh và âm thanh
-            const Text("CHỨNG CỨ HÌNH ẢNH & ÂM THANH", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+            const Text(
+              "CHỨNG CỨ HÌNH ẢNH & ÂM THANH",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54,
+              ),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -277,33 +366,61 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: _capturedImage != null ? const Color(0xFFE8F5E9) : Colors.white,
+                        color: _capturedImage != null
+                            ? const Color(0xFFE8F5E9)
+                            : Colors.white,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: _capturedImage != null ? Colors.green : Colors.grey.shade200),
+                        border: Border.all(
+                          color: _capturedImage != null
+                              ? Colors.green
+                              : Colors.grey.shade200,
+                        ),
                       ),
                       child: Column(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: _capturedImage != null ? Colors.green : const Color(0xFFE0F2F1), 
-                              shape: BoxShape.circle
+                              color: _capturedImage != null
+                                  ? Colors.green
+                                  : const Color(0xFFE0F2F1),
+                              shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              _capturedImage != null ? Icons.check : Icons.camera_alt, 
-                              color: _capturedImage != null ? Colors.white : const Color(0xFF00695C)
+                              _capturedImage != null
+                                  ? Icons.check
+                                  : Icons.camera_alt,
+                              color: _capturedImage != null
+                                  ? Colors.white
+                                  : const Color(0xFF00695C),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text(_capturedImage != null ? "Đã chụp 1 ảnh" : "Chụp ảnh / Video", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(_capturedImage != null ? "Bấm để chụp lại" : "Hiện trường, vết thương", style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                          Text(
+                            _capturedImage != null
+                                ? "Đã chụp 1 ảnh"
+                                : "Chụp ảnh / Video",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            _capturedImage != null
+                                ? "Bấm để chụp lại"
+                                : "Hiện trường, vết thương",
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 11,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                
+
                 // Khối Ghi âm
                 Expanded(
                   child: GestureDetector(
@@ -311,9 +428,15 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: _audioPath != null ? const Color(0xFFE8F5E9) : const Color(0xFFFFF9F9),
+                        color: _audioPath != null
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFF9F9),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: _audioPath != null ? Colors.green : const Color(0xFFFFEBEE)),
+                        border: Border.all(
+                          color: _audioPath != null
+                              ? Colors.green
+                              : const Color(0xFFFFEBEE),
+                        ),
                       ),
                       child: Stack(
                         alignment: Alignment.center,
@@ -323,26 +446,49 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: _isRecording ? Colors.red : (_audioPath != null ? Colors.green : const Color(0xFFFFEBEE)), 
-                                  shape: BoxShape.circle
+                                  color: _isRecording
+                                      ? Colors.red
+                                      : (_audioPath != null
+                                            ? Colors.green
+                                            : const Color(0xFFFFEBEE)),
+                                  shape: BoxShape.circle,
                                 ),
                                 child: Icon(
-                                  _isRecording ? Icons.stop : (_audioPath != null ? Icons.check : Icons.mic), 
-                                  color: _isRecording || _audioPath != null ? Colors.white : Colors.red
+                                  _isRecording
+                                      ? Icons.stop
+                                      : (_audioPath != null
+                                            ? Icons.check
+                                            : Icons.mic),
+                                  color: _isRecording || _audioPath != null
+                                      ? Colors.white
+                                      : Colors.red,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                _isRecording ? "Đang ghi âm..." : (_audioPath != null ? "Đã ghi âm" : "Ghi âm nhanh"), 
+                                _isRecording
+                                    ? "Đang ghi âm..."
+                                    : (_audioPath != null
+                                          ? "Đã ghi âm"
+                                          : "Ghi âm nhanh"),
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold, 
-                                  fontSize: 13, 
-                                  color: _isRecording ? Colors.red : (_audioPath != null ? Colors.green : Colors.red)
-                                )
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: _isRecording
+                                      ? Colors.red
+                                      : (_audioPath != null
+                                            ? Colors.green
+                                            : Colors.red),
+                                ),
                               ),
                               Text(
-                                _audioPath != null ? "Bấm để ghi đè" : "Nhấn để nói", 
-                                style: const TextStyle(color: Colors.grey, fontSize: 11)
+                                _audioPath != null
+                                    ? "Bấm để ghi đè"
+                                    : "Nhấn để nói",
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
                               ),
                             ],
                           ),
@@ -350,8 +496,12 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                             const Positioned(
                               top: 0,
                               right: 12,
-                              child: Icon(Icons.circle, color: Colors.red, size: 8),
-                            )
+                              child: Icon(
+                                Icons.circle,
+                                color: Colors.red,
+                                size: 8,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -363,28 +513,56 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
 
             // Nút Xác nhận
             ElevatedButton(
-              onPressed: () {},
+              onPressed: () {
+                // LƯU VÀO RAM TẠM THỜI
+                MoTaTamThoi.trieuChung = _selectedSymptoms.toList();
+                MoTaTamThoi.moTaChiTiet = _moTaController.text.trim();
+                MoTaTamThoi.fileAnh = _capturedImage;
+                MoTaTamThoi.fileGhiAm = _audioPath != null
+                    ? File(_audioPath!)
+                    : null;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã lưu mô tả hiện trường!')),
+                );
+                Navigator.pop(context);
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF004D40), // Xanh rêu đậm
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.send, color: Colors.white, size: 18),
                   SizedBox(width: 8),
-                  Text("Xác nhận & Gửi bác sĩ ngay", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Xác nhận & Gửi bác sĩ ngay",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            
+
             // Nút để sau
             Center(
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text("Để sau, tôi sẽ trao đổi qua điện thoại", style: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  "Để sau, tôi sẽ trao đổi qua điện thoại",
+                  style: TextStyle(
+                    color: Colors.black54,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],

@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Thay đúng đường dẫn model của dự án
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 
 class ThongTinCuuHoData {
   final Set<Marker> markers;
@@ -25,7 +25,11 @@ class ThongTinCuuHoData {
 class NguoiCuuHoService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Stream<ThongTinCuuHoData> langNgheNguoiCuuHo(LatLng myPosition, double currentRadius) {
+  Stream<ThongTinCuuHoData> langNgheNguoiCuuHo(
+    LatLng myPosition, 
+    double currentRadius, {
+    Function(NguoiDungModel rescuer, String distanceStr)? onMarkerSelect,
+  }) {
     return _firestore
         .collection('NguoiDung')
         .where('isOnline', isEqualTo: true)
@@ -93,7 +97,11 @@ class NguoiCuuHoService {
             markerId: MarkerId(user.maNguoiDung ?? 'rescuer_$i'),
             position: position,
             icon: icon,
-            infoWindow: InfoWindow(title: user.hoTen, snippet: distanceStr),
+            onTap: () {
+              if (onMarkerSelect != null) {
+                onMarkerSelect(user, distanceStr);
+              }
+            },
           )
         );
       }
@@ -128,27 +136,23 @@ class NguoiCuuHoService {
     });
   }
 
-  // Hàm vẽ Marker custom nhỏ gọn, vừa vặn trên bản đồ
   Future<BitmapDescriptor> _taohinhAnhMarker(String text) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..isAntiAlias = true;
 
-    // Kích thước chuẩn nhỏ gọn: 80x100 (thay vì 140x180 như cũ)
     const double width = 80;
     const double height = 100;
 
-    // 1. Hình tròn Avatar xanh ở trên
     paint.color = const Color(0xFF00695C);
     canvas.drawCircle(const Offset(width / 2, 28), 26, paint);
     
     paint.color = Colors.white;
     canvas.drawCircle(const Offset(width / 2, 28), 22.5, paint);
 
-    // Icon người nhỏ gọn bên trong
     TextPainter iconPainter = TextPainter(textDirection: TextDirection.ltr);
     iconPainter.text = TextSpan(
-      text: String.fromCharCode(0xe491), // Icons.person
+      text: String.fromCharCode(0xe491),
       style: const TextStyle(
         fontSize: 30, 
         fontFamily: 'MaterialIcons', 
@@ -161,7 +165,6 @@ class NguoiCuuHoService {
       Offset((width / 2) - (iconPainter.width / 2), 28 - (iconPainter.height / 2)),
     );
 
-    // 2. Bảng bo góc hiển thị số mét
     paint.color = const Color(0xFF00695C);
     RRect rrectBorder = RRect.fromRectAndRadius(
       const Rect.fromLTWH(6, 56, 68, 28), 
@@ -176,7 +179,6 @@ class NguoiCuuHoService {
     );
     canvas.drawRRect(rrectBg, paint);
 
-    // 3. Mũi tên chỉ xuống điểm tọa độ
     Path path = Path();
     path.moveTo(width / 2 - 7, 84);
     path.lineTo(width / 2 + 7, 84);
@@ -185,7 +187,6 @@ class NguoiCuuHoService {
     paint.color = const Color(0xFF00695C);
     canvas.drawPath(path, paint);
 
-    // 4. Chữ khoảng cách (VD: 81 m, 1.2 km)
     TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
     textPainter.text = TextSpan(
       text: text,
