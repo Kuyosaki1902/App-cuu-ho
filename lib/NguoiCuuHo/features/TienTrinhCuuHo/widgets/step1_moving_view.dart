@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../controllers/rescue_process_controller.dart';
 
 class Step1MovingHeader extends StatelessWidget {
   const Step1MovingHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final controller = context.watch<RescueProcessController>();
+
     return Container(
-      width: double.infinity, // 🟢 Full Width
-      height: 95, // 🟢 Chiều cao đồng nhất
+      width: double.infinity,
+      height: 95,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFE52525),
@@ -40,13 +44,13 @@ class Step1MovingHeader extends StatelessWidget {
                   color: Colors.black26,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.speed, color: Colors.white, size: 12),
-                    SizedBox(width: 4),
+                    const Icon(Icons.speed, color: Colors.white, size: 12),
+                    const SizedBox(width: 4),
                     Text(
-                      'Tốc độ: 34 km/h',
-                      style: TextStyle(color: Colors.white, fontSize: 10),
+                      'Tốc độ: ${controller.currentSpeedKmH.toStringAsFixed(0)} km/h',
+                      style: const TextStyle(color: Colors.white, fontSize: 10),
                     ),
                   ],
                 ),
@@ -57,20 +61,22 @@ class Step1MovingHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 🟢 Hiển thị khoảng cách realtime từ controller
                   Text(
-                    'CÒN 350M',
-                    style: TextStyle(
+                    'CÒN ${controller.distanceText.toUpperCase()}',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
+                  // 🟢 Hiển thị thời gian dự kiến realtime từ controller
                   Text(
-                    'Dự kiến đến trong ~2 phút',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                    controller.durationText,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 ],
               ),

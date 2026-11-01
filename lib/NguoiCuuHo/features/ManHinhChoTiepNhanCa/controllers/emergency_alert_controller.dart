@@ -114,6 +114,9 @@ class EmergencyAlertController extends ChangeNotifier {
     _moveCameraToFitPositions();
   }
 
+  // Thêm biến cờ để kiểm soát việc chỉ khởi tạo đếm ngược 1 lần duy nhất cho mỗi yêu cầu
+  bool _isAssignmentProcessed = false;
+
   void listenForNewAssignment(
     String currentUserId,
     BuildContext context,
@@ -121,6 +124,7 @@ class EmergencyAlertController extends ChangeNotifier {
     _assignmentSubscription?.cancel();
     currentDoctorId = currentUserId;
     currentContext = context;
+    _isAssignmentProcessed = false; // Reset cờ khi lắng nghe mới
 
     await _fetchDoctorInfo(currentUserId);
 
@@ -142,6 +146,7 @@ class EmergencyAlertController extends ChangeNotifier {
               Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
               String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
 
+              // Chỉ bắt các ca đang chờ tiếp nhận
               if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
                   trangThai.isEmpty) {
                 targetDoc = doc;
@@ -150,17 +155,20 @@ class EmergencyAlertController extends ChangeNotifier {
                         (data['maYeuCau'] ?? '').toString().isNotEmpty
                     ? data['maYeuCau'].toString()
                     : doc.id;
+                currentMaYeuCau = foundMaYeuCau;
                 break;
               }
             }
 
-            if (foundMaYeuCau.isNotEmpty) {
-              currentMaYeuCau = foundMaYeuCau;
+            // 🟢 QUAN TRỌNG: Chỉ chạy logic âm thanh và đếm ngược nếu HÃY CÒN MỚI và CHƯA BỊ XỬ LÝ
+            if (foundMaYeuCau.isNotEmpty && !_isAssignmentProcessed) {
+              _isAssignmentProcessed =
+                  true; // Khóa lại ngay lập tức để không bị gọi lại nhiều lần
               await _playEmergencySound();
               await _fetchVictimRequestDetails(foundMaYeuCau);
               fetchRealtimeRoute();
 
-              // 🟢 Bắt đầu đếm ngược 3 phút khi nhận ca thành công
+              // Bắt đầu đếm ngược 3 phút
               _startCountdown();
             }
           }
@@ -292,6 +300,10 @@ class EmergencyAlertController extends ChangeNotifier {
     }
   }
 
+  // 1. Thêm biến lưu mức độ khẩn cấp (mặc định là 1)
+  int mucDoKhanCap = 1;
+
+  // 2. Trong hàm _fetchVictimRequestDetails, bổ sung đọc field mucDoKhanCap:
   Future<void> _fetchVictimRequestDetails(String maYeuCau) async {
     try {
       DocumentSnapshot yeuCauDoc = await _firestore
@@ -301,6 +313,10 @@ class EmergencyAlertController extends ChangeNotifier {
 
       if (yeuCauDoc.exists && yeuCauDoc.data() != null) {
         var yeuCauData = yeuCauDoc.data() as Map<String, dynamic>;
+
+        // 🟢 Đọc mức độ khẩn cấp (nếu không có thì mặc định là 1)
+        mucDoKhanCap =
+            int.tryParse(yeuCauData['mucDoKhanCap']?.toString() ?? '1') ?? 1;
 
         String? ycGeohash = yeuCauData['geoHash'] ?? yeuCauData['geohash'];
         if (ycGeohash != null && ycGeohash.isNotEmpty) {
@@ -354,6 +370,39 @@ class EmergencyAlertController extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Lỗi đọc bảng YeuCauCuuHo & NguoiDung: $e');
+    }
+  }
+
+  // 🟢 KHI BẤM NHẬN CA / BẮT ĐẦU ĐIỀU HƯỚNG: CẬP NHẬT nhanCaCuuHo = true
+  Future<void> acceptAssignment() async {
+    await stopEmergencySound();
+    _timer?.cancel();
+
+    if (currentDoctorId.isNotEmpty && currentMaYeuCau.isNotEmpty) {
+      try {
+        String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+        // a. Cập nhật trạng thái tiếp nhận thành công
+        await _firestore
+            .collection('ChiTietPhanCongCuuHo')
+            .doc(currentDoctorId)
+            .collection('DanhSachNgay')
+            .doc(todayStr)
+            .collection('DanhSachPhanCong')
+            .doc(currentMaYeuCau)
+            .set({
+              'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_tiepnhan',
+            }, SetOptions(merge: true));
+
+        // b. Cập nhật nhanCaCuuHo = true (Đang bận trong ca trực)
+        await _firestore.collection('NguoiDung').doc(currentDoctorId).set({
+          'nhanCaCuuHo': true,
+        }, SetOptions(merge: true));
+
+        debugPrint('Đã tiếp nhận ca, đặt nhanCaCuuHo = true thành công.');
+      } catch (e) {
+        debugPrint('Lỗi cập nhật tiếp nhận ca: $e');
+      }
     }
   }
 

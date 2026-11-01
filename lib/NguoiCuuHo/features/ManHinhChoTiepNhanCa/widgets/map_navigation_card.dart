@@ -15,13 +15,16 @@ class MapNavigationCard extends StatefulWidget {
 
 class _MapNavigationCardState extends State<MapNavigationCard> {
   BitmapDescriptor? _customVictimIcon;
+  int? _lastMucDo;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = context.watch<EmergencyAlertController>();
+    if (_lastMucDo != controller.mucDoKhanCap) {
+      _lastMucDo = controller.mucDoKhanCap;
       _loadCustomVictimMarker();
-    });
+    }
   }
 
   Future<void> _loadCustomVictimMarker() async {
@@ -40,7 +43,7 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
       distance: distanceInMeters,
       avatarBytes: null,
       primaryColor: Colors.white,
-      relationBadge: null,
+      mucDo: controller.mucDoKhanCap,
     );
 
     if (mounted) {
@@ -50,55 +53,53 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
     }
   }
 
-  // 🟢 VẼ CANVAS NỀN TRẮNG HÌNH TRÒN TUYỆT ĐỐI GIỐNG AVATAR
+  // 🟢 VẼ CANVAS NỀN TRẮNG VỚI ICON ĐỔI MÀU THEO MỨC ĐỘ KHẨN CẤP
   Future<BitmapDescriptor> createCustomUserMarker({
     required double distance,
     Uint8List? avatarBytes,
     Color primaryColor = Colors.white,
-    String? relationBadge,
+    required int mucDo,
   }) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
 
-    const double size = 96.0; // Kích thước tổng thể canvas hình vuông
+    const double size = 96.0;
     const double radius = size / 2;
 
-    // 1. Đổ bóng mượt quanh hình tròn
     final Path shadowPath = Path()
       ..addOval(
         Rect.fromCircle(center: Offset(radius, radius), radius: radius - 4),
       );
     canvas.drawShadow(shadowPath, Colors.black.withOpacity(0.22), 5.0, true);
 
-    // 2. Nền trắng hình tròn hoàn toàn
     final Paint bgPaint = Paint()
       ..color = primaryColor
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(Offset(radius, radius), radius - 4, bgPaint);
 
-    // Thêm viền nhẹ sắc nét quanh vòng tròn trắng
     final Paint borderPaint = Paint()
       ..color = Colors.grey.withOpacity(0.15)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawCircle(Offset(radius, radius), radius - 4, borderPaint);
 
-    // 3. Icon Người dùng màu xanh dương ở chính giữa
+    // 🟢 Đổi màu icon theo mức độ (1: Đỏ, 2: Vàng/Cam)
+    Color iconColor = mucDo == 1
+        ? const Color(0xFFE52525)
+        : Colors.amber.shade800;
+
     TextPainter userIconPainter = TextPainter(textDirection: TextDirection.ltr);
     userIconPainter.text = TextSpan(
       text: String.fromCharCode(Icons.person.codePoint),
       style: TextStyle(
-        fontSize: 42.0, // Kích thước icon cân đối bên trong hình tròn
+        fontSize: 42.0,
         fontFamily: Icons.person.fontFamily,
-        color: const Color(0xFF0088CC),
+        color: iconColor,
       ),
     );
     userIconPainter.layout();
-    userIconPainter.paint(
-      canvas,
-      Offset(radius - 21, radius - 21), // Căn giữa tuyệt đối icon
-    );
+    userIconPainter.paint(canvas, Offset(radius - 21, radius - 21));
 
     final ui.Image image = await pictureRecorder.endRecording().toImage(
       size.toInt(),
@@ -115,12 +116,17 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
   Widget build(BuildContext context) {
     final controller = context.watch<EmergencyAlertController>();
 
+    bool isLevel1 = controller.mucDoKhanCap == 1;
+    Color themeColor = isLevel1
+        ? const Color(0xFFE52525)
+        : Colors.amber.shade800;
+
     final Set<Polyline> polylines = {
       if (controller.polylineCoordinates.isNotEmpty)
         Polyline(
           polylineId: const PolylineId('real_world_route'),
           points: controller.polylineCoordinates,
-          color: const ui.Color.fromARGB(255, 11, 59, 230),
+          color: themeColor, // 🟢 Đổi màu đường đi theo mức độ
           width: 6,
           startCap: Cap.roundCap,
           endCap: Cap.roundCap,
@@ -134,7 +140,9 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
         position: controller.victimLocation,
         icon:
             _customVictimIcon ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+            BitmapDescriptor.defaultMarkerWithHue(
+              isLevel1 ? BitmapDescriptor.hueRed : BitmapDescriptor.hueOrange,
+            ),
         anchor: const Offset(0.5, 0.5),
         infoWindow: InfoWindow(
           title: controller.victimName,
@@ -197,18 +205,18 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.near_me_outlined,
                             size: 16,
-                            color: Color(0xFFE52525),
+                            color: themeColor, // 🟢 Đổi màu icon khoảng cách
                           ),
                           const SizedBox(width: 4),
                           Text(
                             controller.distanceText,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFE52525),
+                              color: themeColor, // 🟢 Đổi màu chữ khoảng cách
                             ),
                           ),
                         ],
@@ -216,7 +224,6 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                     ),
                   ),
 
-                  // 🟢 THAY THẾ ROW THÀNH 3 NÚT TƯƠNG TÁC ĐƯỢC
                   Positioned(
                     top: 10,
                     right: 10,
@@ -227,6 +234,7 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                           Icons.car_crash_outlined,
                           controller.carTime,
                           'driving',
+                          themeColor,
                         ),
                         const SizedBox(width: 6),
                         _buildModeButton(
@@ -234,6 +242,7 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                           Icons.motorcycle_outlined,
                           controller.motoTime,
                           'cycling',
+                          themeColor,
                         ),
                         const SizedBox(width: 6),
                         _buildModeButton(
@@ -241,6 +250,7 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                           Icons.directions_walk,
                           controller.walkTime,
                           'foot',
+                          themeColor,
                         ),
                       ],
                     ),
@@ -257,12 +267,14 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFEBEE),
+                    color: isLevel1
+                        ? const Color(0xFFFFEBEE)
+                        : const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.location_on,
-                    color: Color(0xFFE52525),
+                    color: themeColor, // 🟢 Đổi màu icon địa chỉ
                     size: 20,
                   ),
                 ),
@@ -301,12 +313,12 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
     );
   }
 
-  // 🟢 HÀM BUILD NÚT CHỌN PHƯƠNG TIỆN CÓ HIỆU ỨNG ĐỔI MÀU
   Widget _buildModeButton(
     EmergencyAlertController controller,
     IconData icon,
     String text,
     String modeValue,
+    Color themeColor,
   ) {
     bool isSelected = controller.selectedTravelMode == modeValue;
 
@@ -317,17 +329,13 @@ class _MapNavigationCardState extends State<MapNavigationCard> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE52525) : Colors.white,
+          color: isSelected ? themeColor : Colors.white,
           borderRadius: BorderRadius.circular(8),
           boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? Colors.white : const Color(0xFFE52525),
-            ),
+            Icon(icon, size: 16, color: isSelected ? Colors.white : themeColor),
             const SizedBox(width: 4),
             Text(
               text,

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../controllers/rescue_process_controller.dart';
 
 class Step2ArrivedHeader extends StatelessWidget {
   const Step2ArrivedHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // 🟢 Lấy controller để đọc địa chỉ và tọa độ thực tế của nạn nhân
+    final controller = context.watch<RescueProcessController>();
+
     return Container(
-      width: double.infinity, // 🟢 Full Width
-      height: 95, // 🟢 Chiều cao đồng nhất
+      width: double.infinity,
+      height: 95,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFB71C1C),
@@ -35,14 +40,16 @@ class Step2ArrivedHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Tọa độ: 10.7324° N, 106.7218° E (Sai số: ±3m)',
-            style: TextStyle(color: Colors.white70, fontSize: 11),
+          // 🟢 Hiển thị tọa độ thực tế từ controller của nạn nhân
+          Text(
+            'Tọa độ: ${controller.victimLocation.latitude.toStringAsFixed(4)}° N, ${controller.victimLocation.longitude.toStringAsFixed(4)}° E (Sai số: ±3m)',
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
           ),
           const SizedBox(height: 2),
-          const Text(
-            'Hẻm 142/18 Huỳnh Tấn Phát, P. Tân Thuận Tây, Q.7',
-            style: TextStyle(
+          // 🟢 Hiển thị địa chỉ text thực tế đã geocode từ Firestore
+          Text(
+            controller.victimAddress,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 11,
               fontWeight: FontWeight.w500,

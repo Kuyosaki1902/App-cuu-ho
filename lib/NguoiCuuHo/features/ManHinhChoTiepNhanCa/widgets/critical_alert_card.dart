@@ -9,12 +9,32 @@ class CriticalAlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<EmergencyAlertController>();
 
+    // 🟢 Kiểm tra mức độ khẩn cấp để đổi màu linh hoạt (1: Đỏ, 2: Vàng/Cam)
+    bool isLevel1 = controller.mucDoKhanCap == 1;
+    Color themeColor = isLevel1 ? Colors.red : Colors.amber.shade800;
+    Color bgColor = isLevel1
+        ? const Color(0xFFFFF5F5)
+        : const Color(0xFFFFFBEB);
+    Color borderColor = isLevel1
+        ? const Color(0xFFFFCDD2)
+        : const Color(0xFFFDE68A);
+    Color badgeBgColor = isLevel1
+        ? const Color(0xFFFFEBEE)
+        : const Color(0xFFFEF3C7);
+    String labelText = isLevel1 ? 'NGUY KỊCH' : 'CẤP ĐỘ 2';
+    String titleText = isLevel1
+        ? 'CẢNH BÁO CẤP NGUY KỊCH'
+        : 'CẢNH BÁO CẤP ĐỘ 2';
+    String descText = isLevel1
+        ? 'Sự cố y tế nguy kịch đã đối soát năng lực phản ứng gần bạn'
+        : 'Sự cố y tế cấp độ 2 đã đối soát năng lực phản ứng gần bạn';
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF5F5),
+        color: bgColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFCDD2), width: 1),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -25,19 +45,19 @@ class CriticalAlertCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFEBEE),
+                  color: badgeBgColor,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.circle, color: Colors.red, size: 8),
-                    SizedBox(width: 4),
+                    Icon(Icons.circle, color: themeColor, size: 8),
+                    const SizedBox(width: 4),
                     Text(
-                      'NGUY KỊCH',
+                      labelText,
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: themeColor,
                       ),
                     ),
                   ],
@@ -51,22 +71,18 @@ class CriticalAlertCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFCDD2)),
+                  border: Border.all(color: borderColor),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.timer_outlined,
-                      color: Colors.red,
-                      size: 14,
-                    ),
+                    Icon(Icons.timer_outlined, color: themeColor, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       controller.formattedTimer,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: themeColor,
                       ),
                     ),
                   ],
@@ -75,9 +91,9 @@ class CriticalAlertCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const Text(
-            'CẢNH BÁO CẤP NGUY KỊCH',
-            style: TextStyle(
+          Text(
+            titleText,
+            style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
               color: Color(0xFF0F172A),
@@ -85,9 +101,9 @@ class CriticalAlertCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Sự cố y tế nguy kịch đã đối soát năng lực phản ứng gần bạn',
-            style: TextStyle(
+          Text(
+            descText,
+            style: const TextStyle(
               fontSize: 11,
               color: Color(0xFF64748B),
               height: 1.3,
@@ -100,8 +116,10 @@ class CriticalAlertCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: controller.progressValue,
               minHeight: 6,
-              backgroundColor: Colors.red.shade100,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.red),
+              backgroundColor: isLevel1
+                  ? Colors.red.shade100
+                  : Colors.amber.shade100,
+              valueColor: AlwaysStoppedAnimation<Color>(themeColor),
             ),
           ),
         ],

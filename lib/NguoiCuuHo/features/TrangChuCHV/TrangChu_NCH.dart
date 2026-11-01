@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
@@ -6,6 +7,7 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/header.dart'
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/bottom.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'widgets/map_section.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ManHinhChoTiepNhanCa/ManHinhCho.dart';
 
@@ -18,22 +20,27 @@ class Trangchunguoicuuho extends StatefulWidget {
 
 class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
+  bool _isNavigating = false; // Biến cờ ngăn việc gọi Navigator.push liên tục
 
   @override
   void initState() {
     super.initState();
-    // 🟢 1. ĐẶT ĐOẠN CODE LẮNG NGHE Ở ĐÂY
+    // 🟢 Khởi động lắng nghe thời gian thực phân công cứu hộ
     _listenForRescueAssignments();
   }
 
-  // 🟢 HÀM LẮNG NGHE PHÂN CÔNG CỨU HỘ VÀ TỰ ĐỘNG NHẢY SANG MANHINHCHO
-  // 🟢 Nhớ import intl để lấy ngày định dạng yyyy-MM-dd
-
   void _listenForRescueAssignments() {
-    String currentUserId = 'nguoidung2'; // ID của cứu hộ viên hiện tại
+    String currentUserId = 'nguoidung2'; // Giữ nguyên dữ liệu giả của bạn
+
+    // 🟢 Lưu ý: Nếu dữ liệu giả của bạn trên Firebase lưu ở ngày cũ (vd: 2026-10-28),
+    // hãy sửa DateTime.now() thành ngày đó để test. Nếu bạn tạo ca mới hôm nay thì giữ nguyên.
     String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
-    // 🟢 TRUY VẤN VÀO NÚT: ChiTietPhanCongCuuHo -> maNguoiDung -> DanhSachNgay -> yyyy-MM-dd -> DanhSachPhanCong
+    if (_isNavigating) return;
+    _assignmentSubscription?.cancel();
+
+    debugPrint('🔍 [TrangChu] Lắng nghe user: $currentUserId ngày: $todayStr');
+
     _assignmentSubscription = FirebaseFirestore.instance
         .collection('ChiTietPhanCongCuuHo')
         .doc(currentUserId)
@@ -42,34 +49,73 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
         .collection('DanhSachPhanCong')
         .snapshots()
         .listen((snapshot) {
-          if (snapshot.docs.isNotEmpty && mounted) {
-            bool coCaChoPhanHoi = false;
+          if (!mounted || _isNavigating) return;
 
-            // 🟢 Duyệt qua toàn bộ các maYeuCau trong sub-collection DanhSachPhanCong
+          if (snapshot.docs.isNotEmpty) {
+            String targetMaYeuCau = '';
+            bool hasDangTienTrinh = false;
+            bool hasChoTiepNhan = false;
+
             for (var doc in snapshot.docs) {
               Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
               String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
 
-              // Kiểm tra xem có ca nào đang ở trạng thái chờ phản hồi không
-              if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan') {
-                coCaChoPhanHoi = true;
-                break; // Tìm thấy ca đầu tiên thì dừng vòng lặp
+              String maYeuCauTmp =
+                  (data['maYeuCau'] ?? '').toString().isNotEmpty
+                  ? data['maYeuCau'].toString()
+                  : doc.id;
+
+              debugPrint(
+                '📄 Quét thấy ca: $maYeuCauTmp | Trạng thái: $trangThai',
+              );
+
+              // 🟢 CHỈ DÙNG SO SÁNH TUYỆT ĐỐI (==), KHÔNG DÙNG .contains()
+              if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
+                  trangThai == 'cuuho_trangthai_phancong_dangthuchien') {
+                hasDangTienTrinh = true;
+                targetMaYeuCau = maYeuCauTmp;
+                break; // Ưu tiên 1: Đẩy vào lại tiến trình (Step 1,2,3)
+              }
+
+              // 🟢 Trạng thái chờ đổ chuông
+              if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
+                  trangThai.isEmpty) {
+                hasChoTiepNhan = true;
+                targetMaYeuCau = maYeuCauTmp;
               }
             }
 
-            // 🟢 Nếu có ca chờ phản hồi -> Mở màn hình Manhinhcho
-            if (coCaChoPhanHoi) {
-              // Hủy lắng nghe tạm thời để tránh mở đè nhiều màn hình trùng lặp
+            // Điều hướng
+            if (hasDangTienTrinh && targetMaYeuCau.isNotEmpty) {
+              _isNavigating = true;
               _assignmentSubscription?.cancel();
 
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      Manhinhcho(currentUserId: currentUserId),
+                  builder: (context) => TienTrinhCuuHo(
+                    currentUserId: currentUserId,
+                    maYeuCauCuuHo: targetMaYeuCau,
+                  ),
                 ),
               ).then((_) {
-                // Lắng nghe lại khi cứu hộ viên đóng hoặc quay về từ Manhinhcho
+                _isNavigating = false;
+                _listenForRescueAssignments();
+              });
+            } else if (hasChoTiepNhan && targetMaYeuCau.isNotEmpty) {
+              _isNavigating = true;
+              _assignmentSubscription?.cancel();
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => Manhinhcho(
+                    currentUserId: currentUserId,
+                    maYeuCauCuuHo: targetMaYeuCau,
+                  ),
+                ),
+              ).then((_) {
+                _isNavigating = false;
                 _listenForRescueAssignments();
               });
             }
@@ -79,7 +125,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
 
   @override
   void dispose() {
-    // 🟢 HỦY LẮNG NGHE KHỦI MEMORY LEAK KHI DISPOSE WIDGET
+    // 🟢 Hủy lắng nghe để tránh rò rỉ bộ nhớ (Memory Leak)
     _assignmentSubscription?.cancel();
     super.dispose();
   }
@@ -121,7 +167,6 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                   ),
 
                   // 2. Map Section
-                  // 2. Map Section
                   Expanded(
                     child: MapSection(
                       currentPosition: controller.currentPosition,
@@ -130,20 +175,13 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                       isOnline: controller.isOnline,
                       RefreshLocation: controller.initLocationService,
                       nearbyUsers: controller.nearbyUsers,
-
-                      // 🟢 THÊM DEBUG PRINT ĐỂ KIỂM TRA LUỒNG CHẠY
                       onCallAllRelatives: (user, danhSachNguoiThan) async {
                         debugPrint(
                           '👉 [TrangChu] Đã nhận callback onCallAllRelatives!',
                         );
 
-                        String victimUserId =
-                            user['userId'] ?? ''; // maNguoiDung
+                        String victimUserId = user['userId'] ?? '';
                         String victimName = user['hoTen'] ?? 'Người dùng';
-
-                        debugPrint(
-                          '👉 [TrangChu] victimUserId: $victimUserId, victimName: $victimName',
-                        );
 
                         if (victimUserId.isEmpty) {
                           debugPrint('❌ Lỗi: victimUserId bị trống!');
@@ -158,15 +196,11 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                           ),
                         );
 
-                        // Gọi trực tiếp hàm trong controller của bạn
                         try {
                           await controller.triggerEmergencyCallToRelative(
                             victimUserId: victimUserId,
                             danhSachNguoiThan: danhSachNguoiThan,
                             victimName: victimName,
-                          );
-                          debugPrint(
-                            '✅ [TrangChu] Đã gọi xong triggerEmergencyCallToRelative từ controller!',
                           );
                         } catch (e) {
                           debugPrint('❌ [TrangChu] Lỗi khi gọi controller: $e');

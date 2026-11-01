@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,16 +11,21 @@ import 'widgets/map_navigation_card.dart';
 import 'widgets/victim_info_card.dart';
 
 class Manhinhcho extends StatelessWidget {
-  final String currentUserId; // 🟢 Truyền mã cứu hộ viên vào màn hình
+  final String currentUserId;
+  final String maYeuCauCuuHo;
 
-  const Manhinhcho({super.key, this.currentUserId = 'nguoidung2'});
+  const Manhinhcho({
+    super.key,
+    required this.currentUserId,
+    required this.maYeuCauCuuHo,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (context) {
         final controller = EmergencyAlertController();
-        // 🟢 Kích hoạt lắng nghe dữ liệu từ YeuCauCuuHo và ChiTietPhanCongCuuHo
+        //Kích hoạt lắng nghe dữ liệu từ YeuCauCuuHo và ChiTietPhanCongCuuHo
         controller.listenForNewAssignment(currentUserId, context);
         return controller;
       },
@@ -49,24 +56,42 @@ class Manhinhcho extends StatelessWidget {
                               const SizedBox(height: 10),
                               const VictimInfoCard(),
                               const SizedBox(height: 12),
+                              // Trong tệp ManHinhCho.dart (hoặc ManHinhCho_2.dart)
                               SizedBox(
                                 width: double.infinity,
                                 height: 50,
                                 child: ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFE52525),
+                                    // 🟢 Chuyển màu nút dựa vào mức độ khẩn cấp (1: Đỏ, 2: Vàng đậm/Cam)
+                                    backgroundColor:
+                                        controller.mucDoKhanCap == 1
+                                        ? const Color(0xFFE52525)
+                                        : Colors.amber.shade800,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     elevation: 2,
                                   ),
-                                  onPressed: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => TienTrinhCuuHo(),
-                                      ),
-                                    );
+                                  onPressed: () async {
+                                    // Lấy sẵn các giá trị cần thiết từ controller hiện tại trước khi chuyển trang
+                                    String doctorId =
+                                        controller.currentDoctorId;
+                                    String maYeuCau =
+                                        controller.currentMaYeuCau;
+
+                                    await controller.acceptAssignment();
+
+                                    if (context.mounted) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => TienTrinhCuuHo(
+                                            currentUserId: doctorId,
+                                            maYeuCauCuuHo: maYeuCau,
+                                          ),
+                                        ),
+                                      );
+                                    }
                                   },
                                   icon: const Icon(
                                     Icons.navigation,
@@ -74,7 +99,7 @@ class Manhinhcho extends StatelessWidget {
                                     size: 20,
                                   ),
                                   label: const Text(
-                                    'NHẬN CỨU HỘ',
+                                    'CỨU HỘ NGAY',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,

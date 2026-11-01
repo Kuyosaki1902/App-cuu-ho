@@ -9,6 +9,13 @@ class VictimInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<EmergencyAlertController>();
 
+    bool isLevel1 = controller.mucDoKhanCap == 1;
+    Color themeColor = isLevel1 ? Colors.red : Colors.amber.shade800;
+    Color badgeBgColor = isLevel1
+        ? const Color(0xFFFFEBEE)
+        : const Color(0xFFFEF3C7);
+    String labelText = isLevel1 ? 'Nguy kịch' : 'Cấp độ 2';
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -32,19 +39,19 @@ class VictimInfoCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFEBEE),
+                  color: badgeBgColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.circle, color: Colors.red, size: 6),
-                    SizedBox(width: 4),
+                    Icon(Icons.circle, color: themeColor, size: 6),
+                    const SizedBox(width: 4),
                     Text(
-                      'Nguy kịch',
+                      labelText,
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: themeColor,
                       ),
                     ),
                   ],
@@ -94,7 +101,7 @@ class VictimInfoCard extends StatelessWidget {
                 ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE52525),
+                    backgroundColor: themeColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -124,16 +131,22 @@ class VictimInfoCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF5F5),
+                color: isLevel1
+                    ? const Color(0xFFFFF5F5)
+                    : const Color(0xFFFFFBEB),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFFCDD2)),
+                border: Border.all(
+                  color: isLevel1
+                      ? const Color(0xFFFFCDD2)
+                      : const Color(0xFFFDE68A),
+                ),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: themeColor,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
@@ -143,7 +156,7 @@ class VictimInfoCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -152,22 +165,18 @@ class VictimInfoCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                            color: themeColor,
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
+                        const SizedBox(height: 2),
+                        const Text(
                           'Bấm để xem video & đánh giá nhanh',
                           style: TextStyle(fontSize: 10, color: Colors.grey),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(
-                    Icons.play_circle_fill,
-                    color: Colors.red,
-                    size: 24,
-                  ),
+                  Icon(Icons.play_circle_fill, color: themeColor, size: 24),
                 ],
               ),
             ),
