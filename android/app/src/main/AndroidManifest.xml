@@ -2,6 +2,16 @@
 <!-- 🌟 THÊM 2 DÒNG XIN QUYỀN GPS TẠI ĐÂY -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+<!-- Cấp quyền Internet (Nên có nếu dùng Maps/Firebase) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 🌟 THÊM ĐOẠN QUERIES NÀY VÀO ĐÂY 🌟 -->
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
     <application
         android:label="cuhokhancap"
         android:name="${applicationName}"

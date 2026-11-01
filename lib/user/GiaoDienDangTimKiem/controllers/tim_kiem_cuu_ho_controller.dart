@@ -38,7 +38,8 @@ class TimKiemCuuHoController {
   YeuCauCuuHoModel? yeuCauCuuHo;
   ChiTietMoTaHienTruongModel? chiTietMoTa;
   List<LuuAnhModel> danhSachAnhBase64 = [];
-
+  // 🌟 Map lưu Vị trí ban đầu của cứu hộ viên lúc được cấp phát
+  Map<String, LatLng> initialRescuerLocations = {};
   LatLng currentDeviceLocation = const LatLng(10.7769, 106.6993);
 
   final Set<Circle> circles = {};
@@ -68,20 +69,31 @@ class TimKiemCuuHoController {
     return '${seconds}s';
   }
 
-  Future<void> initSearch(String maYeuCau, Function() onUpdate) async {
+  bool _hasNavigated = false;
+  // 🌟 Cập nhật tham số của initSearch
+  Future<void> initSearch(
+    String maYeuCau,
+    Function() onUpdate, {
+    Function(Map<String, LatLng>)? onRescuerAccepted, // 🌟 Nhận Map tọa độ
+  }) async {
     isLoading = true;
+    _hasNavigated = false; // Reset lại khi bắt đầu
     onUpdate();
 
     try {
-      await fetchGPSLocation();
-
-      await _firebaseService.updateYeuCauLocation(
-        maYeuCau: maYeuCau,
-        viDo: currentDeviceLocation.latitude,
-        kinhDo: currentDeviceLocation.longitude,
-      );
-
+      // 1. LẤY DỮ LIỆU YÊU CẦU TỪ FIREBASE TRƯỚC
       yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
+
+      // 2. GÁN TỌA ĐỘ TỪ YÊU CẦU CỨU HỘ VÀO BẢN ĐỒ (Bỏ GPS thiết bị)
+      if (yeuCauCuuHo != null &&
+          yeuCauCuuHo!.viDo != null &&
+          yeuCauCuuHo!.kinhDo != null) {
+        currentDeviceLocation = LatLng(
+          yeuCauCuuHo!.viDo!,
+          yeuCauCuuHo!.kinhDo!,
+        );
+      }
+
       moveToCurrentLocation();
 
       // 🌟 GIẢI QUYẾT BƯỚC 1: TRUY VẾT & BẮN THÔNG BÁO NGƯỜI THÂN QUA RTDB TRƯỚC
@@ -110,7 +122,7 @@ class TimKiemCuuHoController {
       await updateMapOverlays();
 
       // 🌟 GIẢI QUYẾT BƯỚC 3: STREAM THEO DÕI CÁC BẢN GHI PHÂN CÔNG
-      _listenToPhanCongChanges(maYeuCau, onUpdate);
+      _listenToPhanCongChanges(maYeuCau, onUpdate, onRescuerAccepted);
 
       // Đếm thời gian nhảy từng giây
       _secondsTimer?.cancel();
@@ -124,47 +136,89 @@ class TimKiemCuuHoController {
       isLoading = false;
       onUpdate();
     }
-
-    // 🌟 GIẢI QUYẾT BƯỚC 4: BẮT ĐẦU VÒNG QUÉT RADAR AI 15S
     startAdaptiveAIRadar(maYeuCau, onUpdate);
   }
 
-  /// 🌟 REALTIME MONITORING: LẮNG NGHE ĐƠN & QUẢN LÝ TRẠNG THÁI
-  void _listenToPhanCongChanges(String maYeuCau, Function() onUpdate) {
+  // 🌟 Cập nhật tham số và thêm đoạn chuyển trang vào _listenToPhanCongChanges
+  void _listenToPhanCongChanges(
+    String maYeuCau,
+    Function() onUpdate,
+    Function(Map<String, LatLng>)?
+    onRescuerAccepted, // ✅ Thêm Map<String, LatLng> vào đây
+  ) {
     _phanCongSubscription?.cancel();
     _phanCongSubscription = _firebaseService.streamPhanCongByYeuCau(maYeuCau).listen((
       phanCongList,
     ) async {
       acceptedRescuerIds.clear();
+      bool hasAccepted = false;
 
       for (var pc in phanCongList) {
+        // 🌟 YÊU CẦU 1: TỰ ĐỘNG ĐỒNG BỘ TRẠNG THÁI TỪ CỨU HỘ VIÊN VÀO YÊU CẦU CỨU HỘ
+        if (yeuCauCuuHo?.danhSachPhanCongVien[pc.maNguoiCuuHo] !=
+            pc.maTrangThaiTiepNhan) {
+          await _firebaseService.updateDanhSachPhanCongVien(
+            maYeuCau: maYeuCau,
+            maNguoiCuuHo: pc.maNguoiCuuHo,
+            trangThai: pc.maTrangThaiTiepNhan,
+          );
+          // Cập nhật luôn biến local để khỏi phải load lại YeuCauCuuHo
+          yeuCauCuuHo?.danhSachPhanCongVien[pc.maNguoiCuuHo] =
+              pc.maTrangThaiTiepNhan;
+        }
+
+        // Kiểm tra những ai đã chấp nhận
         if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan') {
+          hasAccepted = true;
           if (!acceptedRescuerIds.contains(pc.maNguoiCuuHo)) {
             acceptedRescuerIds.add(pc.maNguoiCuuHo);
           }
         }
       }
 
-      // 🛑 ĐIỀU KIỆN 1: Ít nhất 1 CHV chấp nhận -> NGỪNG QUÉT MỚI & đổi trạng thái sang user_tinhtrang_daphancong
-      if (acceptedRescuerIds.isNotEmpty) {
-        _stop15sRadarTimer(); // Tắt Timer 15s quét mở rộng ngay!
+      // 🛑 ĐIỀU KIỆN 1: CÓ ÍT NHẤT 1 NGƯỜI NHẬN CA
+      if (hasAccepted) {
+        _stop15sRadarTimer(); // CHỈ TẮT VÒNG QUÉT (Ngưng tìm thêm người mới)
 
         if (yeuCauCuuHo?.maTinhTrangYeuCau != 'user_tinhtrang_daphancong') {
           await _firebaseService.updateTinhTrangYeuCau(
             maYeuCau,
             'user_tinhtrang_daphancong',
           );
-          debugPrint(
-            '🎯 Đã có CHV chấp nhận -> Dừng quét mới & chuyển user_tinhtrang_daphancong',
-          );
+        }
+
+        // Nhảy màn hình 1 lần duy nhất
+        if (!_hasNavigated && onRescuerAccepted != null) {
+          _hasNavigated = true;
+          onRescuerAccepted(initialRescuerLocations); // 🌟 Truyền dữ liệu đi
         }
       }
 
-      // 🛑 ĐIỀU KIỆN 2: Đủ 5 CHV chấp nhận -> Dừng hẳn & Hủy tất cả các bản ghi chờ còn lại
+      // 🛑 ĐIỀU KIỆN 2: KHI ĐÃ ĐỦ 3 NGƯỜI TIẾP NHẬN
       if (acceptedRescuerIds.length >= 3) {
+        // 1. Tắt toàn bộ Timer và ngắt Stream theo dõi
         _stopAllTimers();
+        _phanCongSubscription?.cancel();
+
+        // 2. Hủy các đơn thừa trong bảng ChiTietPhanCongCuuHo
         await _firebaseService.cancelRemainingAssignments(maYeuCau);
-        debugPrint('🎯 Đã đủ 5 CHV chấp nhận! Hủy các đơn chờ còn lại.');
+
+        // 3. 🌟 YÊU CẦU 3: Dọn dẹp nốt những người thừa trong danhSachPhanCongVien của Yêu Cầu
+        if (yeuCauCuuHo != null) {
+          for (var key in yeuCauCuuHo!.danhSachPhanCongVien.keys.toList()) {
+            if (yeuCauCuuHo!.danhSachPhanCongVien[key] ==
+                'cuuho_trangthai_phancong_chotiepnhan') {
+              await _firebaseService.updateDanhSachPhanCongVien(
+                maYeuCau: maYeuCau,
+                maNguoiCuuHo: key,
+                trangThai: 'cuuho_trangthai_phancong_dahuy',
+              );
+            }
+          }
+        }
+        debugPrint(
+          '🎯 Đã đủ 3 cứu hộ viên tiếp nhận! Chốt sổ và hủy các đơn chờ còn lại.',
+        );
       }
 
       onUpdate();
@@ -278,6 +332,8 @@ class TimKiemCuuHoController {
       double distanceKm = (item['distanceMeters'] as double) / 1000;
 
       assignedRescuerIds.add(maNguoiCuuHo);
+      // 🌟 LƯU TỌA ĐỘ BAN ĐẦU CỦA NGƯỜI NÀY LẠI
+      initialRescuerLocations[maNguoiCuuHo] = LatLng(user.viDo!, user.kinhDo!);
       rescuerList.add({
         'user': user,
         'distanceKm': distanceKm.toStringAsFixed(1),
@@ -582,7 +638,7 @@ class TimKiemCuuHoController {
               ),
             ),
 
-            // --- 3. THẺ CHỮ "SOS" NẰM DƯỚI MŨI TÊN ---
+            // --- 3. THẺ CHỮ "SOS" HOẶC "VỊ TRÍ CỦA BẠN" NẰM DƯỚI MŨI TÊN ---
             Transform.translate(
               offset: const Offset(0, -2), // Kéo sát vào mũi tên
               child: Container(
@@ -605,13 +661,17 @@ class TimKiemCuuHoController {
                     ),
                   ],
                 ),
-                child: const Text(
-                  'SOS',
-                  style: TextStyle(
+                // Xóa chữ const ở Text và dùng toán tử 3 ngôi kiểm tra loại yêu cầu
+                child: Text(
+                  yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_sos'
+                      ? 'SOS'
+                      : 'Vị trí của bạn',
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                     color: Color(0xFFC81E1E),
-                    letterSpacing: 1.0,
+                    letterSpacing:
+                        0.5, // Giảm letterSpacing lại một chút để chữ dài nhìn gọn hơn
                   ),
                 ),
               ),

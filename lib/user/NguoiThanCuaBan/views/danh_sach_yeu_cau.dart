@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
+import 'custom_avatar.dart'; // Bổ sung import CustomAvatar
 
 class DanhSachYeuCauWidget extends StatelessWidget {
   final String currentUserId;
@@ -17,6 +18,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     required this.primaryColor,
     required this.controller,
   });
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List>(
@@ -98,12 +100,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                         context,
                         user: req['user'],
                         senderId: req['senderId'],
+                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
                       )
                     : _buildReceivedCard(
                         context,
                         user: req['user'],
                         relation: req['moiQuanHe'],
                         senderId: req['senderId'],
+                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
                       ),
               ),
             ],
@@ -126,12 +130,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                         context,
                         user: req['user'],
                         targetId: req['targetId'],
+                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
                       )
                     : _buildSentCard(
                         context,
                         user: req['user'],
                         relation: req['moiQuanHe'],
                         targetId: req['targetId'],
+                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
                       ),
               ),
             ],
@@ -149,6 +155,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     required NguoiDungModel user,
     required String relation,
     required String senderId,
+    required String? avatarUrl, // Thêm tham số
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -162,10 +169,12 @@ class DanhSachYeuCauWidget extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CustomAvatar(
+                avatarUrl: avatarUrl,
+                name: user.hoTen,
                 radius: 24,
-                backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
-              ),
+                primaryColor: primaryColor,
+              ), // Sử dụng CustomAvatar
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,6 +265,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     required NguoiDungModel user,
     required String relation,
     required String targetId,
+    required String? avatarUrl, // Thêm tham số
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -269,10 +279,12 @@ class DanhSachYeuCauWidget extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CustomAvatar(
+                avatarUrl: avatarUrl,
+                name: user.hoTen,
                 radius: 24,
-                backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
-              ),
+                primaryColor: primaryColor,
+              ), // Sử dụng CustomAvatar
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,6 +362,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     BuildContext context, {
     required NguoiDungModel user,
     required String senderId,
+    required String? avatarUrl, // Thêm tham số
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -364,10 +377,12 @@ class DanhSachYeuCauWidget extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CustomAvatar(
+                avatarUrl: avatarUrl,
+                name: user.hoTen,
                 radius: 24,
-                backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
-              ),
+                primaryColor: primaryColor,
+              ), // Sử dụng CustomAvatar
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -449,6 +464,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     BuildContext context, {
     required NguoiDungModel user,
     required String targetId,
+    required String? avatarUrl, // Thêm tham số
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -460,10 +476,12 @@ class DanhSachYeuCauWidget extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CustomAvatar(
+            avatarUrl: avatarUrl,
+            name: user.hoTen,
             radius: 24,
-            backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
-          ),
+            primaryColor: primaryColor,
+          ), // Sử dụng CustomAvatar
           const SizedBox(width: 12),
           Expanded(
             child: Column(

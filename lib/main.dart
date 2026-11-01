@@ -1,12 +1,11 @@
 import 'package:cuhokhancap/user/BangXepHangCuuHo/BangXepHangCuuHo.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart';
-
 import 'package:cuhokhancap/user/NguoiThanCuaBan/NguoiThanCuaBan.dart';
 import 'package:cuhokhancap/user/UpData.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase/firebase_options.dart';
-import 'package:cuhokhancap/user/ChatVoiBacSi.dart';
+import 'package:cuhokhancap/user/ChatVoiBacSi/ChatVoiBacSi.dart';
 import 'package:cuhokhancap/user/ChonNguoiCuuHo/ChonNguoiCuuHo.dart';
 import 'package:cuhokhancap/user/LIchSuCuuHo.dart';
 import 'package:cuhokhancap/user/NguoiCuuHo_MHC.dart';
@@ -31,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: NguoiThanCuaBan(userId: "nguoidung3"),
+      home: GiaoDienDangTimKiem(maYeuCau: "yeucau7"),
     );
   }
 }

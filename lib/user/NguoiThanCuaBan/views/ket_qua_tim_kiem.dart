@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
+import 'custom_avatar.dart'; // Bổ sung import CustomAvatar
 
 class KetQuaTimKiemWidget extends StatelessWidget {
   final Color primaryColor;
@@ -68,10 +69,13 @@ class KetQuaTimKiemWidget extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const CircleAvatar(
+                CustomAvatar(
+                  avatarUrl: searchResult!
+                      .avatarUrl, // Truyền avatarUrl từ kết quả search
+                  name: user.hoTen,
                   radius: 28,
-                  backgroundImage: NetworkImage('https://i.pravatar.cc/150'),
-                ),
+                  primaryColor: primaryColor,
+                ), // Sử dụng CustomAvatar
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

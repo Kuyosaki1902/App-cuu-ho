@@ -1,5 +1,6 @@
 // lib/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart
 
+import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/TongQuanBacSiTiepNhan.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'controllers/tim_kiem_cuu_ho_controller.dart';
@@ -22,9 +23,29 @@ class _GiaoDienDangTimKiemState extends State<GiaoDienDangTimKiem> {
   @override
   void initState() {
     super.initState();
-    _controller.initSearch(widget.maYeuCau, () {
-      if (mounted) setState(() {});
-    });
+    _controller.initSearch(
+      widget.maYeuCau,
+      () {
+        if (mounted) setState(() {});
+      },
+      // 🌟 Hứng initialLocations và đẩy sang TongQuanBacSiTiepNhan
+      onRescuerAccepted: (initialLocations) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TongQuanBacSiTiepNhan(
+                maYeuCau: widget.maYeuCau,
+                currentUserId: _controller.yeuCauCuuHo?.maNguoiYeuCau ?? '',
+                victimLat: _controller.currentDeviceLocation.latitude,
+                victimLng: _controller.currentDeviceLocation.longitude,
+                initialLocations: initialLocations, // 🌟 Truyền tiếp
+              ),
+            ),
+          );
+        }
+      },
+    );
   }
 
   @override

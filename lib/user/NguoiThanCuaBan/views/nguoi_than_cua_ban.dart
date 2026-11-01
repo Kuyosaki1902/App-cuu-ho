@@ -1,5 +1,6 @@
 // lib/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart
 
+import 'package:cuhokhancap/user/NguoiThanCuaBan/views/custom_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
 
@@ -181,7 +182,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
     required String phone,
     required String email,
     required String relation,
-    required String avatarUrl,
+    required String? avatarUrl,
     required String trangThai, // <--- Bổ sung
   }) {
     bool isPendingCancel = trangThai == 'user_trangthai_nguoithan_dongyhuy';
@@ -196,9 +197,11 @@ class NguoiThanCuaBanTab extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              CustomAvatar(
+                avatarUrl: avatarUrl,
+                name: name,
                 radius: 28,
-                backgroundImage: NetworkImage(avatarUrl),
+                primaryColor: primaryColor,
               ),
               const SizedBox(width: 12),
               Expanded(
