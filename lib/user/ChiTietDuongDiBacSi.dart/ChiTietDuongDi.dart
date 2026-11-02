@@ -6,7 +6,7 @@ import 'views/top_navigation_bar.dart';
 import 'views/bottom_sheet_duong_di.dart';
 
 class ChiTietDuongDiScreen extends StatefulWidget {
-  final String maNguoiCuuHo; // 🌟 Thêm biến này để hết đỏ
+  final String maNguoiCuuHo;
   final double startLat;
   final double startLng;
   final double victimLat;
@@ -15,7 +15,7 @@ class ChiTietDuongDiScreen extends StatefulWidget {
 
   const ChiTietDuongDiScreen({
     super.key,
-    required this.maNguoiCuuHo, // 🌟 Khai báo required
+    required this.maNguoiCuuHo,
     required this.startLat,
     required this.startLng,
     required this.victimLat,
@@ -35,7 +35,7 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
   void initState() {
     super.initState();
     _controller = ChiTietDuongDiController(
-      maNguoiCuuHo: widget.maNguoiCuuHo, // 🌟 Truyền xuống Controller
+      maNguoiCuuHo: widget.maNguoiCuuHo,
       startLat: widget.startLat,
       startLng: widget.startLng,
       victimLat: widget.victimLat,
@@ -70,7 +70,7 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
             compassEnabled: false,
-            padding: const EdgeInsets.only(bottom: 350),
+            padding: const EdgeInsets.only(bottom: 300),
           ),
 
           // 2. Top Navigation Bar
@@ -81,6 +81,65 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
             controller: _controller,
             tenBacSi: widget.tenBacSi,
             primaryColor: primaryColor,
+          ),
+
+          // 🌟 4. Cụm nút điều khiển bản đồ (Nút Ghim bao quát & Nút về vị trí nạn nhân)
+          Positioned(
+            right: 16,
+            top: 100,
+            child: Column(
+              children: [
+                // Nút Ghim (Bao quát lộ trình giữa cứu hộ viên và nạn nhân)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.zoom_out_map,
+                      color: Color(0xFF006A55),
+                    ),
+                    tooltip: 'Bao quát lộ trình',
+                    onPressed: () {
+                      _controller.fitRouteBounds();
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Nút Quay lại vị trí nạn nhân
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.person_pin_circle,
+                      color: Color(0xFFC81E1E),
+                    ),
+                    tooltip: 'Vị trí nạn nhân',
+                    onPressed: () {
+                      _controller.moveToVictim();
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

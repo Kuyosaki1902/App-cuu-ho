@@ -74,17 +74,28 @@ class TimKiemCuuHoController {
   Future<void> initSearch(
     String maYeuCau,
     Function() onUpdate, {
-    Function(Map<String, LatLng>)? onRescuerAccepted, // 🌟 Nhận Map tọa độ
+    Function(Map<String, LatLng>)? onRescuerAccepted,
   }) async {
     isLoading = true;
-    _hasNavigated = false; // Reset lại khi bắt đầu
+    _hasNavigated = false;
+    assignedRescuerIds.clear(); // 🌟 Xóa sạch cache phân công trên thiết bị
+    initialRescuerLocations
+        .clear(); // 🌟 Xóa sạch tọa độ ban đầu cũ trên thiết bị
     onUpdate();
 
     try {
       // 1. LẤY DỮ LIỆU YÊU CẦU TỪ FIREBASE TRƯỚC
       yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
 
-      // 2. GÁN TỌA ĐỘ TỪ YÊU CẦU CỨU HỘ VÀO BẢN ĐỒ (Bỏ GPS thiết bị)
+      // 🌟 2. RESET SẠCH DANH SÁCH BỊ KẸT TRÊN FIREBASE (Đưa về trống hoặc hủy các đơn treo cũ)
+      if (yeuCauCuuHo != null) {
+        yeuCauCuuHo!.danhSachPhanCongVien.clear(); // Xóa trên model local
+
+        // Cập nhật lên Firestore để xóa trắng Map danhSachPhanCongVien cũ kỹ đi
+        await _firebaseService.saveYeuCauCuuHo(yeuCauCuuHo!);
+      }
+
+      // 3. GÁN TỌA ĐỘ TỪ YÊU CẦU CỨU HỘ VÀO BẢN ĐỒ
       if (yeuCauCuuHo != null &&
           yeuCauCuuHo!.viDo != null &&
           yeuCauCuuHo!.kinhDo != null) {
@@ -96,7 +107,7 @@ class TimKiemCuuHoController {
 
       moveToCurrentLocation();
 
-      // 🌟 GIẢI QUYẾT BƯỚC 1: TRUY VẾT & BẮN THÔNG BÁO NGƯỜI THÂN QUA RTDB TRƯỚC
+      // 4. BẮN THÔNG BÁO NGƯỜI THÂN QUA RTDB
       if (yeuCauCuuHo != null) {
         await _firebaseService.notifyConnectedRelatives(
           maNguoiYeuCau: yeuCauCuuHo!.maNguoiYeuCau,
@@ -106,7 +117,7 @@ class TimKiemCuuHoController {
         );
       }
 
-      // 🌟 GIẢI QUYẾT BƯỚC 2: ĐỌC MÔ TẢ & ẢNH BASE64 ĐỂ GEMINI MULTIMODAL PHÂN TÍCH
+      // 5. ĐỌC MÔ TẢ & ẢNH BASE64 ĐỂ GEMINI PHÂN TÍCH
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
       if (chiTietMoTa != null) {
         danhSachAnhBase64 = await _firebaseService.getImagesByMoTaId(
@@ -121,7 +132,7 @@ class TimKiemCuuHoController {
 
       await updateMapOverlays();
 
-      // 🌟 GIẢI QUYẾT BƯỚC 3: STREAM THEO DÕI CÁC BẢN GHI PHÂN CÔNG
+      // 6. STREAM THEO DÕI CÁC BẢN GHI PHÂN CÔNG MỚI
       _listenToPhanCongChanges(maYeuCau, onUpdate, onRescuerAccepted);
 
       // Đếm thời gian nhảy từng giây
@@ -136,6 +147,8 @@ class TimKiemCuuHoController {
       isLoading = false;
       onUpdate();
     }
+
+    // Bắt đầu vòng quét AI từ đầu với danh sách hoàn toàn sạch
     startAdaptiveAIRadar(maYeuCau, onUpdate);
   }
 

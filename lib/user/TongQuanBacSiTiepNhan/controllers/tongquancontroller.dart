@@ -39,7 +39,8 @@ class RescuerOverviewController {
       final acceptedList = danhSachPhanCong
           .where(
             (pc) =>
-                pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan',
+                pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan' ||
+                pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_daden',
           )
           .toList();
 

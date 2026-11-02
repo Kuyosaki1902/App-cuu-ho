@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:geolocator/geolocator.dart'; // Để backup đo đường chim bay nếu OSRM lỗi
+import 'package:geolocator/geolocator.dart';
 
 class ChiTietDuongDiController {
   final String maNguoiCuuHo;
@@ -17,9 +17,15 @@ class ChiTietDuongDiController {
 
   GoogleMapController? mapController;
   StreamSubscription? _locationSub;
+  StreamSubscription?
+  _phanCongSub; // 🌟 Thêm stream lắng nghe trạng thái phân công
+
+  late double currentCurLat;
+  late double currentCurLng;
 
   double khoangCachBanDau_OSRM = 0.0;
   double progressValue = 0.05; // Khởi đầu mốc 5% (Đã tiếp nhận)
+  bool _isAlreadyArrived = false; // 🌟 Biến cờ kiểm tra đã đến nơi chưa
 
   String trangthaiText = "ĐANG TÍNH TOÁN LỘ TRÌNH...";
   String estimatedTime = "-- phút";
@@ -36,7 +42,10 @@ class ChiTietDuongDiController {
     required this.victimLat,
     required this.victimLng,
     required this.tenBacSi,
-  });
+  }) {
+    currentCurLat = startLat;
+    currentCurLng = startLng;
+  }
 
   Future<void> initTracking(Function() onUpdate) async {
     _initVictimMarker();
@@ -44,7 +53,36 @@ class ChiTietDuongDiController {
     // 1. Gọi OSRM lần đầu để chốt Khoảng cách gốc
     khoangCachBanDau_OSRM = await _fetchOSRMRoute(startLat, startLng);
 
-    // 2. Stream vị trí di chuyển thực tế từ Firebase
+    // 🌟 2. LẮNG NGHE TRẠNG THÁI TỪ PHÂN CÔNG (ChiTietPhanCongCuuHo)
+    // Truy vấn theo cấu trúc subcollection chuẩn của dự án bác
+    final String todayStr = DateTime.now().toString().substring(0, 10);
+    _phanCongSub = FirebaseFirestore.instance
+        .collection('ChiTietPhanCongCuuHo')
+        .doc(maNguoiCuuHo)
+        .collection('DanhSachNgay')
+        .doc(todayStr)
+        .collection('DanhSachPhanCong')
+        // Nếu cấu trúc phân công lưu theo maYeuCau hoặc maPhanCong, ta lắng nghe doc tương ứng.
+        // Ở đây ta dùng snapshots trực tiếp trên collection DanhSachPhanCong lọc theo maNguoiCuuHo & maYeuCau
+        .snapshots()
+        .listen((snapshot) {
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            // Kiểm tra đúng yêu cầu cứu hộ hiện tại không
+            if (data['maYeuCau'] != null) {
+              String trangThai = data['maTrangThaiTiepNhan'] ?? '';
+              if (trangThai == 'cuuho_trangthai_phancong_daden') {
+                _isAlreadyArrived = true;
+                progressValue = 1.0;
+                trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
+                estimatedTime = "0 phút";
+                onUpdate();
+              }
+            }
+          }
+        });
+
+    // 3. Stream vị trí di chuyển thực tế từ Firebase (NguoiDung)
     _locationSub = FirebaseFirestore.instance
         .collection('NguoiDung')
         .doc(maNguoiCuuHo)
@@ -53,6 +91,9 @@ class ChiTietDuongDiController {
           if (docSnap.exists && docSnap.data() != null) {
             double curLat = docSnap.data()?['viDo'] ?? startLat;
             double curLng = docSnap.data()?['kinhDo'] ?? startLng;
+
+            currentCurLat = curLat;
+            currentCurLng = curLng;
 
             await _updateRouteAndProgress(curLat, curLng, onUpdate);
           }
@@ -86,17 +127,20 @@ class ChiTietDuongDiController {
         if (data['routes'] != null && data['routes'].isNotEmpty) {
           final route = data['routes'][0];
 
-          double distanceMeters = route['distance'].toDouble(); // Đo bằng OSRM
+          double distanceMeters = route['distance'].toDouble();
           double durationSeconds = route['duration'].toDouble();
           String encodedPolyline = route['geometry'];
 
-          // 1. TEXT UI
           double distanceKm = distanceMeters / 1000;
           distanceText = "${distanceKm.toStringAsFixed(1)} km";
 
           int minutes = (durationSeconds / 60).round();
           if (minutes < 1) minutes = 1;
-          estimatedTime = "$minutes phút";
+
+          // Nếu chưa đến nơi theo trạng thái Firebase thì mới cập nhật ETA theo OSRM
+          if (!_isAlreadyArrived) {
+            estimatedTime = "$minutes phút";
+          }
 
           DateTime arrival = DateTime.now().add(
             Duration(seconds: durationSeconds.toInt()),
@@ -104,28 +148,24 @@ class ChiTietDuongDiController {
           arrivalTime =
               "${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')}";
 
-          // 2. TÍNH TIẾN TRÌNH & CHẶN LÙI
-          if (distanceMeters <= 15.0) {
-            progressValue = 1.0;
-            trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
-            estimatedTime = "0 phút";
-          } else {
+          // 🌟 BỎ HOÀN TOÀN LOGIC TỰ ĐỘNG ÉP 15M -> CHỈ TÍNH TIẾN TRÌNH THEO OSRM KHI CHƯA ĐẾN
+          if (!_isAlreadyArrived) {
             if (khoangCachBanDau_OSRM > 0) {
               double currentProgress =
                   (khoangCachBanDau_OSRM - distanceMeters) /
                   khoangCachBanDau_OSRM;
-              // 🌟 Clamp chặn lùi
               if (currentProgress > progressValue) {
                 progressValue = currentProgress;
               }
-              if (progressValue >= 0.99) progressValue = 0.99; // Khóa trần
+              // Khóa trần ở 0.99 nếu chưa có tín hiệu "Đã đến" từ cứu hộ viên
+              if (progressValue >= 0.99) progressValue = 0.99;
             }
             trangthaiText = progressValue > 0.8
                 ? "SẮP ĐẾN NƠI"
                 : "ĐANG DI CHUYỂN TỚI ĐỊA ĐIỂM";
           }
 
-          // 3. VẼ MARKER CỨU HỘ & ĐƯỜNG ĐI OSRM
+          // VẼ MARKER CỨU HỘ & ĐƯỜNG ĐI OSRM
           markers.removeWhere((m) => m.markerId.value == 'rescuer_location');
           markers.add(
             Marker(
@@ -169,11 +209,9 @@ class ChiTietDuongDiController {
         }
       }
     } catch (e) {}
-    // Backup dùng đường chim bay nếu API chết
-    return Geolocator.distanceBetween(lat, lng, victimLat, victimLng);
+    return Geolocator.distanceBetween(lat, lng, victimLng, victimLat);
   }
 
-  // Thuật toán decode mã Polyline từ Google/OSRM
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> poly = [];
     int index = 0, len = encoded.length;
@@ -201,29 +239,41 @@ class ChiTietDuongDiController {
     return poly;
   }
 
+  void fitRouteBounds() {
+    if (mapController == null) return;
+    mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(
+            currentCurLat < victimLat ? currentCurLat : victimLat,
+            currentCurLng < victimLng ? currentCurLng : victimLng,
+          ),
+          northeast: LatLng(
+            currentCurLat > victimLat ? currentCurLat : victimLat,
+            currentCurLng > victimLng ? currentCurLng : victimLng,
+          ),
+        ),
+        80,
+      ),
+    );
+  }
+
+  void moveToVictim() {
+    mapController?.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(victimLat, victimLng), 16.0),
+    );
+  }
+
   void onMapCreated(GoogleMapController controller) {
     mapController = controller;
     Future.delayed(const Duration(milliseconds: 500), () {
-      mapController?.animateCamera(
-        CameraUpdate.newLatLngBounds(
-          LatLngBounds(
-            southwest: LatLng(
-              startLat < victimLat ? startLat : victimLat,
-              startLng < victimLng ? startLng : victimLng,
-            ),
-            northeast: LatLng(
-              startLat > victimLat ? startLat : victimLat,
-              startLng > victimLng ? startLng : victimLng,
-            ),
-          ),
-          80,
-        ),
-      );
+      fitRouteBounds();
     });
   }
 
   void dispose() {
     _locationSub?.cancel();
+    _phanCongSub?.cancel(); // 🌟 Hủy stream phân công khi đóng màn hình
     mapController?.dispose();
   }
 }

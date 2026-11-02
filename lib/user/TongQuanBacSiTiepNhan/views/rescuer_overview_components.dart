@@ -121,7 +121,7 @@ class RescuerItemCard extends StatelessWidget {
   final TrackingRescuerModel item;
   final String maYeuCau;
   final String currentUserId;
-  final VoidCallback? onTap; // Thêm callback sự kiện khi nhấn thẻ
+  final VoidCallback? onTap;
 
   const RescuerItemCard({
     super.key,
@@ -133,16 +133,23 @@ class RescuerItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 Bọc toàn bộ Card bằng GestureDetector để bắt sự kiện
+    // 🌟 Kiểm tra xem cứu hộ viên này đã đến nơi chưa
+    bool isArrived =
+        item.phanCong.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_daden';
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          // 🌟 Đổi màu nền và viền nếu đã đến nơi
+          color: isArrived ? const Color(0xFFE2F7F2) : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(
+            color: isArrived ? const Color(0xFF0C5C4D) : Colors.grey[200]!,
+            width: isArrived ? 1.5 : 1.0,
+          ),
         ),
         child: Row(
           children: [
@@ -188,29 +195,40 @@ class RescuerItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Text(
-                        '${item.estimatedTimeMinutes} phút',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF10B981),
+                  // 🌟 Nếu đã đến thì hiện chữ, chưa đến thì hiện thời gian/km
+                  if (isArrived)
+                    const Text(
+                      'ĐÃ ĐẾN NƠI',
+                      style: TextStyle(
+                        color: Color(0xFF0C5C4D),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Text(
+                          '${item.estimatedTimeMinutes} phút',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
+                          ),
                         ),
-                      ),
-                      const Text(
-                        '  •  ',
-                        style: TextStyle(color: Colors.grey, fontSize: 10),
-                      ),
-                      Text(
-                        '${item.distanceKm.toStringAsFixed(1)} km',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
+                        const Text(
+                          '  •  ',
+                          style: TextStyle(color: Colors.grey, fontSize: 10),
                         ),
-                      ),
-                    ],
-                  ),
+                        Text(
+                          '${item.distanceKm.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -278,7 +296,7 @@ class RescuerItemCard extends StatelessWidget {
   }
 }
 
-// 4. DANH SÁCH CỨU HỘ BÊN DƯỚI
+// 4. DANH SÁCH CỨU HỘ BÊN DƯỚI (Fix lỗi kéo BottomSheet)
 class RescuerListBottomSheet extends StatelessWidget {
   final List<TrackingRescuerModel> trackingList;
   final String maYeuCau;
@@ -298,7 +316,6 @@ class RescuerListBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -310,9 +327,13 @@ class RescuerListBottomSheet extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
+      // 🌟 Đổi Column thành ListView và truyền controller vào đây
+      // Bây giờ vuốt ở thanh kéo hay tiêu đề đều thay đổi được kích thước
+      child: ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
-          // 🌟 THANH KÉO (DRAG HANDLE) GẦN VÒM - CHỈNH KÍCH THƯỚC GỌN GÀNG
+          // THANH KÉO (DRAG HANDLE)
           Center(
             child: Container(
               width: 40,
@@ -356,37 +377,28 @@ class RescuerListBottomSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          // 🌟 Trải danh sách cứu hộ viên ra thay vì dùng ListView.builder
           if (trackingList.isEmpty)
             const Padding(
               padding: EdgeInsets.all(20.0),
               child: Text(
                 'Đang chờ người cứu hộ tiếp nhận...',
                 style: TextStyle(color: Colors.grey),
+                textAlign: TextAlign.center,
               ),
             )
           else
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: EdgeInsets.zero,
-                itemCount: trackingList.length,
-                itemBuilder: (context, index) {
-                  final item = trackingList[index];
-                  return RescuerItemCard(
-                    item: item,
-                    maYeuCau: maYeuCau,
-                    currentUserId: currentUserId,
-                    onTap: () {
-                      if (onRescuerTap != null &&
-                          item.nguoiDung.viDo != null &&
-                          item.nguoiDung.kinhDo != null) {
-                        onRescuerTap!(
-                          item.nguoiDung.viDo!,
-                          item.nguoiDung.kinhDo!,
-                        );
-                      }
-                    },
-                  );
+            ...trackingList.map(
+              (item) => RescuerItemCard(
+                item: item,
+                maYeuCau: maYeuCau,
+                currentUserId: currentUserId,
+                onTap: () {
+                  if (onRescuerTap != null &&
+                      item.nguoiDung.viDo != null &&
+                      item.nguoiDung.kinhDo != null) {
+                    onRescuerTap!(item.nguoiDung.viDo!, item.nguoiDung.kinhDo!);
+                  }
                 },
               ),
             ),
