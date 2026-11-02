@@ -300,20 +300,16 @@ class Step4CompletedFullView extends StatelessWidget {
                 // 1. Cập nhật nhanCaCuuHo = false lên Firestore để giải phóng trạng thái trực
                 await controller.releaseRescueDuty(currentUserId);
 
-                // 2. Reset lại trạng thái trong Controller
-                controller.resetToNewCase();
+                // 🟢 ĐÃ XÓA controller.resetToNewCase(); Ở ĐÂY ĐỂ TRÁNH KÍCH HOẠT REBUILD MÀN HÌNH CŨ
 
                 if (context.mounted) {
-                  // 🟢 XÓA SẠCH TOÀN BỘ STACK MÀN HÌNH CŨ VÀ ĐƯA VỀ MÀN HÌNH CHÍNH (TRANG CHỦ)
-                  // Thay thế 'MainScreen()' bằng tên widget màn hình chính/trang chủ thực tế của bạn
+                  // 2. XÓA SẠCH STACK VÀ ĐƯA VỀ TRANG CHỦ
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          const Trangchunguoicuuho(), // Hoặc MainDashboard() của bạn
+                      builder: (context) => const Trangchunguoicuuho(),
                     ),
-                    (route) =>
-                        false, // Điều kiện false sẽ xóa toàn bộ các route cũ trong stack
+                    (route) => false,
                   );
                 }
               },

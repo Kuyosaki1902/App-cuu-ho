@@ -45,18 +45,18 @@ class TrangThaiXacThucController extends ChangeNotifier {
           if (doc.exists && doc.data() != null) {
             final data = doc.data() as Map<String, dynamic>;
             String maTrangThai =
-                (data['maTrangThaiHoSo'] ?? 'cuuho_trangthai_tiepnhan')
+                (data['maTrangThaiHoSo'] ?? 'cuuho_trangthai_hoso_tiepnhan')
                     .toString()
                     .trim();
 
             debugPrint('📌 Dữ liệu THỰC TẾ từ Server: "$maTrangThai"');
 
-            if (maTrangThai == 'cuuho_trangthai_daduyet') {
+            if (maTrangThai == 'cuuho_trangthai_hoso_daduyet') {
               trangThaiText = 'Đã phê duyệt';
               notifyListeners();
               if (onApproved != null) onApproved!();
-            } else if (maTrangThai == 'cuuho_trangthai_tuchoi') {
-              trangThaiText = 'Từ chối hồ sơ';
+            } else if (maTrangThai == 'cuuho_trangthai_hoso_canbosung') {
+              trangThaiText = 'Bổ sung hồ sơ';
               notifyListeners();
               if (onRejected != null) onRejected!();
             } else {

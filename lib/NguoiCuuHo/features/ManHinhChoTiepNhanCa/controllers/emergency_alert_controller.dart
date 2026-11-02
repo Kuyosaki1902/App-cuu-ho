@@ -554,7 +554,7 @@ class EmergencyAlertController extends ChangeNotifier {
   Future<void> _playEmergencySound() async {
     try {
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-      await _audioPlayer.play(AssetSource('sounds/emergency_alarm.mp3'));
+      await _audioPlayer.play(AssetSource('sounds/nhan_cuu_ho.mp3'));
     } catch (e) {
       debugPrint('Lỗi phát âm thanh chuông báo: $e');
     }

@@ -120,7 +120,7 @@ class CuuHoVienCoCCHNController extends ChangeNotifier {
         tenChuyenNganh: scopeController.text.trim(),
         donViCongTac: hospitalController.text.trim(),
         thoiGianOnline: DateTime.now().toIso8601String(),
-        maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
+        maTrangThaiHoSo: 'cuuho_trangthai_hoso_tiepnhan',
       );
 
       bool isSuccess = await _hoSoService.saveHoSoCuuHo(hoSo);

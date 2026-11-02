@@ -73,12 +73,12 @@ class Manhinhcho extends StatelessWidget {
                                     elevation: 2,
                                   ),
                                   onPressed: () async {
-                                    // Lấy sẵn các giá trị cần thiết từ controller hiện tại trước khi chuyển trang
                                     String doctorId =
                                         controller.currentDoctorId;
                                     String maYeuCau =
                                         controller.currentMaYeuCau;
 
+                                    // 🟢 Gọi hàm nhận ca (hàm này đã được bổ sung hủy timer ở trên)
                                     await controller.acceptAssignment();
 
                                     if (context.mounted) {

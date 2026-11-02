@@ -69,15 +69,23 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                 '📄 Quét thấy ca: $maYeuCauTmp | Trạng thái: $trangThai',
               );
 
-              // 🟢 CHỈ DÙNG SO SÁNH TUYỆT ĐỐI (==), KHÔNG DÙNG .contains()
-              if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
-                  trangThai == 'cuuho_trangthai_phancong_dangthuchien') {
-                hasDangTienTrinh = true;
-                targetMaYeuCau = maYeuCauTmp;
-                break; // Ưu tiên 1: Đẩy vào lại tiến trình (Step 1,2,3)
+              // 🟢 1. CHỐT CHẶN AN TOÀN: Bỏ qua ngay lập tức các ca đã kết thúc
+              if (trangThai == 'cuuho_trangthai_phancong_hoanthanh' ||
+                  trangThai == 'cuuho_trangthai_phancong_dahuy' ||
+                  trangThai == 'cuuho_trangthai_phancong_tuchoi') {
+                continue; // Lờ đi ca này và quét tiếp ca khác
               }
 
-              // 🟢 Trạng thái chờ đổ chuông
+              // 🚀 2. ƯU TIÊN 1: Ca đang trong tiến trình cứu hộ (Step 1, 2, 3)
+              if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
+                  trangThai == 'cuuho_trangthai_phancong_daden' ||
+                  trangThai == 'cuuho_trangthai_phancong_dangcuuho') {
+                hasDangTienTrinh = true;
+                targetMaYeuCau = maYeuCauTmp;
+                break;
+              }
+
+              // ⏳ 3. Trạng thái chờ đổ chuông
               if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
                   trangThai.isEmpty) {
                 hasChoTiepNhan = true;

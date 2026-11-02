@@ -108,6 +108,8 @@ class RescueProcessController extends ChangeNotifier {
   Future<void> _fetchVictimInfo(String maYeuCau) async {
     try {
       if (maYeuCau.isEmpty) return;
+
+      // 1. Lấy thông tin trực tiếp từ bảng YeuCauCuuHo (Nguồn phát tín hiệu chính)
       DocumentSnapshot ycDoc = await _firestore
           .collection('YeuCauCuuHo')
           .doc(maYeuCau)
@@ -116,6 +118,7 @@ class RescueProcessController extends ChangeNotifier {
       if (ycDoc.exists && ycDoc.data() != null) {
         var data = ycDoc.data() as Map<String, dynamic>;
 
+        // 🟢 ƯU TIÊN 1: Lấy tọa độ trực tiếp từ YeuCauCuuHo
         String? geohash = data['geoHash'] ?? data['geohash'];
         if (geohash != null && geohash.isNotEmpty) {
           GeoHash geo = GeoHash(geohash);
@@ -127,18 +130,22 @@ class RescueProcessController extends ChangeNotifier {
           );
         }
 
+        // 2. Lấy thông tin cá nhân nạn nhân từ bảng NguoiDung (chỉ để lấy Tên và SĐT)
         String maNguoiYeuCau =
             (data['maNguoiYeuCau'] ?? data['maNguoiDung'] ?? '').toString();
+
         if (maNguoiYeuCau.isNotEmpty) {
           DocumentSnapshot userDoc = await _firestore
               .collection('NguoiDung')
               .doc(maNguoiYeuCau)
               .get();
+
           if (userDoc.exists && userDoc.data() != null) {
             var userData = userDoc.data() as Map<String, dynamic>;
             victimName = userData['hoTen'] ?? 'Nạn nhân';
             victimPhone = userData['soDienThoai'] ?? '';
 
+            // ⚠️ CHỈ LẤY TỌA ĐỘ TỪ NGUOIDUNG KHI YEUCAUCUUHO HOÀN TOÀN TRỐNG TỌA ĐỘ
             if (victimLocation.latitude == 0.0) {
               String? uGeohash = userData['geoHash'] ?? userData['geohash'];
               if (uGeohash != null && uGeohash.isNotEmpty) {
@@ -157,20 +164,22 @@ class RescueProcessController extends ChangeNotifier {
 
         notifyListeners();
 
-        if (victimLocation.latitude != 0.0) {
+        // 🟢 3. DỰA VÀO KINH ĐỘ, VĨ ĐỘ ĐÃ TÌM ĐƯỢC ĐỂ CHUYỂN ĐỔI THÀNH ĐỊA CHỈ NGAY LẬP TỨC
+        if (victimLocation.latitude != 0.0 && victimLocation.longitude != 0.0) {
           victimAddress = await getAddressFromLatLng(
             victimLocation.latitude,
             victimLocation.longitude,
           );
-          notifyListeners();
+          notifyListeners(); // Cập nhật lại giao diện ngay khi có địa chỉ thực tế
         }
 
+        // 4. Nếu cứu hộ viên đã có vị trí, tính toán lộ trình di chuyển ngay
         if (doctorLocation.latitude != 0.0) {
           fetchRealtimeRoute();
         }
       }
     } catch (e) {
-      debugPrint('Lỗi tải thông tin nạn nhân: $e');
+      debugPrint('Lỗi tải thông tin nạn nhân từ YeuCauCuuHo: $e');
     }
   }
 
@@ -360,6 +369,7 @@ class RescueProcessController extends ChangeNotifier {
   }
 
   // Cập nhật trạng thái hoàn thành ca ở Step 3 (không set nhanCaCuuHo ở đây nữa)
+  // Cập nhật trạng thái hoàn thành ca ở Step 3 an toàn tuyệt đối
   Future<void> completeRescueMission(
     String currentDoctorId,
     String maYeuCau,
@@ -367,6 +377,7 @@ class RescueProcessController extends ChangeNotifier {
     try {
       String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
+      // 🟢 THAY .update() THÀNH .set(merge: true) ĐỂ CHỐNG LỖI KẸT TRẠNG THÁI
       await _firestore
           .collection('ChiTietPhanCongCuuHo')
           .doc(currentDoctorId)
@@ -374,9 +385,9 @@ class RescueProcessController extends ChangeNotifier {
           .doc(todayStr)
           .collection('DanhSachPhanCong')
           .doc(maYeuCau)
-          .update({
+          .set({
             'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_hoanthanh',
-          });
+          }, SetOptions(merge: true));
 
       DocumentReference ycRef = _firestore
           .collection('YeuCauCuuHo')
@@ -390,8 +401,9 @@ class RescueProcessController extends ChangeNotifier {
           await ycRef.update({'danhSachPhanCongVien': phanCongMap});
         }
       }
+      debugPrint('✅ Đã ép trạng thái ca thành HOÀN THÀNH thành công!');
     } catch (e) {
-      debugPrint('Lỗi khi hoàn thành ca cứu hộ: $e');
+      debugPrint('❌ Lỗi khi hoàn thành ca cứu hộ: $e');
     }
   }
 
@@ -462,42 +474,95 @@ class RescueProcessController extends ChangeNotifier {
     }
   }
 
+  // 🌍 Sử dụng OpenStreetMap Nominatim API (Miễn phí, không cần API Key, không lo REQUEST_DENIED)
   Future<String> getAddressFromLatLng(double lat, double lng) async {
     if (lat == 0.0 || lng == 0.0 || lat.isNaN || lng.isNaN) {
       return 'Đang định vị...';
     }
 
+    // Endpoint API đảo ngược tọa độ thành địa chỉ của OpenStreetMap
     final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$googleApiKey&language=vi',
+      'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&accept-language=vi',
     );
 
     try {
-      final response = await http.get(url);
+      // OpenStreetMap bắt buộc phải có header User-Agent để định danh ứng dụng
+      final response = await http.get(
+        url,
+        headers: {
+          'User-Agent': 'CuuHoKhanCapApp/1.0 (contact@cuhokhancap.com)',
+        },
+      );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['status'] == 'OK' &&
-            data['results'] != null &&
-            (data['results'] as List).isNotEmpty) {
-          return data['results'][0]['formatted_address'] ??
-              'Vị trí sự cố thực tế';
+        if (data != null && data['display_name'] != null) {
+          // Trả về chuỗi địa chỉ chi tiết do OpenStreetMap cung cấp
+          return data['display_name'];
         }
+      } else {
+        debugPrint('❌ Lỗi OpenStreetMap HTTP Code: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('Lỗi HTTP Geocoding API: $e');
+      debugPrint('❌ Lỗi ngoại lệ OpenStreetMap API: $e');
     }
-    return 'Vị trí sự cố thực tế';
+
+    // Fallback nếu không lấy được địa chỉ
+    return 'Tọa độ: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
   }
 
-  void nextStep() {
+  // 🟢 Nâng cấp hàm nextStep để nhận tham số và tự động cập nhật trạng thái lên Firestore
+  // Nâng cấp hàm nextStep để nhận tham số và tự động cập nhật trạng thái lên Firestore
+  Future<void> nextStep(String currentDoctorId, String maYeuCau) async {
     if (currentStep < 3) {
       currentStep++;
       notifyListeners();
+
+      try {
+        String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        String newStatus = '';
+
+        // 🟢 BỔ SUNG TRẠNG THÁI hoanthanh KHI CHUYỂN LÊN BƯỚC 4
+        if (currentStep == 1) {
+          newStatus = 'cuuho_trangthai_phancong_daden'; // BƯỚC 2: Đã đến nơi
+        } else if (currentStep == 2) {
+          newStatus =
+              'cuuho_trangthai_phancong_dangcuuho'; // BƯỚC 3: Đang cứu hộ
+        } else if (currentStep == 3) {
+          newStatus =
+              'cuuho_trangthai_phancong_hoanthanh'; // 🚀 BƯỚC 4: Chốt chặn ghi đè hoàn thành
+        }
+
+        Map<String, dynamic> updateData = {'currentStep': currentStep};
+
+        if (newStatus.isNotEmpty) {
+          updateData['maTrangThaiTiepNhan'] = newStatus;
+        }
+
+        // Cập nhật vào bảng ChiTietPhanCongCuuHo
+        await _firestore
+            .collection('ChiTietPhanCongCuuHo')
+            .doc(currentDoctorId)
+            .collection('DanhSachNgay')
+            .doc(todayStr)
+            .collection('DanhSachPhanCong')
+            .doc(maYeuCau)
+            .set(updateData, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Lỗi cập nhật nextStep lên Firestore: $e');
+      }
     }
   }
 
   void resetToNewCase() {
     currentStep = 0;
     rescueElapsedSeconds = 0;
+
+    // 🟢 BỔ SUNG CHỐT CHẶN: Xóa trắng tọa độ để bẻ gãy điều kiện auto-nextStep ở màn hình chính
+    doctorLocation = const LatLng(0.0, 0.0);
+    victimLocation = const LatLng(0.0, 0.0);
+    polylineCoordinates.clear();
+
     notifyListeners();
   }
 

@@ -46,7 +46,7 @@ class TienTrinhCuuHo extends StatelessWidget {
             if (distanceInMeters <= 2.0) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (controller.currentStep == 0) {
-                  controller.nextStep();
+                  controller.nextStep(currentUserId, maYeuCauCuuHo);
                 }
               });
             }
@@ -139,7 +139,8 @@ class TienTrinhCuuHo extends StatelessWidget {
 
         // 🟢 CHẶN: Chỉ cho phép bấm (hoặc tự động chuyển) khi khoảng cách <= 2 mét
         if (distanceInMeters <= 2.0) {
-          onPrimaryPressed = () => controller.nextStep();
+          onPrimaryPressed = () =>
+              controller.nextStep(currentUserId, maYeuCauCuuHo);
         } else {
           onPrimaryPressed = null; // Vô hiệu hóa nút khi ngoài tầm 2 mét
         }
@@ -150,7 +151,8 @@ class TienTrinhCuuHo extends StatelessWidget {
       case 1: // 📍 BƯỚC 2: ĐÃ ĐẾN NƠI
         primaryText = 'CỨU NẠN';
         primaryIcon = Icons.medical_services_outlined;
-        onPrimaryPressed = () => controller.nextStep();
+        onPrimaryPressed = () =>
+            controller.nextStep(currentUserId, maYeuCauCuuHo);
         showCancelButton = true; // Hiển thị nút hủy ca ở bước 2
         break;
 
@@ -164,7 +166,7 @@ class TienTrinhCuuHo extends StatelessWidget {
             currentUserId,
             maYeuCauCuuHo,
           );
-          controller.nextStep();
+          controller.nextStep(currentUserId, maYeuCauCuuHo);
         };
         showCancelButton = false;
         break;

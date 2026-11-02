@@ -160,7 +160,7 @@ class VictimDetailCard extends StatelessWidget {
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
-                            Icons.info_outline,
+                            Icons.message_outlined,
                             color: Color(0xFFE52525),
                             size: 22,
                           ),
@@ -283,50 +283,53 @@ class VictimDetailCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // 🟢 THÊM AVATAR VÀO BÊN TRÁI TÊN NẠN NHÂN
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      vName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFFFFF1F2),
+                      child: const Icon(
+                        Icons.person,
+                        color: Color(0xFFE52525),
+                        size: 24,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      vPhone.isNotEmpty
-                          ? 'SĐT: $vPhone'
-                          : 'Đang cập nhật SĐT...',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            vName,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            vPhone.isNotEmpty
+                                ? 'SĐT: $vPhone'
+                                : 'Đang cập nhật SĐT...',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
+              // 🟢 ĐÃ XÓA NHÃN "CẤP ĐỘ 2 / Khẩn cấp", CHỈ GIỮ LẠI CÁC NÚT HÀNH ĐỘNG BÊN PHẢI
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'CẤP ĐỘ 2\nKhẩn cấp',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
                   InkWell(
                     onTap: () =>
                         _showContactsBottomSheet(context, vName, vPhone),
@@ -370,7 +373,7 @@ class VictimDetailCard extends StatelessWidget {
                         ],
                       ),
                       child: const Icon(
-                        Icons.info_outline,
+                        Icons.message_outlined,
                         color: Colors.white,
                         size: 18,
                       ),
@@ -411,7 +414,7 @@ class VictimDetailCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  vAddress,
+                  controller.victimAddress,
                   style: const TextStyle(
                     fontSize: 11,
                     color: Color(0xFF334155),

@@ -208,7 +208,7 @@ class CuuHoVienKhongCCHNController extends ChangeNotifier {
         soluongCaDaNhan: 0,
         soLuongDaKhongNhan: 0,
         soLuongCaHoanThanh: 0,
-        maTrangThaiHoSo: 'cuuho_trangthai_tiepnhan',
+        maTrangThaiHoSo: 'cuuho_trangthai_hoso_tiepnhan',
       );
 
       await FirebaseFirestore.instance
