@@ -1,9 +1,14 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Quyền truy cập máy ảnh -->
     <uses-permission android:name="android.permission.CAMERA"/>
 
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <!-- Quyền truy cập định vị chính xác và tương đối -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -12,6 +17,11 @@
         android:label="cuhokhancap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="true"
+            tools:ignore="Instantiatable" />
         <meta-data 
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps"/>

@@ -15,6 +15,10 @@ import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
 import 'package:cuhokhancap/user/Design/chi_tiet_nguoi_cuu_ho_card.dart'; // Import file card vừa tạo
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart'; 
+import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
+import 'package:cuhokhancap/user/Design/man_hinh_canh_bao.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cuhokhancap/firebase/background_service.dart';
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -58,6 +62,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
   @override
   void initState() {
     super.initState();
+    _yeuCauQuyenThongBaoVaKhoiChayService();
     WidgetsBinding.instance.addObserver(this); 
     
     _gianhQuyenDangNhap().then((_) {
@@ -69,7 +74,19 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPermissionAndListenLocation();
     });
+
+    _langNgheCanhBaoKhanCap();
   }
+
+  Future<void> _yeuCauQuyenThongBaoVaKhoiChayService() async {
+  // Yêu cầu quyền thông báo
+  if (await Permission.notification.isDenied) {
+    await Permission.notification.request();
+  }
+  
+  // Khởi chạy Foreground Service
+  await initializeService();
+}
 
   Future<void> _gianhQuyenDangNhap() async {
     final rtdb = FirebaseDatabase.instanceFor(
@@ -106,10 +123,40 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung> with WidgetsBindi
     );
   }
 
+  void _langNgheCanhBaoKhanCap() {
+  FirebaseFirestore.instance
+      .collectionGroup('DanhSachNguoiThan')
+      .where('maNguoiThan', isEqualTo: widget.maNguoiDung)
+      .where('trangThai', isEqualTo: 'dangGoi')
+      .snapshots()
+      .listen((snapshot) {
+    if (snapshot.docs.isNotEmpty) {
+      for (var doc in snapshot.docs) {
+        _hienThiManHinhCanhBao(doc.reference, doc.data()['maNguoiDung']);
+      }
+    }
+  });
+}
+
+void _hienThiManHinhCanhBao(DocumentReference docRef, String maNguoiGoi) {
+  showDialog(
+    context: context,
+    barrierDismissible: false, // Ngăn người dùng bấm ra ngoài để tắt
+    builder: (context) => ManHinhCanhBao(
+      docRef: docRef,
+      maNguoiGoi: maNguoiGoi,
+    ),
+  );
+}
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Ứng dụng được mở lại trên màn hình
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, true);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      // Ứng dụng bị thu nhỏ (paused) hoặc vuốt tắt hoàn toàn (detached)
+      _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
     } 
   }
 
