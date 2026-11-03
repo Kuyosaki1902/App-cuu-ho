@@ -1,6 +1,7 @@
 // lib/GiaoDienDangTimKiem/controllers/tim_kiem_cuu_ho_controller.dart
 
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -726,8 +727,18 @@ class TimKiemCuuHoController {
     moveToCurrentLocation();
   }
 
-  void moveToCurrentLocation() {
-    mapController?.animateCamera(CameraUpdate.newLatLng(currentDeviceLocation));
+  Future<void> moveToCurrentLocation() async {
+    if (mapController != null) {
+      // 1. Lấy mức zoom hiện tại trên màn hình của người dùng
+      double currentZoom = await mapController!.getZoomLevel();
+
+      // 2. Cập nhật vị trí (target) mới nhưng giữ nguyên currentZoom
+      mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: currentDeviceLocation, zoom: currentZoom),
+        ),
+      );
+    }
   }
 
   void _stop15sRadarTimer() {

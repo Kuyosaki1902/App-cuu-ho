@@ -1,4 +1,4 @@
-//lib/user/TongQuanBacSiTiepNhan/TongQuanBacSiTiepNhan.dart
+// lib/user/TongQuanBacSiTiepNhan/TongQuanBacSiTiepNhan.dart
 import 'package:cuhokhancap/user/ChiTietDuongDiBacSi.dart/ChiTietDuongDi.dart';
 import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/controllers/tongquancontroller.dart';
 import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/models/tracking_rescuer_model.dart';
@@ -11,7 +11,7 @@ class TongQuanBacSiTiepNhan extends StatefulWidget {
   final String currentUserId;
   final double victimLat;
   final double victimLng;
-  final Map<String, LatLng>? initialLocations; // 🌟 Khai báo biến hứng dữ liệu
+  final Map<String, LatLng>? initialLocations;
 
   const TongQuanBacSiTiepNhan({
     super.key,
@@ -19,7 +19,7 @@ class TongQuanBacSiTiepNhan extends StatefulWidget {
     required this.currentUserId,
     required this.victimLat,
     required this.victimLng,
-    this.initialLocations, // 🌟 Nhận tham số vào đây
+    this.initialLocations,
   });
 
   @override
@@ -31,7 +31,8 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
   GoogleMapController? _mapController;
 
   bool _isAutoFitEnabled = false;
-  double _bottomSheetFraction = 0.38;
+  double _bottomSheetFraction =
+      0.38; // 🌟 Phục hồi biến quản lý chiều cao bottom sheet
 
   @override
   void initState() {
@@ -78,7 +79,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
         widget.victimLng + maxDeltaLng,
       ),
     );
-    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+    _mapController?.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
   Set<Marker> _buildMarkers(List<TrackingRescuerModel> rescuers) {
@@ -104,7 +105,6 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           anchor: const Offset(0.5, 0.5),
           onTap: () {
-            // 🌟 NHẤN VÀO MARKER CỨU HỘ SẼ MỞ SANG MÀN HÌNH CHI TIẾT
             double sLat =
                 widget.initialLocations?[res.nguoiDung.maNguoiDung]?.latitude ??
                 res.nguoiDung.viDo ??
@@ -157,7 +157,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
 
           return Stack(
             children: [
-              // 1. BẢN ĐỒ
+              // 1. BẢN ĐỒ (Đã gắn lại padding theo chiều cao BottomSheet)
               GoogleMap(
                 initialCameraPosition: CameraPosition(
                   target: LatLng(widget.victimLat, widget.victimLng),
@@ -171,6 +171,15 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                   _mapController = controller;
                 },
                 padding: EdgeInsets.only(bottom: mapBottomPadding),
+
+                // Tự động tắt Auto-Fit khi người dùng chạm tay vuốt bản đồ
+                onCameraMoveStarted: () {
+                  if (_isAutoFitEnabled) {
+                    setState(() {
+                      _isAutoFitEnabled = false;
+                    });
+                  }
+                },
               ),
 
               // 2. BOTTOM SHEET
@@ -185,33 +194,39 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                   initialChildSize: 0.30,
                   minChildSize: 0.18,
                   maxChildSize: 0.42,
-                  builder:
-                      (
-                        BuildContext context,
-                        ScrollController scrollController,
-                      ) {
-                        return RescuerListBottomSheet(
-                          trackingList: trackingList,
-                          maYeuCau: widget.maYeuCau,
-                          currentUserId: widget.currentUserId,
-                          scrollController: scrollController,
-                          // 🌟 NHẤN VÀO THẺ CARD SẼ LIA CAMERA (Giữ nguyên logic cũ)
-                          onRescuerTap: (lat, lng) {
-                            setState(() {
-                              _isAutoFitEnabled = false;
-                            });
-                            _mapController?.animateCamera(
-                              CameraUpdate.newLatLngZoom(
-                                LatLng(lat, lng),
-                                16.0,
+                  builder: (BuildContext context, ScrollController scrollController) {
+                    return RescuerListBottomSheet(
+                      trackingList: trackingList,
+                      maYeuCau: widget.maYeuCau,
+                      currentUserId: widget.currentUserId,
+                      scrollController: scrollController,
+                      // 🌟 SỬA TẠI ĐÂY: Nhấn vào card/avatar sẽ lia map đến bác sĩ mà giữ nguyên mức zoom
+                      onRescuerTap: (lat, lng) async {
+                        setState(() {
+                          _isAutoFitEnabled =
+                              false; // Tắt chế độ tự động bao quát
+                        });
+
+                        if (_mapController != null) {
+                          // Lấy mức zoom hiện tại người dùng đang xem
+                          double currentZoom = await _mapController!
+                              .getZoomLevel();
+
+                          _mapController?.animateCamera(
+                            CameraUpdate.newCameraPosition(
+                              CameraPosition(
+                                target: LatLng(lat, lng),
+                                zoom:
+                                    currentZoom, // Giữ nguyên hiện trạng zoom, không bị phóng to thu nhỏ
                               ),
-                            );
-                          },
-                        );
+                            ),
+                          );
+                        }
                       },
+                    );
+                  },
                 ),
               ),
-
               // 3. TOP NAV
               Positioned(
                 top: 0,
@@ -224,12 +239,13 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                 ),
               ),
 
-              // 4. MAP CONTROLS
+              // 4. MAP CONTROLS (Đủ 2 nút: Auto-fit & Định vị giữ zoom)
               Positioned(
                 right: 16,
                 top: 100,
                 child: Column(
                   children: [
+                    // Nút 1: Bật/Tắt Auto Fit (Bao quát lộ trình)
                     MapControlButton(
                       icon: _isAutoFitEnabled
                           ? Icons.zoom_out_map
@@ -245,18 +261,30 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                       },
                     ),
                     const SizedBox(height: 12),
+                    // Nút 2: Về vị trí nạn nhân (Giữ nguyên mức zoom hiện tại)
                     MapControlButton(
                       icon: Icons.my_location,
-                      onTap: () {
+                      onTap: () async {
                         setState(() {
                           _isAutoFitEnabled = false;
                         });
-                        _mapController?.animateCamera(
-                          CameraUpdate.newLatLngZoom(
-                            LatLng(widget.victimLat, widget.victimLng),
-                            15.0,
-                          ),
-                        );
+
+                        if (_mapController != null) {
+                          double currentZoom = await _mapController!
+                              .getZoomLevel();
+
+                          _mapController?.animateCamera(
+                            CameraUpdate.newCameraPosition(
+                              CameraPosition(
+                                target: LatLng(
+                                  widget.victimLat,
+                                  widget.victimLng,
+                                ),
+                                zoom: currentZoom,
+                              ),
+                            ),
+                          );
+                        }
                       },
                     ),
                   ],

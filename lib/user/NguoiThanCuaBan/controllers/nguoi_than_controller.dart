@@ -8,6 +8,7 @@ class SearchUserResult {
   final NguoiDungModel user;
   final String status;
   final String? avatarUrl;
+
   SearchUserResult({required this.user, required this.status, this.avatarUrl});
 }
 
@@ -49,7 +50,7 @@ class BottomSheetGuiYeuCauController extends ChangeNotifier {
 class NguoiThanController {
   final FirebaseService _fbService = FirebaseService();
 
-  // 1. TÌM KIẾM
+  // 1. TÌM KIẾM NGƯỜI DÙNG
   Future<SearchUserResult?> searchUserByPhoneOrEmail({
     required String query,
     required String currentUserId,
@@ -59,7 +60,6 @@ class NguoiThanController {
 
     final targetUserId = userModel.maNguoiDung!;
 
-    // 🌟 THÊM ĐOẠN CHECK NÀY ĐỂ KHÔNG TỰ TÌM THẤY CHÍNH MÌNH NỮA NEK!
     if (targetUserId == currentUserId) {
       return null;
     }
@@ -90,6 +90,7 @@ class NguoiThanController {
     }
 
     String? avatarUrl = await _fbService.getUserAvatarUrl(targetUserId);
+
     return SearchUserResult(
       user: userModel,
       status: status,
@@ -97,7 +98,7 @@ class NguoiThanController {
     );
   }
 
-  // 2. GỬI YÊU CẦU SONG SONG
+  // 2. GỬI YÊU CẦU KẾT NỐI SONG SONG
   Future<void> sendRelationRequest({
     required String currentUserId,
     required String targetUserId,
@@ -114,7 +115,7 @@ class NguoiThanController {
     );
   }
 
-  // 3. STREAM LẤY DANH SÁCH NGƯỜI THÂN
+  // 3. STREAM LẤY DANH SÁCH NGƯỜI THÂN (Đã fix kiểm tra 2 chiều chuẩn xác)
   Stream<List<Map<String, dynamic>>> getRelativesStream(String currentUserID) {
     if (currentUserID.trim().isEmpty) return Stream.value([]);
 
@@ -131,12 +132,28 @@ class NguoiThanController {
             try {
               final data = doc.data();
               String maNguoiThan = doc.id;
+              String myStatus = data['trangThai'] ?? '';
+
+              // Nếu bên mình 'dongy' nhưng đối phương vẫn 'choketnoi' -> Bỏ qua chưa hiện ở Tab Người thân
+              if (myStatus == 'user_trangthai_nguoithan_dongy') {
+                final otherDoc = await _fbService.getOtherRelationDoc(
+                  maNguoiThan,
+                  currentUserID,
+                );
+                if (!otherDoc.exists) return null;
+                final targetStatus = otherDoc.data()?['trangThai'] ?? '';
+                if (targetStatus == 'user_trangthai_nguoithan_choketnoi') {
+                  return null;
+                }
+              }
 
               NguoiDungModel? userData = await _fbService.getUserById(
                 maNguoiThan,
               );
+
               if (userData != null) {
                 String? avatar = await _fbService.getUserAvatarUrl(maNguoiThan);
+
                 return <String, dynamic>{
                   'relation': data['moiQuanHe'] ?? 'Chưa xác định',
                   'id': userData.maNguoiDung,
@@ -145,7 +162,7 @@ class NguoiThanController {
                   'phone': userData.soDienThoai,
                   'email': userData.email,
                   'avatarUrl': avatar,
-                  'trangThai': data['trangThai'] ?? '',
+                  'trangThai': myStatus,
                 };
               }
             } catch (e) {
@@ -159,7 +176,7 @@ class NguoiThanController {
         });
   }
 
-  // 4. STREAM LẤY YÊU CẦU CHỜ DUYỆT / HỦY
+  // 4. STREAM LẤY DANH SÁCH YÊU CẦU CẦN XỬ LÝ
   Stream<List<Map<String, dynamic>>> getPendingRequestsStream(
     String currentUserId,
   ) {
@@ -187,8 +204,9 @@ class NguoiThanController {
             );
             if (!otherDoc.exists ||
                 otherDoc.data()?['trangThai'] !=
-                    'user_trangthai_nguoithan_choketnoi')
+                    'user_trangthai_nguoithan_choketnoi') {
               return null;
+            }
             type = 'sent';
             subType = 'connect';
             idField = 'targetId';
@@ -199,8 +217,9 @@ class NguoiThanController {
             );
             if (!otherDoc.exists ||
                 otherDoc.data()?['trangThai'] !=
-                    'user_trangthai_nguoithan_huynguoithan')
+                    'user_trangthai_nguoithan_huynguoithan') {
               return null;
+            }
             type = 'sent';
             subType = 'cancel';
             idField = 'targetId';
@@ -236,10 +255,7 @@ class NguoiThanController {
     });
   }
 
-  // ===========================================================================
-  // CÁC HÀM XỬ LÝ TRẠNG THÁI BATCH CHUẨN DUY NHẤT
-  // ===========================================================================
-
+  // 5. CÁC HÀM XỬ LÝ TRẠNG THÁI
   Future<void> acceptConnectRequest(
     String currentUserId,
     String senderId,
@@ -325,8 +341,9 @@ class NguoiThanController {
     final now = DateTime.now();
     int age = now.year - ngaySinh.year;
     if (now.month < ngaySinh.month ||
-        (now.month == ngaySinh.month && now.day < ngaySinh.day))
+        (now.month == ngaySinh.month && now.day < ngaySinh.day)) {
       age--;
+    }
     return age;
   }
 }

@@ -330,18 +330,15 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () => () async {
-                      // 🌟 Gọi hàm hủy tìm kiếm từ Controller
+                    onPressed: () async {
                       if (controller.yeuCauCuuHo != null) {
                         await controller.cancelSearch(
                           controller.yeuCauCuuHo!.maYeuCau,
                         );
                       }
 
-                      // Sau khi dọn dẹp xong thì đóng BottomSheet / Quay về màn hình trước
                       if (context.mounted) {
                         Navigator.pop(context);
-                        // Navigator.pop(context); // Bật thêm pop nếu muốn thoát hẳn ra màn hình Home
                       }
                     },
                     icon: const Icon(

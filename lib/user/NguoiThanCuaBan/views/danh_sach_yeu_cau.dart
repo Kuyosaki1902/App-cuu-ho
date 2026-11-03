@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/NguoiThanCuaBan/controllers/nguoi_than_controller.dart';
-import 'custom_avatar.dart'; // Bổ sung import CustomAvatar
+import 'custom_avatar.dart';
 
 class DanhSachYeuCauWidget extends StatelessWidget {
   final String currentUserId;
@@ -100,14 +100,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                         context,
                         user: req['user'],
                         senderId: req['senderId'],
-                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
+                        avatarUrl: req['avatarUrl'],
                       )
                     : _buildReceivedCard(
                         context,
                         user: req['user'],
                         relation: req['moiQuanHe'],
                         senderId: req['senderId'],
-                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
+                        avatarUrl: req['avatarUrl'],
                       ),
               ),
             ],
@@ -130,14 +130,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                         context,
                         user: req['user'],
                         targetId: req['targetId'],
-                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
+                        avatarUrl: req['avatarUrl'],
                       )
                     : _buildSentCard(
                         context,
                         user: req['user'],
                         relation: req['moiQuanHe'],
                         targetId: req['targetId'],
-                        avatarUrl: req['avatarUrl'], // Truyền avatarUrl
+                        avatarUrl: req['avatarUrl'],
                       ),
               ),
             ],
@@ -148,14 +148,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // CÁC THẺ UI DÀNH CHO YÊU CẦU KẾT NỐI
+  // THẺ YÊU CẦU KẾT NỐI ĐÃ NHẬN
   // ---------------------------------------------------------------------------
   Widget _buildReceivedCard(
     BuildContext context, {
     required NguoiDungModel user,
     required String relation,
     required String senderId,
-    required String? avatarUrl, // Thêm tham số
+    required String? avatarUrl,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -174,7 +174,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                 name: user.hoTen,
                 radius: 24,
                 primaryColor: primaryColor,
-              ), // Sử dụng CustomAvatar
+              ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,12 +260,15 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // THẺ YÊU CẦU KẾT NỐI ĐÃ GỬI
+  // ---------------------------------------------------------------------------
   Widget _buildSentCard(
     BuildContext context, {
     required NguoiDungModel user,
     required String relation,
     required String targetId,
-    required String? avatarUrl, // Thêm tham số
+    required String? avatarUrl,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -284,7 +287,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                 name: user.hoTen,
                 radius: 24,
                 primaryColor: primaryColor,
-              ), // Sử dụng CustomAvatar
+              ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,13 +359,13 @@ class DanhSachYeuCauWidget extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // CÁC THẺ UI DÀNH CHO YÊU CẦU HỦY KẾT NỐI
+  // THẺ YÊU CẦU HỦY KẾT NỐI ĐÃ NHẬN (ĐÃ FIX TEXT LOGIC)
   // ---------------------------------------------------------------------------
   Widget _buildReceivedCancelCard(
     BuildContext context, {
     required NguoiDungModel user,
     required String senderId,
-    required String? avatarUrl, // Thêm tham số
+    required String? avatarUrl,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -382,7 +385,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                 name: user.hoTen,
                 radius: 24,
                 primaryColor: primaryColor,
-              ), // Sử dụng CustomAvatar
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -395,8 +398,10 @@ class DanhSachYeuCauWidget extends StatelessWidget {
                         fontSize: 16,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    // 🌟 FIX CHUẨN LOGIC CHỮ TẠI ĐÂY
                     const Text(
-                      'Đã gửi yêu cầu hủy kết nối',
+                      'Muốn hủy kết nối với bạn',
                       style: TextStyle(
                         color: Colors.orange,
                         fontSize: 12,
@@ -460,11 +465,14 @@ class DanhSachYeuCauWidget extends StatelessWidget {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // THẺ YÊU CẦU HỦY KẾT NỐI ĐÃ GỬI
+  // ---------------------------------------------------------------------------
   Widget _buildSentCancelCard(
     BuildContext context, {
     required NguoiDungModel user,
     required String targetId,
-    required String? avatarUrl, // Thêm tham số
+    required String? avatarUrl,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -481,7 +489,7 @@ class DanhSachYeuCauWidget extends StatelessWidget {
             name: user.hoTen,
             radius: 24,
             primaryColor: primaryColor,
-          ), // Sử dụng CustomAvatar
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

@@ -7,11 +7,13 @@ const Color primaryColor = Color(0xFF046450);
 class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String targetName;
   final String targetAvatar;
+  final String distanceText; // 🌟 Thêm khoảng cách động
 
   const ChatAppBar({
     super.key,
     required this.targetName,
     required this.targetAvatar,
+    this.distanceText = '-- km',
   });
 
   @override
@@ -83,9 +85,9 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Text(
-                      'Đang di chuyển (cách 2.8 km)',
-                      style: TextStyle(
+                    Text(
+                      'Đang di chuyển (cách $distanceText)', // 🌟 Hiển thị khoảng cách real-time
+                      style: const TextStyle(
                         fontSize: 11,
                         color: primaryColor,
                         fontWeight: FontWeight.w600,
@@ -129,9 +131,16 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
-// 2. BANNER TRẠNG THÁI
+// 2. BANNER TRẠNG THÁI (Đã xóa nút Bản đồ)
 class ChatStatusBanner extends StatelessWidget {
-  const ChatStatusBanner({super.key});
+  final String estimatedTimeText; // 🌟 Nhận thời gian dự kiến động
+  final String arrivalClockText; //  Nhận giờ dự kiến động
+
+  const ChatStatusBanner({
+    super.key,
+    this.estimatedTimeText = '-- phút nữa tới',
+    this.arrivalClockText = '--:--',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -153,41 +162,20 @@ class ChatStatusBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          const Text(
-            '12 – 15 phút nữa tới',
-            style: TextStyle(
+          Text(
+            estimatedTimeText, // 🌟 Hiển thị thời gian thực
+            style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
               color: primaryColor,
             ),
           ),
-          const Text(
-            ' • Dự kiến: 09:42 SA',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
+          Text(
+            ' • Dự kiến: $arrivalClockText', // 🌟 Hiển thị mốc giờ thực
+            style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.map_outlined, size: 14, color: primaryColor),
-                SizedBox(width: 4),
-                Text(
-                  'Bản đồ',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // 🌟 Nút "Bản đồ" đã được loại bỏ hoàn toàn theo yêu cầu
         ],
       ),
     );
@@ -412,7 +400,7 @@ class ChatBottomInput extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+          ], // syntax fix
         ),
       ),
     );

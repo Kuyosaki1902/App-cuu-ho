@@ -58,7 +58,7 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // 1. Google Maps hiển thị lộ trình
+          // 1. Google Maps hiển thị lộ trình (🌟 Tăng padding bottom lên 350 để không bị che khuất)
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: LatLng(widget.victimLat, widget.victimLng),
@@ -70,72 +70,83 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
             compassEnabled: false,
-            padding: const EdgeInsets.only(bottom: 300),
+            padding: const EdgeInsets.only(bottom: 350),
+            onCameraMoveStarted: () {
+              _controller.disableAutoTracking();
+            },
           ),
 
           // 2. Top Navigation Bar
           const ChiTietDuongDiTopNav(),
 
-          // 3. Bottom Sheet
+          // 3. Bottom Sheet cố định kích thước
           ChiTietDuongDiBottomSheet(
             controller: _controller,
             tenBacSi: widget.tenBacSi,
             primaryColor: primaryColor,
           ),
 
-          // 🌟 4. Cụm nút điều khiển bản đồ (Nút Ghim bao quát & Nút về vị trí nạn nhân)
+          // 4. Cụm nút điều khiển bản đồ
           Positioned(
             right: 16,
             top: 100,
             child: Column(
               children: [
-                // Nút Ghim (Bao quát lộ trình giữa cứu hộ viên và nạn nhân)
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.zoom_out_map,
-                      color: Color(0xFF006A55),
+                // Nút 1: Auto-Fit (Bao quát lộ trình)
+                GestureDetector(
+                  onTap: () {
+                    _controller.enableAutoTracking();
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    tooltip: 'Bao quát lộ trình',
-                    onPressed: () {
-                      _controller.fitRouteBounds();
-                    },
+                    child: Icon(
+                      _controller.isAutoTracking
+                          ? Icons.zoom_out_map
+                          : Icons.center_focus_strong,
+                      color: _controller.isAutoTracking
+                          ? Colors.blue
+                          : Colors.black87,
+                      size: 20,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Nút Quay lại vị trí nạn nhân
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.person_pin_circle,
-                      color: Color(0xFFC81E1E),
+                // Nút 2: Vị trí nạn nhân (Giữ nguyên mức zoom hiện tại)
+                GestureDetector(
+                  onTap: () async {
+                    await _controller.moveToVictim();
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    tooltip: 'Vị trí nạn nhân',
-                    onPressed: () {
-                      _controller.moveToVictim();
-                    },
+                    child: const Icon(
+                      Icons.my_location,
+                      color: Colors.black87,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],

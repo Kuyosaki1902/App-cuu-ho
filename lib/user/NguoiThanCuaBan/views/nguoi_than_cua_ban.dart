@@ -16,16 +16,12 @@ class NguoiThanCuaBanTab extends StatelessWidget {
     required this.primaryColor,
   });
 
-  // Hàm hiển thị hộp thoại xác nhận xóa
-  // lib/NguoiThanCuaBan/views/nguoi_than_cua_ban.dart
-
-  // Hàm hiển thị hộp thoại xác nhận xóa
+  // Hộp thoại xác nhận yêu cầu hủy kết nối
   Future<void> _showDeleteConfirmDialog(
     BuildContext context, {
     required String relativeId,
     required String relativeName,
   }) async {
-    // 1. Lấy trước messengerState từ Context hiện tại (Trước khi mở Dialog)
     final messenger = ScaffoldMessenger.of(context);
 
     final bool? confirm = await showDialog<bool>(
@@ -38,7 +34,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
-          'Bạn có chắc chắn muốn xóa mối quan hệ người thân với $relativeName không?\n\nLưu ý: Thao tác này sẽ xóa mối quan hệ ở cả hai phía.',
+          'Bạn có chắc chắn muốn gửi yêu cầu hủy mối quan hệ người thân với $relativeName không?',
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
@@ -55,7 +51,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Xóa',
+              'Xóa mối quan hệ',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -68,12 +64,11 @@ class NguoiThanCuaBanTab extends StatelessWidget {
 
     if (confirm == true) {
       try {
-        // Thay vì xóa ngay lập tức, chuyển trạng thái thành Yêu Cầu Hủy (sẽ nhảy sang Tab Đã Gửi)
         await controller.requestCancelRelation(userId, relativeId);
 
         messenger.showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF2E7D32), // Xanh lá
+            backgroundColor: const Color(0xFF2E7D32),
             content: Text(
               'Đã gửi yêu cầu hủy kết nối tới $relativeName!',
               style: const TextStyle(color: Colors.white),
@@ -83,7 +78,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
       } catch (e) {
         messenger.showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFFD32F2F), // Đỏ
+            backgroundColor: const Color(0xFFD32F2F),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -94,7 +89,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Xóa mối quan hệ thất bại: $e',
+                    'Gửi yêu cầu xóa thất bại: $e',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,
@@ -130,7 +125,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Bạn chưa thêm người thân của mình',
+                  'Bạn chưa có người thân nào',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
@@ -166,7 +161,7 @@ class NguoiThanCuaBanTab extends StatelessWidget {
               email: item['email'],
               relation: item['relation'],
               avatarUrl: item['avatarUrl'],
-              trangThai: item['trangThai'], // <--- Bổ sung
+              trangThai: item['trangThai'],
             );
           },
         );
@@ -183,15 +178,25 @@ class NguoiThanCuaBanTab extends StatelessWidget {
     required String email,
     required String relation,
     required String? avatarUrl,
-    required String trangThai, // <--- Bổ sung
+    required String trangThai,
   }) {
-    bool isPendingCancel = trangThai == 'user_trangthai_nguoithan_dongyhuy';
+    bool isMyCancelRequest = trangThai == 'user_trangthai_nguoithan_dongyhuy';
+    bool isOtherCancelRequest =
+        trangThai == 'user_trangthai_nguoithan_huynguoithan';
+    bool isPendingCancel = isMyCancelRequest || isOtherCancelRequest;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isPendingCancel ? Colors.orange.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isPendingCancel
+              ? Colors.orange.shade300
+              : Colors.grey.shade200,
+          width: isPendingCancel ? 1.5 : 1.0,
+        ),
       ),
       child: Column(
         children: [
@@ -214,16 +219,53 @@ class NguoiThanCuaBanTab extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       '$age tuổi',
                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
+                    if (isPendingCancel) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.access_time_filled_rounded,
+                              size: 13,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isMyCancelRequest
+                                  ? 'Đã gửi yêu cầu hủy kết nối'
+                                  : 'Đối phương đã yêu cầu hủy',
+                              style: const TextStyle(
+                                color: Colors.orange,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
 
-              // 🌟 MENU 3 DẤU CHẤM THẲNG ĐỨNG ĐỀ LÊN CARD
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.grey),
                 color: Colors.white,
@@ -240,20 +282,21 @@ class NguoiThanCuaBanTab extends StatelessWidget {
                   }
                 },
                 itemBuilder: (BuildContext ctx) => [
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'delete',
+                    enabled: !isPendingCancel,
                     child: Row(
                       children: [
                         Icon(
                           Icons.delete_outline_rounded,
-                          color: Colors.red,
+                          color: isPendingCancel ? Colors.grey : Colors.red,
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
                           'Xóa mối quan hệ',
                           style: TextStyle(
-                            color: Colors.red,
+                            color: isPendingCancel ? Colors.grey : Colors.red,
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
                           ),
@@ -269,7 +312,9 @@ class NguoiThanCuaBanTab extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F6F8),
+              color: isPendingCancel
+                  ? Colors.orange.shade100.withOpacity(0.4)
+                  : const Color(0xFFF4F6F8),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(

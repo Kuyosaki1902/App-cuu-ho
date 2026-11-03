@@ -1,11 +1,15 @@
 // lib/user/ChiTietDuongDi/controllers/chi_tiet_duong_di_controller.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:widget_to_marker/widget_to_marker.dart';
+import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/user/models/nguoidungmodel.dart';
 
 class ChiTietDuongDiController {
   final String maNguoiCuuHo;
@@ -15,17 +19,22 @@ class ChiTietDuongDiController {
   final double victimLng;
   final String tenBacSi;
 
+  final FirebaseService _fbService = FirebaseService();
   GoogleMapController? mapController;
   StreamSubscription? _locationSub;
-  StreamSubscription?
-  _phanCongSub; // 🌟 Thêm stream lắng nghe trạng thái phân công
+  StreamSubscription? _phanCongSub;
 
   late double currentCurLat;
   late double currentCurLng;
 
   double khoangCachBanDau_OSRM = 0.0;
-  double progressValue = 0.05; // Khởi đầu mốc 5% (Đã tiếp nhận)
-  bool _isAlreadyArrived = false; // 🌟 Biến cờ kiểm tra đã đến nơi chưa
+  double progressValue = 0.05;
+  bool _isAlreadyArrived = false;
+
+  bool isAutoTracking = true;
+  Function()? _uiUpdateCallback;
+
+  double _lastBearing = 0.0; // Lưu góc hướng di chuyển trước đó
 
   String trangthaiText = "ĐANG TÍNH TOÁN LỘ TRÌNH...";
   String estimatedTime = "-- phút";
@@ -48,13 +57,11 @@ class ChiTietDuongDiController {
   }
 
   Future<void> initTracking(Function() onUpdate) async {
+    _uiUpdateCallback = onUpdate;
     _initVictimMarker();
 
-    // 1. Gọi OSRM lần đầu để chốt Khoảng cách gốc
     khoangCachBanDau_OSRM = await _fetchOSRMRoute(startLat, startLng);
 
-    // 🌟 2. LẮNG NGHE TRẠNG THÁI TỪ PHÂN CÔNG (ChiTietPhanCongCuuHo)
-    // Truy vấn theo cấu trúc subcollection chuẩn của dự án bác
     final String todayStr = DateTime.now().toString().substring(0, 10);
     _phanCongSub = FirebaseFirestore.instance
         .collection('ChiTietPhanCongCuuHo')
@@ -62,13 +69,10 @@ class ChiTietDuongDiController {
         .collection('DanhSachNgay')
         .doc(todayStr)
         .collection('DanhSachPhanCong')
-        // Nếu cấu trúc phân công lưu theo maYeuCau hoặc maPhanCong, ta lắng nghe doc tương ứng.
-        // Ở đây ta dùng snapshots trực tiếp trên collection DanhSachPhanCong lọc theo maNguoiCuuHo & maYeuCau
         .snapshots()
         .listen((snapshot) {
           for (var doc in snapshot.docs) {
             final data = doc.data();
-            // Kiểm tra đúng yêu cầu cứu hộ hiện tại không
             if (data['maYeuCau'] != null) {
               String trangThai = data['maTrangThaiTiepNhan'] ?? '';
               if (trangThai == 'cuuho_trangthai_phancong_daden') {
@@ -76,13 +80,12 @@ class ChiTietDuongDiController {
                 progressValue = 1.0;
                 trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
                 estimatedTime = "0 phút";
-                onUpdate();
+                _uiUpdateCallback?.call();
               }
             }
           }
         });
 
-    // 3. Stream vị trí di chuyển thực tế từ Firebase (NguoiDung)
     _locationSub = FirebaseFirestore.instance
         .collection('NguoiDung')
         .doc(maNguoiCuuHo)
@@ -92,10 +95,33 @@ class ChiTietDuongDiController {
             double curLat = docSnap.data()?['viDo'] ?? startLat;
             double curLng = docSnap.data()?['kinhDo'] ?? startLng;
 
+            // Tính góc hướng di chuyển từ vị trí cũ sang vị trí mới
+            double bearing = _calculateBearing(
+              currentCurLat,
+              currentCurLng,
+              curLat,
+              curLng,
+            );
+            if (curLat != currentCurLat || curLng != currentCurLng) {
+              _lastBearing = bearing;
+            }
+
             currentCurLat = curLat;
             currentCurLng = curLng;
 
-            await _updateRouteAndProgress(curLat, curLng, onUpdate);
+            NguoiDungModel userModel = NguoiDungModel.fromMap(
+              docSnap.data()!,
+              docSnap.id,
+            );
+            await _updateRouteAndProgress(
+              curLat,
+              curLng,
+              userModel,
+              _lastBearing,
+              () {
+                _uiUpdateCallback?.call();
+              },
+            );
           }
         });
   }
@@ -114,6 +140,8 @@ class ChiTietDuongDiController {
   Future<void> _updateRouteAndProgress(
     double curLat,
     double curLng,
+    NguoiDungModel userModel,
+    double bearing,
     Function() onUpdate,
   ) async {
     final url = Uri.parse(
@@ -137,7 +165,6 @@ class ChiTietDuongDiController {
           int minutes = (durationSeconds / 60).round();
           if (minutes < 1) minutes = 1;
 
-          // Nếu chưa đến nơi theo trạng thái Firebase thì mới cập nhật ETA theo OSRM
           if (!_isAlreadyArrived) {
             estimatedTime = "$minutes phút";
           }
@@ -148,7 +175,6 @@ class ChiTietDuongDiController {
           arrivalTime =
               "${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')}";
 
-          // 🌟 BỎ HOÀN TOÀN LOGIC TỰ ĐỘNG ÉP 15M -> CHỈ TÍNH TIẾN TRÌNH THEO OSRM KHI CHƯA ĐẾN
           if (!_isAlreadyArrived) {
             if (khoangCachBanDau_OSRM > 0) {
               double currentProgress =
@@ -157,7 +183,6 @@ class ChiTietDuongDiController {
               if (currentProgress > progressValue) {
                 progressValue = currentProgress;
               }
-              // Khóa trần ở 0.99 nếu chưa có tín hiệu "Đã đến" từ cứu hộ viên
               if (progressValue >= 0.99) progressValue = 0.99;
             }
             trangthaiText = progressValue > 0.8
@@ -165,15 +190,19 @@ class ChiTietDuongDiController {
                 : "ĐANG DI CHUYỂN TỚI ĐỊA ĐIỂM";
           }
 
-          // VẼ MARKER CỨU HỘ & ĐƯỜNG ĐI OSRM
+          // 🌟 Tạo custom marker dạng Avatar tròn + Mũi tên chỉ hướng giống màn hình tổng quan
+          BitmapDescriptor rescuerIcon = await _createRescuerIcon(
+            userModel,
+            bearing,
+          );
+
           markers.removeWhere((m) => m.markerId.value == 'rescuer_location');
           markers.add(
             Marker(
               markerId: const MarkerId('rescuer_location'),
               position: LatLng(curLat, curLng),
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueGreen,
-              ),
+              icon: rescuerIcon,
+              anchor: const Offset(0.5, 0.5),
               infoWindow: InfoWindow(title: tenBacSi),
             ),
           );
@@ -189,11 +218,111 @@ class ChiTietDuongDiController {
           );
 
           onUpdate();
+
+          if (isAutoTracking) {
+            fitRouteBounds();
+          }
         }
       }
     } catch (e) {
       debugPrint("Lỗi OSRM: $e");
     }
+  }
+
+  // Thuật toán tính góc hướng di chuyển
+  double _calculateBearing(
+    double startLat,
+    double startLng,
+    double endLat,
+    double endLng,
+  ) {
+    double lat1 = startLat * math.pi / 180;
+    double lng1 = startLng * math.pi / 180;
+    double lat2 = endLat * math.pi / 180;
+    double lng2 = endLng * math.pi / 180;
+
+    double dLng = lng2 - lng1;
+    double y = math.sin(dLng) * math.cos(lat2);
+    double x =
+        math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+
+    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
+  }
+
+  // Hàm render Widget ra BitmapDescriptor cho Marker
+  Future<BitmapDescriptor> _createRescuerIcon(
+    NguoiDungModel user,
+    double bearing,
+  ) async {
+    String? avatarData = await _fbService.getUserAvatarUrl(user.maNguoiDung!);
+    ImageProvider? avatarProvider;
+    String initials = (user.hoTen.isNotEmpty)
+        ? user.hoTen.substring(0, 1).toUpperCase()
+        : '?';
+
+    if (avatarData != null && avatarData.isNotEmpty) {
+      if (avatarData.startsWith('http')) {
+        avatarProvider = NetworkImage(avatarData);
+      } else {
+        String base64Str = avatarData.contains(',')
+            ? avatarData.split(',').last
+            : avatarData;
+        try {
+          avatarProvider = MemoryImage(base64Decode(base64Str));
+        } catch (_) {}
+      }
+    }
+
+    Widget markerWidget = Directionality(
+      textDirection: TextDirection.ltr,
+      child: SizedBox(
+        width: 80,
+        height: 80,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.rotate(
+              angle: bearing * math.pi / 180,
+              child: Transform.translate(
+                offset: const Offset(0, -22),
+                child: const Icon(
+                  Icons.navigation,
+                  color: Color(0xFF006A55),
+                  size: 36,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 4),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: avatarProvider != null
+                    ? Colors.white
+                    : const Color(0xFF006A55),
+                backgroundImage: avatarProvider,
+                child: avatarProvider == null
+                    ? Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return await markerWidget.toBitmapDescriptor();
   }
 
   Future<double> _fetchOSRMRoute(double lat, double lng) async {
@@ -239,6 +368,20 @@ class ChiTietDuongDiController {
     return poly;
   }
 
+  void disableAutoTracking() {
+    if (isAutoTracking) {
+      isAutoTracking = false;
+      _uiUpdateCallback?.call();
+    }
+  }
+
+  void enableAutoTracking() {
+    isAutoTracking = true;
+    fitRouteBounds();
+    _uiUpdateCallback?.call();
+  }
+
+  // 🌟 Đẩy padding bounds rộng hơn (120 thay vì 80) để bản đồ tự động lùi lên trên, không bị che bởi bottom sheet
   void fitRouteBounds() {
     if (mapController == null) return;
     mapController?.animateCamera(
@@ -253,27 +396,36 @@ class ChiTietDuongDiController {
             currentCurLng > victimLng ? currentCurLng : victimLng,
           ),
         ),
-        80,
+        120, // Tăng khoảng đệm để không bị bottom sheet che lấp
       ),
     );
   }
 
-  void moveToVictim() {
-    mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(LatLng(victimLat, victimLng), 16.0),
-    );
+  Future<void> moveToVictim() async {
+    disableAutoTracking();
+    if (mapController != null) {
+      double currentZoom = await mapController!.getZoomLevel();
+      mapController!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(victimLat, victimLng),
+            zoom: currentZoom,
+          ),
+        ),
+      );
+    }
   }
 
   void onMapCreated(GoogleMapController controller) {
     mapController = controller;
     Future.delayed(const Duration(milliseconds: 500), () {
-      fitRouteBounds();
+      enableAutoTracking();
     });
   }
 
   void dispose() {
     _locationSub?.cancel();
-    _phanCongSub?.cancel(); // 🌟 Hủy stream phân công khi đóng màn hình
+    _phanCongSub?.cancel();
     mapController?.dispose();
   }
 }

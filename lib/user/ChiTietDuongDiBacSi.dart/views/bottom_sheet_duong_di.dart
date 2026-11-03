@@ -1,6 +1,7 @@
 // lib/user/ChiTietDuongDi/views/bottom_sheet_duong_di.dart
 import 'package:flutter/material.dart';
 import '../controllers/chi_tiet_duong_di_controller.dart';
+import 'package:cuhokhancap/user/ChatVoiBacSi/ChatVoiBacSi.dart';
 
 class ChiTietDuongDiBottomSheet extends StatelessWidget {
   final ChiTietDuongDiController controller;
@@ -224,9 +225,10 @@ class ChiTietDuongDiBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // 2 Nút hành động: Nhắn tin & Gọi cho bác sĩ
+            // 2 Nút hành động: Nhắn tin & Gọi cho bác sĩ (Đã đầy đủ nguyên bản)
             Row(
               children: [
+                // Nút Nhắn tin (Chuyển sang màn hình chat)
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -237,7 +239,21 @@ class ChiTietDuongDiBottomSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatVoiBacSiScreen(
+                            maPhongChat: controller.maNguoiCuuHo,
+                            maNguoiCuuHo: controller.maNguoiCuuHo,
+                            currentUserId: controller.maNguoiCuuHo,
+                            targetName: tenBacSi,
+                            targetAvatar:
+                                'https://ui-avatars.com/api/?name=$tenBacSi&background=046450&color=fff',
+                          ),
+                        ),
+                      );
+                    },
                     icon: Icon(
                       Icons.chat_bubble_outline,
                       color: primaryColor,
@@ -253,6 +269,7 @@ class ChiTietDuongDiBottomSheet extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
+                // Nút Gọi cho bác sĩ (Giữ nguyên form chưa làm logic gọi)
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
