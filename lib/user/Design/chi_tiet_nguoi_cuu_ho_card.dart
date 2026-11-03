@@ -25,7 +25,9 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String initials = _getInitials(rescuer.hoTen);
-    String nameDisplay = rescuer.hoTen.isNotEmpty ? rescuer.hoTen : "Người cứu hộ";
+    String nameDisplay = rescuer.hoTen.isNotEmpty
+        ? rescuer.hoTen
+        : "Người cứu hộ";
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -40,7 +42,10 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
             offset: const Offset(0, 5),
           ),
         ],
-        border: Border.all(color: const Color(0xFF00695C).withValues(alpha: 0.2), width: 1.5),
+        border: Border.all(
+          color: const Color(0xFF00695C).withValues(alpha: 0.2),
+          width: 1.5,
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -69,7 +74,11 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check_circle, color: Color(0xFF00C853), size: 14),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF00C853),
+                      size: 14,
+                    ),
                   ),
                 ],
               ),
@@ -103,7 +112,11 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
                               color: Colors.grey.shade100,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close, size: 18, color: Colors.grey),
+                            child: const Icon(
+                              Icons.close,
+                              size: 18,
+                              color: Colors.grey,
+                            ),
                           ),
                         ),
                       ],
@@ -112,7 +125,10 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFE0F2F1),
                             borderRadius: BorderRadius.circular(10),
@@ -127,7 +143,11 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Icon(Icons.near_me, size: 12, color: Color(0xFF00695C)),
+                        const Icon(
+                          Icons.near_me,
+                          size: 12,
+                          color: Color(0xFF00695C),
+                        ),
                         const SizedBox(width: 2),
                         Text(
                           distanceText,
@@ -150,7 +170,11 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               onPressed: onSendRequest,
-              icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+              icon: const Icon(
+                Icons.send_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
               label: const Text(
                 "GỬI YÊU CẦU BÁC SĨ / CỨU HỘ",
                 style: TextStyle(

@@ -270,10 +270,10 @@ class _DangKyState extends State<DangKy> {
         ngaySinh: _selectedDate!,
         ngayTao: DateTime.now(),
         matKhau: _passwordController.text,
-        viDo: null,          // Mặc định ban đầu chưa có tọa độ
-        kinhDo: null,        // Mặc định ban đầu chưa có tọa độ
-        geohash: null,       // Mặc định ban đầu chưa có geohash
-        nhanCaCuuHo: false,  // Mặc định tắt trạng thái nhận ca
+        viDo: null, // Mặc định ban đầu chưa có tọa độ
+        kinhDo: null, // Mặc định ban đầu chưa có tọa độ
+        geohash: null, // Mặc định ban đầu chưa có geohash
+        nhanCaCuuHo: false, // Mặc định tắt trạng thái nhận ca
         isOnline: false,
       );
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
-import 'ThongTinTaiKhoan.dart'; 
+import 'ThongTinTaiKhoan.dart';
 
 class MenuNguoiDung extends StatefulWidget {
-  final String maNguoiDung; 
-  
+  final String maNguoiDung;
+
   const MenuNguoiDung({super.key, required this.maNguoiDung});
 
   @override
@@ -20,7 +20,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
   @override
   void initState() {
     super.initState();
-    _userStream = _firebaseService.layThongTinNguoiDungRealTime(widget.maNguoiDung);
+    _userStream = _firebaseService.layThongTinNguoiDungRealTime(
+      widget.maNguoiDung,
+    );
   }
 
   String _getInitials(String name) {
@@ -52,8 +54,12 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
           stream: _userStream,
           builder: (context, snapshot) {
             NguoiDungModel? user = snapshot.data;
-            String tenHienThi = user?.hoTen.isNotEmpty == true ? user!.hoTen : "Người dùng";
-            String sdtHienThi = user?.soDienThoai.isNotEmpty == true ? _maskPhoneNumber(user!.soDienThoai) : "Chưa cập nhật SĐT";
+            String tenHienThi = user?.hoTen.isNotEmpty == true
+                ? user!.hoTen
+                : "Người dùng";
+            String sdtHienThi = user?.soDienThoai.isNotEmpty == true
+                ? _maskPhoneNumber(user!.soDienThoai)
+                : "Chưa cập nhật SĐT";
             String avatarInitials = _getInitials(tenHienThi);
 
             // Kiểm tra trạng thái vai trò hiện tại từ Firebase
@@ -132,8 +138,11 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                               onTap: () {
                                 if (user != null) {
                                   Navigator.push(
-                                    context, 
-                                    MaterialPageRoute(builder: (context) => ThongTinTaiKhoan(nguoiDung: user)),
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ThongTinTaiKhoan(nguoiDung: user),
+                                    ),
                                   );
                                 }
                               },
@@ -146,7 +155,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                       children: [
                                         CircleAvatar(
                                           radius: 24,
-                                          backgroundColor: const Color(0xFF00695C),
+                                          backgroundColor: const Color(
+                                            0xFF00695C,
+                                          ),
                                           child: Text(
                                             avatarInitials,
                                             style: const TextStyle(
@@ -173,7 +184,8 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             tenHienThi,
@@ -219,7 +231,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                   color: const Color(0xFF004D40),
                                   borderRadius: BorderRadius.vertical(
                                     top: const Radius.circular(14),
-                                    bottom: Radius.circular(_isExpanded ? 0 : 14),
+                                    bottom: Radius.circular(
+                                      _isExpanded ? 0 : 14,
+                                    ),
                                   ),
                                 ),
                                 child: Material(
@@ -232,7 +246,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                     },
                                     borderRadius: BorderRadius.vertical(
                                       top: const Radius.circular(14),
-                                      bottom: Radius.circular(_isExpanded ? 0 : 14),
+                                      bottom: Radius.circular(
+                                        _isExpanded ? 0 : 14,
+                                      ),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -273,7 +289,8 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                 firstChild: Padding(
                                   padding: const EdgeInsets.all(12),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Expanded(
                                         child: _buildHorizontalButton(
@@ -376,7 +393,8 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                 const SizedBox(width: 12),
                                 const Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "CHUYỂN ĐỔI SANG",
@@ -401,8 +419,13 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                 Switch(
                                   value: isCuuHo,
                                   onChanged: (bool val) async {
-                                    String vaTroMoi = val ? 'vaitro_cuuhococc' : 'vaitro_nguoidung';
-                                    await _firebaseService.capNhatVaiTro(widget.maNguoiDung, vaTroMoi);
+                                    String vaTroMoi = val
+                                        ? 'vaitro_cuuhococc'
+                                        : 'vaitro_nguoidung';
+                                    await _firebaseService.capNhatVaiTro(
+                                      widget.maNguoiDung,
+                                      vaTroMoi,
+                                    );
                                   },
                                   activeThumbColor: Colors.white,
                                   activeTrackColor: const Color(0xFF00C853),
