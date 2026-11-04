@@ -23,18 +23,6 @@ class RescuerTopNavBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: Colors.white,
-              radius: 20,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.black87,
-                  size: 20,
-                ),
-                onPressed: onBack,
-              ),
-            ),
             const Spacer(),
             // Badge đếm số lượng người đang tới
             Container(

@@ -7,24 +7,12 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart'; // Import RTDB
+import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart';// Import RTDB
 import 'package:cuhokhancap/user/Models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/Models/chitietphancongcuuhomodel%20.dart';
-import 'package:cuhokhancap/user/Models/gioitinhmodel.dart';
 import 'package:cuhokhancap/user/Models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/Models/hosocuuhokhongcchnmodel.dart';
-import 'package:cuhokhancap/user/Models/loaiyeucaumodel.dart';
 import 'package:cuhokhancap/user/Models/luuanhmodel.dart';
-import 'package:cuhokhancap/user/Models/moiquanhe.dart';
-import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
-import 'package:cuhokhancap/user/Models/nguoithanmodel.dart';
-import 'package:cuhokhancap/user/Models/phanloaianhmodel.dart';
-import 'package:cuhokhancap/user/Models/tinhtrangyeucaumodel.dart';
-import 'package:cuhokhancap/user/Models/trangthaimodel.dart';
-import 'package:cuhokhancap/user/Models/vaitromodel.dart';
 import 'package:cuhokhancap/user/Models/yeucaucuuhomodel.dart';
 
 class FirebaseService {
@@ -502,6 +490,17 @@ class FirebaseService {
       return null; // 🌟 Thất bại trả về null
     }
   }
+
+
+
+
+  // ===========================================================================
+  // --------------------------NGÔ THIÊN BẢO------------------------------
+  // ===========================================================================
+
+
+
+
 
   // ===========================================================================
   // 1. NGUOI DUNG MODEL (NguoiDung)

@@ -36,7 +36,7 @@ class ManHinhCanhBao extends StatelessWidget {
         ],
       ),
       content: Text(
-        'Tài khoản $maNguoiGoi đang gặp nguy hiểm và đã phát tín hiệu cầu cứu. Vui lòng kiểm tra và hỗ trợ ngay lập tức!',
+        '$maNguoiGoi đang gặp nguy hiểm và đã phát tín hiệu cầu cứu. Vui lòng kiểm tra và hỗ trợ ngay lập tức!',
         style: const TextStyle(fontSize: 16),
         textAlign: TextAlign.center,
       ),

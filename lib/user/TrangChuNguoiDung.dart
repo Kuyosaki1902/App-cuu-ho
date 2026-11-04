@@ -10,6 +10,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/DangNhap.dart';
 import 'MenuNguoiDung.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cuhokhancap/user/MoTaTinhTrang.dart';
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
@@ -21,6 +22,8 @@ import 'package:permission_handler/permission_handler.dart' hide ServiceStatus;
 import 'package:cuhokhancap/user/Design/man_hinh_canh_bao.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/firebase/background_service.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -149,13 +152,58 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
         .where('maNguoiThan', isEqualTo: widget.maNguoiDung)
         .where('trangThai', isEqualTo: 'dangGoi')
         .snapshots()
-        .listen((snapshot) {
+        .listen((snapshot) async { // Thêm async ở đây
           if (snapshot.docs.isNotEmpty) {
             for (var doc in snapshot.docs) {
-              _hienThiManHinhCanhBao(doc.reference, doc.data()['maNguoiDung']);
+              String maNguoiGoi = doc.data()['maNguoiDung'];
+
+              // Truy vấn họ tên từ bảng NguoiDung
+              DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('NguoiDung').doc(maNguoiGoi).get();
+              String hoTen = userDoc.exists ? (userDoc.data() as Map<String, dynamic>)['hoTen'] ?? maNguoiGoi : maNguoiGoi;
+
+              // Hiển thị dialog cảnh báo với họ tên
+              _hienThiManHinhCanhBao(doc.reference, hoTen);
+
+              // Kích hoạt thông báo nền kèm âm thanh và rung
+              _phatThongBaoAmThanhVaRung(hoTen, doc.id.hashCode);
             }
           }
         });
+  }
+
+  Future<void> _phatThongBaoAmThanhVaRung(String hoTen, int id) async {
+    final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
+
+    const AndroidInitializationSettings initSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings = InitializationSettings(android: initSettingsAndroid);
+    await plugin.initialize(initSettings);
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'sos_channel_id_v3', // Tiếp tục đổi ID để phá cache
+      'Cảnh báo khẩn cấp',
+      importance: Importance.max,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      fullScreenIntent: true,
+    );
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    
+    // Hiển thị thông báo nền
+    await plugin.show(
+      id,
+      '🚨 CẢNH BÁO KHẨN CẤP',
+      'Người thân của bạn ($hoTen) đang gặp nguy hiểm!',
+      details,
+    );
+
+    // Kích hoạt đọc giọng nói tiếng Việt
+    FlutterTts flutterTts = FlutterTts();
+    await flutterTts.setLanguage("vi-VN");
+    await flutterTts.setSpeechRate(0.5); // Tốc độ đọc
+    await flutterTts.setVolume(1.0);     // Âm lượng tối đa
+    await flutterTts.setPitch(1.0);
+    await flutterTts.speak("Cảnh báo khẩn cấp. Người thân của bạn đang gặp nguy hiểm. Vui lòng kiểm tra ngay lập tức.");
   }
 
   void _hienThiManHinhCanhBao(DocumentReference docRef, String maNguoiGoi) {

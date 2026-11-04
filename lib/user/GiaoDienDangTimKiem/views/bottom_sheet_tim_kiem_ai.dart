@@ -42,6 +42,44 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
     bool isMaxScanReached =
         controller.currentScanStep == controller.scanRadii.length - 1;
 
+    // 🌟 Kiểm tra phân loại yêu cầu
+    bool isManualSelect =
+        controller.yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien';
+    int elapsed = controller.elapsedSeconds;
+
+    // 🌟 Xử lý hiển thị text theo đúng mốc thời gian chuẩn và lấy đúng số lượng thực tế
+    String mainStatusText = '';
+    String headerBadgeText = 'PHỐI HỢP CẤP TỐC AI';
+
+    if (isManualSelect) {
+      headerBadgeText = 'ĐIỀU PHỐI THỦ CÔNG';
+      if (elapsed <= 60) {
+        // Từ 0 đến 1 phút đầu: Đang chờ x cứu hộ tiếp nhận (Lấy đúng số lượng user đã chọn)
+        int targetCount = controller.manualSelectedCount > 0
+            ? controller.manualSelectedCount
+            : (controller.assignedRescuerIds.isNotEmpty
+                  ? controller.assignedRescuerIds.length
+                  : 1);
+        mainStatusText = 'Đang chờ $targetCount cứu hộ viên tiếp nhận';
+      } else if (elapsed > 60 && elapsed <= 120) {
+        // Sau 1 phút đến 2 phút: Đang tìm kiếm bổ sung
+        mainStatusText =
+            'Đang tìm kiếm cứu hộ viên bổ sung. Đã tìm được $rescuerCount bác sĩ';
+      } else {
+        // Quá 2 phút: Không tìm được, liên hệ admin
+        mainStatusText = 'Không tìm được, đang liên hệ admin';
+      }
+    } else {
+      // Logic chế độ Tự động
+      if (elapsed <= 60) {
+        mainStatusText = rescuerCount == 0
+            ? 'Đang tìm kiếm cứu hộ viên...'
+            : 'Đã tìm thấy $rescuerCount người cứu hộ';
+      } else {
+        mainStatusText = 'Không tìm được, đang liên hệ admin';
+      }
+    }
+
     return Align(
       alignment: Alignment.bottomCenter,
       child: Container(
@@ -69,7 +107,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 1. Tiêu đề + Bộ đếm thời gian nhảy từng giây bên phải
+            // 1. Tiêu đề + Bộ đếm thời gian
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -86,7 +124,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'PHỐI HỢP CẤP TỐC AI',
+                            headerBadgeText,
                             style: TextStyle(
                               color: primaryColor,
                               fontWeight: FontWeight.bold,
@@ -97,9 +135,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        rescuerCount == 0
-                            ? 'Đang tìm kiếm cứu hộ viên...'
-                            : 'Đã tìm thấy $rescuerCount người cứu hộ',
+                        mainStatusText,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -110,7 +146,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
-                // ⏱️ Bộ đếm thời gian bên phải
+                // ⏱️ Bộ đếm thời gian
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -204,7 +240,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 3. Tiến trình Quét bán kính (Mở rộng liên tục đến 5km)
+            // 3. Tiến trình Quét bán kính
             Row(
               children: [
                 Container(
@@ -261,7 +297,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 🌟 4. MỤC "XÁC NHẬN NHẬN CA TRỰC TIẾP" (Đã khôi phục chuẩn thiết kế)
+            // 4. MỤC "XÁC NHẬN NHẬN CA TRỰC TIẾP"
             Row(
               children: [
                 Container(

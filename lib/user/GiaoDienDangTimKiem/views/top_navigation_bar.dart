@@ -3,7 +3,9 @@
 import 'package:flutter/material.dart';
 
 class TopNavigationBarWidget extends StatelessWidget {
-  const TopNavigationBarWidget({super.key});
+  final VoidCallback? onBackPressed; // 🌟 Thêm callback nhận vào
+
+  const TopNavigationBarWidget({super.key, this.onBackPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +22,8 @@ class TopNavigationBarWidget extends StatelessWidget {
                   radius: 22,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.black87),
-                    onPressed: () => Navigator.pop(context),
+                    // 🌟 Nếu có truyền hàm thì gọi hàm, không thì mặc định pop màn hình
+                    onPressed: onBackPressed ?? () => Navigator.pop(context),
                   ),
                 ),
                 Container(

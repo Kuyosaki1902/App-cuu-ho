@@ -9,6 +9,11 @@ xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Cho phép điện thoại rung -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    
+    <!-- Cho phép hiển thị thông báo đè lên màn hình (kể cả khi tắt máy) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Quyền truy cập định vị chính xác và tương đối -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -18,10 +23,11 @@ xmlns:tools="http://schemas.android.com/tools">
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="specialUse"
-            android:exported="true"
-            tools:ignore="Instantiatable" />
+        android:name="id.flutter.flutter_background_service.BackgroundService"
+        android:foregroundServiceType="specialUse"
+        android:exported="true"
+        android:stopWithTask="false" 
+        tools:ignore="Instantiatable" />
         <meta-data 
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps"/>
@@ -47,6 +53,16 @@ xmlns:tools="http://schemas.android.com/tools">
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

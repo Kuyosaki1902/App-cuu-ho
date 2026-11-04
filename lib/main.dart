@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'user/DangNhap.dart';
 import 'user/TrangChuNguoiDung.dart'; 
 import 'firebase/firebase_options.dart';
+import 'firebase/background_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +19,9 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final String? maNguoiDungDaLuu = prefs.getString('maNguoiDung_daLuu');
 
+  if (maNguoiDungDaLuu != null && maNguoiDungDaLuu.isNotEmpty) {
+    await initializeService();
+  }
   // 3. Khởi chạy app và truyền biến kiểm tra vào
   runApp(MyApp(maNguoiDungDaLuu: maNguoiDungDaLuu));
 }

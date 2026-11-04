@@ -32,7 +32,7 @@ class _ArrowClipper extends CustomClipper<Path> {
 class TimKiemCuuHoController {
   final FirebaseService _firebaseService = FirebaseService();
   final GeminiService _geminiService = GeminiService();
-
+  int manualSelectedCount = 0;
   GoogleMapController? mapController;
   bool isLoading = true;
   Timer? _fallbackTimer;
@@ -80,9 +80,15 @@ class TimKiemCuuHoController {
   }) async {
     isLoading = true;
     _hasNavigated = false;
-    assignedRescuerIds.clear(); // 🌟 Xóa sạch cache phân công trên thiết bị
-    initialRescuerLocations
-        .clear(); // 🌟 Xóa sạch tọa độ ban đầu cũ trên thiết bị
+
+    // 🌟 RESET SẠCH CACHE TỪ PHIÊN TRƯỚC ĐỂ KHÔNG BỊ KẸT SỐ LIỆU CŨ
+    assignedRescuerIds.clear();
+    initialRescuerLocations.clear();
+    acceptedRescuerIds.clear();
+    rescuerList.clear(); // 👈 Xóa sạch danh sách cứu hộ cũ ở đây!
+    elapsedSeconds = 0; // Reset luôn thời gian quét về 0
+    markers.clear(); // Xóa sạch marker cũ trên bản đồ
+    circles.clear(); // Xóa sạch vòng tròn cũ
     onUpdate();
 
     try {
@@ -147,6 +153,7 @@ class TimKiemCuuHoController {
       if (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' &&
           danhSachChiDinh != null &&
           danhSachChiDinh.isNotEmpty) {
+        manualSelectedCount = danhSachChiDinh.length;
         // 1. TÍNH TOÁN KHOẢNG CÁCH ĐẾN NGƯỜI Ở XA NHẤT TRONG DANH SÁCH ĐƯỢC CHỌN
         List<NguoiDungModel> targetUsers = await _firebaseService.getUsersByIds(
           danhSachChiDinh,
@@ -219,8 +226,16 @@ class TimKiemCuuHoController {
     );
 
     for (var user in targetUsers) {
-      if (user.viDo == null || user.kinhDo == null) continue;
+      debugPrint('🔍 Đang kiểm tra cứu hộ viên: ${user.hoTen}');
 
+      if (user.viDo == null || user.kinhDo == null) {
+        debugPrint('❌ Bị bỏ qua do thiếu tọa độ GPS: ${user.hoTen}');
+        continue;
+      }
+      if (user.nhanCaCuuHo == true) {
+        debugPrint('❌ Bị bỏ qua do nhanCaCuuHo == true: ${user.hoTen}');
+        continue;
+      }
       double distanceMeters = Geolocator.distanceBetween(
         currentDeviceLocation.latitude,
         currentDeviceLocation.longitude,
@@ -382,6 +397,7 @@ class TimKiemCuuHoController {
       if (rescuer.maNguoiDung == yeuCauCuuHo?.maNguoiYeuCau) continue;
       if (assignedRescuerIds.contains(rescuer.maNguoiDung)) continue;
       if (rescuer.viDo == null || rescuer.kinhDo == null) continue;
+      if (rescuer.nhanCaCuuHo == true) continue;
 
       double distanceMeters = Geolocator.distanceBetween(
         currentDeviceLocation.latitude,
@@ -848,10 +864,10 @@ class TimKiemCuuHoController {
     _phanCongSubscription?.cancel();
   }
 
-  /// 🌟 HỦY TÌM KIẾM CỨU HỘ & DỌN DẸP DỮ LIỆU
+  /// 🌟 HỦY TÌM KIẾM CỨU HỘ & DỌN DẸP DỮ LIỆU (Cập nhật trạng thái hủy + tắt nhanCaCuuHo)
   Future<void> cancelSearch(String maYeuCau) async {
     try {
-      isLoading = true; // Hiện loading nếu cần
+      isLoading = true;
 
       // 1. Dừng mọi luồng quét và bộ đếm thời gian
       _stopAllTimers();
@@ -861,20 +877,39 @@ class TimKiemCuuHoController {
       String? maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
 
       if (maNanNhan != null) {
-        // 3. Gọi FirebaseService để xóa thông báo khẩn cấp trên Realtime DB của người thân
+        // 3. Xóa thông báo khẩn cấp trên Realtime DB của người thân
         await _firebaseService.removeEmergencyNotification(
           maNanNhan: maNanNhan,
         );
       }
 
-      // 4. Đổi trạng thái các đơn phân công đang chờ thành "Đã hủy"
+      // 4. Cập nhật trạng thái các đơn phân công thành 'cuuho_trangthai_phancong_dahuy'
       await _firebaseService.cancelRemainingAssignments(maYeuCau);
 
-      // 5. Đổi trạng thái tổng của Yêu cầu cứu hộ thành Hủy (nếu có mã trạng thái hủy)
-      // await _firebaseService.updateTinhTrangYeuCau(maYeuCau, 'user_tinhtrang_dahuy');
+      // 5. Cập nhật trạng thái tổng của Yêu cầu cứu hộ thành 'user_tinhtrang_dahuy'
+      await _firebaseService.updateTinhTrangYeuCau(
+        maYeuCau,
+        'user_tinhtrang_dahuy',
+      );
+
+      // 6. 🌟 Cập nhật nhanCaCuuHo thành false cho tất cả các cứu hộ viên đang bị gán trong đơn này
+      if (yeuCauCuuHo != null && yeuCauCuuHo!.danhSachPhanCongVien.isNotEmpty) {
+        for (var maCuuHo in yeuCauCuuHo!.danhSachPhanCongVien.keys) {
+          try {
+            await _firebaseService.updateUserOnlineStatus(
+              userId: maCuuHo,
+              isOnline:
+                  true, // Vẫn giữ trạng thái online của họ, chỉ tắt cờ nhận ca
+              nhanCaCuuHo: false, // 👈 Đưa nhanCaCuuHo về false
+            );
+          } catch (e) {
+            debugPrint('Lỗi cập nhật nhanCaCuuHo cho $maCuuHo: $e');
+          }
+        }
+      }
 
       debugPrint(
-        '✅ Đã hủy tìm kiếm, thu hồi đơn và xóa thông báo RTDB thành công!',
+        '✅ Đã hủy tìm kiếm, thu hồi đơn và tắt cờ nhận ca của các cứu hộ viên thành công!',
       );
     } catch (e) {
       debugPrint('❌ Lỗi khi hủy tìm kiếm: $e');

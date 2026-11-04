@@ -53,7 +53,7 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
 
     // 1. Lấy mã người dùng từ SharedPreferences
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    maNguoiDungHienTai = prefs.getString('maNguoiDung') ?? '';
+    maNguoiDungHienTai = prefs.getString('maNguoiDung_daLuu') ?? '';
 
     // 2. Lấy tọa độ GPS (Đảm bảo đã cấp quyền)
     try {
