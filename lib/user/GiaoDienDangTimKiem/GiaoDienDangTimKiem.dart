@@ -9,8 +9,12 @@ import 'views/bottom_sheet_tim_kiem_ai.dart';
 
 class GiaoDienDangTimKiem extends StatefulWidget {
   final String maYeuCau;
-
-  const GiaoDienDangTimKiem({super.key, required this.maYeuCau});
+  final List<String>? danhSachChiDinh; // 🌟 Thêm biến này
+  const GiaoDienDangTimKiem({
+    super.key,
+    required this.maYeuCau,
+    this.danhSachChiDinh,
+  });
 
   @override
   State<GiaoDienDangTimKiem> createState() => _GiaoDienDangTimKiemState();
@@ -25,6 +29,7 @@ class _GiaoDienDangTimKiemState extends State<GiaoDienDangTimKiem> {
     super.initState();
     _controller.initSearch(
       widget.maYeuCau,
+      danhSachChiDinh: widget.danhSachChiDinh,
       () {
         if (mounted) setState(() {});
       },

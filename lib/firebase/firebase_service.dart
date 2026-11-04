@@ -358,6 +358,7 @@ class FirebaseService {
     String? moTaChiTiet,
     File? fileAnh,
     File? fileGhiAm,
+    String maLoaiYeuCau = 'loaiyeucau_timtudong',
   }) async {
     try {
       // 1. TÍNH MÃ YÊU CẦU TỰ TĂNG (yeucau1, yeucau2, yeucau3...)
@@ -450,7 +451,7 @@ class FirebaseService {
         'maAdminDieuPhoi': null,
         'thoiGianPhanCong': null,
         'thoiGianHoanThanh': null,
-        'maLoaiYeuCau': 'loaiyeucau_timtudong',
+        'maLoaiYeuCau': maLoaiYeuCau,
         'maTinhTrangYeuCau': 'user_tinhtrang_chotiepnhan',
         'danhSachPhanCongVien': {},
       });

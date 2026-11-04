@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cuhokhancap/user/ChonNguoiCuuHo/ChonNguoiCuuHo.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -827,7 +828,16 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                               ),
                               const SizedBox(height: 12),
                               TextButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChonBacSiTiepNhan(
+                                        banKinhQuet: _currentRadius,
+                                      ),
+                                    ),
+                                  );
+                                },
                                 style: TextButton.styleFrom(
                                   backgroundColor: const Color(0xFFF5F6F8),
                                   padding: const EdgeInsets.symmetric(

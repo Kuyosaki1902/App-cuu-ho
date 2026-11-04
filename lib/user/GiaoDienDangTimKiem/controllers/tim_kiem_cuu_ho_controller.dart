@@ -35,7 +35,7 @@ class TimKiemCuuHoController {
 
   GoogleMapController? mapController;
   bool isLoading = true;
-
+  Timer? _fallbackTimer;
   YeuCauCuuHoModel? yeuCauCuuHo;
   ChiTietMoTaHienTruongModel? chiTietMoTa;
   List<LuuAnhModel> danhSachAnhBase64 = [];
@@ -75,6 +75,7 @@ class TimKiemCuuHoController {
   Future<void> initSearch(
     String maYeuCau,
     Function() onUpdate, {
+    List<String>? danhSachChiDinh,
     Function(Map<String, LatLng>)? onRescuerAccepted,
   }) async {
     isLoading = true;
@@ -142,15 +143,106 @@ class TimKiemCuuHoController {
         elapsedSeconds++;
         onUpdate();
       });
+      // 🌟 KIỂM TRA LUỒNG CHẠY
+      if (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' &&
+          danhSachChiDinh != null &&
+          danhSachChiDinh.isNotEmpty) {
+        // 1. TÍNH TOÁN KHOẢNG CÁCH ĐẾN NGƯỜI Ở XA NHẤT TRONG DANH SÁCH ĐƯỢC CHỌN
+        List<NguoiDungModel> targetUsers = await _firebaseService.getUsersByIds(
+          danhSachChiDinh,
+        );
+        double maxDistanceMeters = 1000.0; // Mặc định tối thiểu 1km
+
+        for (var user in targetUsers) {
+          if (user.viDo != null && user.kinhDo != null) {
+            double distance = Geolocator.distanceBetween(
+              currentDeviceLocation.latitude,
+              currentDeviceLocation.longitude,
+              user.viDo!,
+              user.kinhDo!,
+            );
+            if (distance > maxDistanceMeters) {
+              maxDistanceMeters = distance;
+            }
+          }
+        }
+
+        // 2. TỰ ĐỘNG CHỌN MỐC QUÉT (SCAN STEP) PHÙ HỢP HOẶC MỞ RỘNG TỐI ĐA NẾU QUÁ XA
+        if (maxDistanceMeters <= 1000) {
+          currentScanStep = 0; // Mốc 1km
+        } else if (maxDistanceMeters <= 3000) {
+          currentScanStep = 1; // Mốc 3km
+        } else {
+          currentScanStep = 2; // Mốc 5km (hoặc vượt quá thì nằm ở mức max)
+        }
+
+        await updateMapOverlays(); // Vẽ lại vòng tròn bản đồ theo mốc vừa tính
+
+        // 3. Gán đơn cho các bác sĩ được chọn
+        await _assignToSpecificRescuers(maYeuCau, danhSachChiDinh, onUpdate);
+
+        // 4. Đếm ngược 60 giây chờ đợi phản hồi, nếu tạch thì fallback sang AI tự tìm
+        _fallbackTimer = Timer(const Duration(seconds: 60), () async {
+          if (acceptedRescuerIds.isEmpty) {
+            debugPrint(
+              '⏳ Quá 60s không ai nhận đơn tự chọn, chuyển sang AI quét tự động!',
+            );
+
+            await _firebaseService.updateTinhTrangYeuCau(
+              maYeuCau,
+              'user_tinhtrang_chotiepnhan',
+            );
+
+            startAdaptiveAIRadar(maYeuCau, onUpdate);
+          }
+        });
+      } else {
+        // LUỒNG 2: TÌM TỰ ĐỘNG BẰNG AI RADAR (Bắt đầu từ 1km)
+        startAdaptiveAIRadar(maYeuCau, onUpdate);
+      }
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
       isLoading = false;
       onUpdate();
     }
+  }
 
-    // Bắt đầu vòng quét AI từ đầu với danh sách hoàn toàn sạch
-    startAdaptiveAIRadar(maYeuCau, onUpdate);
+  // 🌟 HÀM MỚI: Chỉ gán đơn cho những người được chỉ định
+  Future<void> _assignToSpecificRescuers(
+    String maYeuCau,
+    List<String> targetIds,
+    Function() onUpdate,
+  ) async {
+    List<NguoiDungModel> targetUsers = await _firebaseService.getUsersByIds(
+      targetIds,
+    );
+
+    for (var user in targetUsers) {
+      if (user.viDo == null || user.kinhDo == null) continue;
+
+      double distanceMeters = Geolocator.distanceBetween(
+        currentDeviceLocation.latitude,
+        currentDeviceLocation.longitude,
+        user.viDo!,
+        user.kinhDo!,
+      );
+
+      assignedRescuerIds.add(user.maNguoiDung!);
+      initialRescuerLocations[user.maNguoiDung!] = LatLng(
+        user.viDo!,
+        user.kinhDo!,
+      );
+      rescuerList.add({
+        'user': user,
+        'distanceKm': (distanceMeters / 1000).toStringAsFixed(1),
+      });
+
+      _addRescuerMarker(user, distanceMeters);
+      await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
+    }
+
+    onUpdate();
   }
 
   // 🌟 Cập nhật tham số và thêm đoạn chuyển trang vào _listenToPhanCongChanges
@@ -751,6 +843,7 @@ class TimKiemCuuHoController {
   }
 
   void dispose() {
+    _fallbackTimer?.cancel();
     _stopAllTimers();
     _phanCongSubscription?.cancel();
   }
