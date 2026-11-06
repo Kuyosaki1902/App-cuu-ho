@@ -7,7 +7,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class TrangChuController extends ChangeNotifier {
   GoogleMapController? mapController;
@@ -25,17 +24,19 @@ class TrangChuController extends ChangeNotifier {
   String maVaiTro = '';
   Timer? _timer;
   bool _isDisposed = false; // 1. Khai báo biến cờ
-
-  // Lấy UID động từ FirebaseAuth, nếu chưa đăng nhập mới dùng ID mặc định
-  String get _userID => FirebaseAuth.instance.currentUser?.uid ?? 'nguoidung2';
+  String _userID = '';
   final int _soLuongCaTiepNhan = 0;
-
-  // Quản lý thời gian theo ngày
   int _onlineSeconds = 0;
   String _todayDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-  // Danh sách người dùng xung quanh
   List<Map<String, dynamic>> _nearbyUsers = [];
+
+  // Lấy UID động từ FirebaseAuth, nếu chưa đăng nhập mới dùng ID mặc định
+  Future<void> getUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    _userID = prefs.getString('maNguoiDung_daLuu') ?? '';
+  }
+
+  //String get _userID => FirebaseAuth.instance.currentUser?.uid ?? 'nguoidung2';
 
   // Getters cho UI đọc dữ liệu
   LatLng? get currentPosition => _currentPosition;
@@ -47,7 +48,33 @@ class TrangChuController extends ChangeNotifier {
   int get onlineSeconds => _onlineSeconds;
   List<Map<String, dynamic>> get nearbyUsers => _nearbyUsers;
 
-  TrangChuController() {
+  // Theo dõi bộ đếm chống ghi đè
+  Timer? _antiOverrideTimer;
+
+  TrangChuController(String userId) {
+    _userID = userId;
+
+    debugPrint('👉 [Controller Init] Đang khởi tạo cho userID: "$_userID"');
+
+    // 🟢 1. Cập nhật trạng thái true ngay lập tức
+    _isOnline = true;
+    _updateUserOnlineStatusInFirestore(true);
+
+    // 🟢 2. CHỐNG GHI ĐÈ: Liên tục "bồi" lại true trong 3 giây đầu tiên (mỗi 500ms một lần)
+    // Để triệt tiêu hoàn toàn mọi lệnh `false` trễ hạn từ dispose bên phía người dùng.
+    int counter = 0;
+    _antiOverrideTimer = Timer.periodic(const Duration(milliseconds: 500), (
+      timer,
+    ) {
+      if (_isDisposed || counter >= 6) {
+        // Chạy trong vòng 3 giây (6 lần) là đủ quét sạch mọi lệnh delay cũ
+        timer.cancel();
+        return;
+      }
+      counter++;
+      _updateUserOnlineStatusInFirestore(true);
+    });
+
     initLocationService();
     _initAndCheckNewDayTimer();
     fetchFullUserData(_userID);
@@ -56,6 +83,7 @@ class TrangChuController extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _antiOverrideTimer?.cancel(); // 🟢 Hủy timer chống ghi đè
     _positionStreamSubscription?.cancel();
     _usersNearbySubscription?.cancel();
     mapController?.dispose();
@@ -227,7 +255,6 @@ class TrangChuController extends ChangeNotifier {
         });
   }
 
-  //================= Firebase =================
   Future<void> fetchFullUserData(String userId) async {
     try {
       _isLoadingLocation = true;
@@ -243,11 +270,10 @@ class TrangChuController extends ChangeNotifier {
         name = userData['hoTen'] ?? 'Chưa cập nhật';
         maVaiTro = userData['maVaiTro'] ?? '';
 
-        if (userData.containsKey('isOnline')) {
-          _isOnline = userData['isOnline'] ?? true;
-        } else {
-          _updateUserOnlineStatusInFirestore(_isOnline);
-        }
+        // 🟢 GIẢI PHÁP: Ép trạng thái về true khi vào màn hình Cứu hộ viên
+        // để ghi đè lại giá trị `false` do sự kiện dispose của màn hình người dùng để lại.
+        _isOnline = true;
+        _updateUserOnlineStatusInFirestore(true);
       }
 
       if (maVaiTro == 'vaitro_cuuhococc') {
@@ -293,7 +319,7 @@ class TrangChuController extends ChangeNotifier {
     } finally {
       if (!_isDisposed) {
         _isLoadingLocation = false;
-        notifyListeners(); // Chặn trước khi gọi ở finally
+        notifyListeners();
       }
     }
   }

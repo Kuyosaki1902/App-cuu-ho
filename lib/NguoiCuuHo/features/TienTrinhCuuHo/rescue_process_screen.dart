@@ -298,7 +298,10 @@ class TienTrinhCuuHo extends StatelessWidget {
                 // (Thay MainScreen bằng tên Widget màn hình chính của bạn)
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (context) => Trangchunguoicuuho()),
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        Trangchunguoicuuho(currentUserId: currentUserId),
+                  ),
                   (route) =>
                       false, // Xóa toàn bộ lịch sử màn hình chờ/tiến trình cũ
                 );

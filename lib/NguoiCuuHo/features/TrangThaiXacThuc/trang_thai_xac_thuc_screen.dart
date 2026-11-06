@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 class TrangThaiXacThucScreen extends StatelessWidget {
   final String userId;
-  final bool isCoCCHN; //Thêm biến phân biệt
+  final bool isCoCCHN;
   const TrangThaiXacThucScreen({
     super.key,
     required this.userId,
@@ -34,7 +34,11 @@ class TrangThaiXacThucScreen extends StatelessWidget {
           // TODO: Thay bằng Widget Màn hình chính Cứu hộ viên của bạn
           Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(builder: (context) => const Trangchunguoicuuho()),
+            MaterialPageRoute(
+              builder: (context) => Trangchunguoicuuho(
+                currentUserId: userId,
+              ), // Truyền userId vào đây
+            ),
             (route) => false,
           );
         };

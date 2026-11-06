@@ -55,6 +55,11 @@ dependencies:
   flutter_background_service: ^5.0.6 # Thư viện quản lý Foreground Service
   flutter_local_notifications: ^17.0.0 # Thư viện hiển thị Notification
   device_info_plus: ^10.1.0
+  widget_to_marker: ^1.0.6
+  google_generative_ai: ^0.4.7
+  record: ^7.1.2
+  geohash_plus: ^1.1.1
+  permission_handler: ^13.0.2
 
 
 dev_dependencies:

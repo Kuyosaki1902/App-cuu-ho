@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
+import 'package:cuhokhancap/user/TrangChuNguoiDung.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
@@ -8,11 +9,14 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/bottom.dart'
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/map_section.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ManHinhChoTiepNhanCa/ManHinhCho.dart';
 
 class Trangchunguoicuuho extends StatefulWidget {
-  const Trangchunguoicuuho({Key? key}) : super(key: key);
+  final String currentUserId;
+  const Trangchunguoicuuho({Key? key, required this.currentUserId})
+    : super(key: key);
 
   @override
   State<Trangchunguoicuuho> createState() => _TrangchunguoicuuhoState();
@@ -29,21 +33,15 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
     _listenForRescueAssignments();
   }
 
-  void _listenForRescueAssignments() {
-    String currentUserId = 'nguoidung2'; // Giữ nguyên dữ liệu giả của bạn
-
-    // 🟢 Lưu ý: Nếu dữ liệu giả của bạn trên Firebase lưu ở ngày cũ (vd: 2026-10-28),
-    // hãy sửa DateTime.now() thành ngày đó để test. Nếu bạn tạo ca mới hôm nay thì giữ nguyên.
+  void _listenForRescueAssignments() async {
     String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     if (_isNavigating) return;
     _assignmentSubscription?.cancel();
 
-    debugPrint('🔍 [TrangChu] Lắng nghe user: $currentUserId ngày: $todayStr');
-
     _assignmentSubscription = FirebaseFirestore.instance
         .collection('ChiTietPhanCongCuuHo')
-        .doc(currentUserId)
+        .doc(widget.currentUserId)
         .collection('DanhSachNgay')
         .doc(todayStr)
         .collection('DanhSachPhanCong')
@@ -102,7 +100,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => TienTrinhCuuHo(
-                    currentUserId: currentUserId,
+                    currentUserId: widget.currentUserId,
                     maYeuCauCuuHo: targetMaYeuCau,
                   ),
                 ),
@@ -118,7 +116,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => Manhinhcho(
-                    currentUserId: currentUserId,
+                    currentUserId: widget.currentUserId,
                     maYeuCauCuuHo: targetMaYeuCau,
                   ),
                 ),
@@ -140,8 +138,9 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
 
   @override
   Widget build(BuildContext context) {
+    String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
     return ChangeNotifierProvider(
-      create: (_) => TrangChuController(),
+      create: (_) => TrangChuController(widget.currentUserId),
       child: Consumer<TrangChuController>(
         builder: (context, controller, child) {
           return Scaffold(
@@ -164,9 +163,14 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                         role: controller.role,
                         base64Image: avatarBase64,
                         onExitToUserMode: () {
-                          Navigator.pushNamedAndRemoveUntil(
+                          Navigator.pushAndRemoveUntil(
                             context,
-                            '/user_home',
+                            MaterialPageRoute(
+                              builder: (context) => TrangChuNguoiDung(
+                                maNguoiDung: controller.userID,
+                                maThietBi: maThietBiMoi,
+                              ),
+                            ),
                             (route) => false,
                           );
                         },
