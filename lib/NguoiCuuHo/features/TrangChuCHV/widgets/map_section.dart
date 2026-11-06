@@ -45,9 +45,27 @@ class _MapSectionState extends State<MapSection> {
   @override
   void didUpdateWidget(covariant MapSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.nearbyUsers != widget.nearbyUsers) {
+
+    // Kiểm tra kỹ nếu danh sách thay đổi thực sự (hoặc khoảng cách dịch chuyển đáng kể) mới tạo lại marker
+    bool isListChanged =
+        oldWidget.nearbyUsers.length != widget.nearbyUsers.length;
+
+    if (!isListChanged) {
+      for (int i = 0; i < widget.nearbyUsers.length; i++) {
+        if (oldWidget.nearbyUsers[i]['userId'] !=
+                widget.nearbyUsers[i]['userId'] ||
+            oldWidget.nearbyUsers[i]['location'] !=
+                widget.nearbyUsers[i]['location'] ||
+            oldWidget.nearbyUsers[i]['distance'] !=
+                widget.nearbyUsers[i]['distance']) {
+          isListChanged = true;
+          break;
+        }
+      }
+    }
+
+    if (isListChanged || oldWidget.isOnline != widget.isOnline) {
       _generateCustomMarkers();
-      // Cập nhật lại dữ liệu user đang chọn nếu danh sách thay đổi
       if (_selectedUserId != null) {
         try {
           _selectedUserData = widget.nearbyUsers.firstWhere(
@@ -817,7 +835,7 @@ class _MapSectionState extends State<MapSection> {
                             _showUserInfoModal(context, _selectedUserData!);
                           },
                           icon: const Icon(Icons.info_outline, size: 16),
-                          label: const Text('Xem thông tin người thân'),
+                          label: const Text('Ds người thân'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -853,7 +871,7 @@ class _MapSectionState extends State<MapSection> {
                             color: Colors.white,
                           ),
                           label: const Text(
-                            'Thông báo khẩn cấp người thân',
+                            'Gọi người thân',
                             style: TextStyle(color: Colors.white),
                           ),
                         ),

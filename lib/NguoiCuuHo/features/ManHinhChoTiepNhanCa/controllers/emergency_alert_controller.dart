@@ -14,6 +14,7 @@ import 'package:dart_geohash/dart_geohash.dart';
 class EmergencyAlertController extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  StreamSubscription<DocumentSnapshot>? _victimRequestSubscription;
 
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
   StreamSubscription<Position>? _positionStreamSubscription;
@@ -107,6 +108,67 @@ class EmergencyAlertController extends ChangeNotifier {
             }
           },
         );
+  }
+
+  void _listenToVictimRequestStatus(String maYeuCau) {
+    _victimRequestSubscription?.cancel();
+
+    _victimRequestSubscription = _firestore
+        .collection('YeuCauCuuHo')
+        .doc(maYeuCau)
+        .snapshots()
+        .listen((snapshot) async {
+          if (!snapshot.exists || snapshot.data() == null) return;
+
+          var data = snapshot.data() as Map<String, dynamic>;
+          String maTinhTrangYeuCau = (data['maTinhTrangYeuCau'] ?? '')
+              .toString();
+
+          // Kiểm tra nếu yêu cầu đã bị hủy bởi người dùng
+          if (maTinhTrangYeuCau == 'user_tinhtrang_dahuy') {
+            debugPrint('Phát hiện yêu cầu cứu hộ đã bị hủy bởi người dùng.');
+
+            // Dừng chuông và hủy bộ đếm
+            await stopEmergencySound();
+            _timer?.cancel();
+            _victimRequestSubscription?.cancel();
+
+            // Cập nhật lại trạng thái phân công thành từ chối/hủy phía cứu hộ nếu cần
+            await _handleUserCanceledAssignment();
+
+            // Quay về màn hình trang chủ / màn hình trước đó để nhận đơn mới
+            if (currentContext != null && Navigator.canPop(currentContext!)) {
+              Navigator.pop(currentContext!);
+            }
+          }
+        });
+  }
+
+  // Xử lý cập nhật trạng thái phân công khi người dùng hủy đơn
+  Future<void> _handleUserCanceledAssignment() async {
+    if (currentDoctorId.isEmpty || currentMaYeuCau.isEmpty) return;
+    try {
+      String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+      // Cập nhật trạng thái tiếp nhận thành từ chối hoặc hủy
+      await _firestore
+          .collection('ChiTietPhanCongCuuHo')
+          .doc(currentDoctorId)
+          .collection('DanhSachNgay')
+          .doc(todayStr)
+          .collection('DanhSachPhanCong')
+          .doc(currentMaYeuCau)
+          .set({
+            'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_tuchoi',
+          }, SetOptions(merge: true));
+
+      // Cho phép nhận ca mới trở lại trên bảng NguoiDung
+      await _firestore.collection('NguoiDung').doc(currentDoctorId).set({
+        'nhanCaCuuHo': true,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Lỗi cập nhật khi đơn bị hủy: $e');
+    }
   }
 
   void setMapController(GoogleMapController controller) {
@@ -306,6 +368,7 @@ class EmergencyAlertController extends ChangeNotifier {
   // 2. Trong hàm _fetchVictimRequestDetails, bổ sung đọc field mucDoKhanCap:
   Future<void> _fetchVictimRequestDetails(String maYeuCau) async {
     try {
+      _listenToVictimRequestStatus(maYeuCau);
       DocumentSnapshot yeuCauDoc = await _firestore
           .collection('YeuCauCuuHo')
           .doc(maYeuCau)
@@ -592,6 +655,7 @@ class EmergencyAlertController extends ChangeNotifier {
   void dispose() {
     _positionStreamSubscription?.cancel();
     _assignmentSubscription?.cancel();
+    _victimRequestSubscription?.cancel(); // 🟢 Thêm dòng này
     stopEmergencySound();
     _timer?.cancel();
     mapController?.dispose();

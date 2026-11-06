@@ -24,6 +24,7 @@ class TrangChuController extends ChangeNotifier {
   String? image;
   String maVaiTro = '';
   Timer? _timer;
+  bool _isDisposed = false; // 1. Khai báo biến cờ
 
   // Lấy UID động từ FirebaseAuth, nếu chưa đăng nhập mới dùng ID mặc định
   String get _userID => FirebaseAuth.instance.currentUser?.uid ?? 'nguoidung2';
@@ -54,11 +55,20 @@ class TrangChuController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _positionStreamSubscription?.cancel();
     _usersNearbySubscription?.cancel();
     mapController?.dispose();
     _timer?.cancel();
     super.dispose();
+  }
+
+  // 3. Ghi đè hàm này để chặn tuyệt đối việc gọi khi đã dispose
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    }
   }
 
   void setMapController(GoogleMapController controller) {
@@ -210,7 +220,7 @@ class TrangChuController extends ChangeNotifier {
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 1, // 🟢 Giảm distanceFilter xuống 5m để nhạy hơn
+            distanceFilter: 10, // 🟢 Giảm distanceFilter xuống 5m để nhạy hơn
           ),
         ).listen((Position position) {
           _updateLocationOnMap(LatLng(position.latitude, position.longitude));
@@ -281,8 +291,10 @@ class TrangChuController extends ChangeNotifier {
     } catch (e) {
       debugPrint('Lỗi đọc dữ liệu Firestore: $e');
     } finally {
-      _isLoadingLocation = false;
-      notifyListeners();
+      if (!_isDisposed) {
+        _isLoadingLocation = false;
+        notifyListeners(); // Chặn trước khi gọi ở finally
+      }
     }
   }
 
@@ -501,11 +513,13 @@ class TrangChuController extends ChangeNotifier {
   }
 
   // Cập nhật vị trí GPS Cứu hộ viên
+  // Thêm biến lưu vị trí cũ để check khoảng cách dịch chuyển
+  LatLng? _lastAnimatedPosition;
+
   Future<void> _updateLocationOnMap(LatLng newPos) async {
     _currentPosition = newPos;
     _isLoadingLocation = false;
 
-    // Đồng bộ vị trí thực tế của Cứu hộ viên lên Firestore NguoiDung
     try {
       await _firestore.collection('NguoiDung').doc(_userID).set({
         'viDo': newPos.latitude,
@@ -516,20 +530,33 @@ class TrangChuController extends ChangeNotifier {
       debugPrint('Lỗi cập nhật vị trí Cứu hộ viên lên Firestore: $e');
     }
 
-    // 🟢 TỰ ĐỘNG KHỞI CHẠY/TÍNH TOÁN LẠI QUÉT XUNG QUANH MỖI KHI CỨU HỘ VIÊN DI CHUYỂN
-    if (_isOnline) {
-      if (_usersNearbySubscription == null) {
-        listenToNearbyUsers();
-      }
+    if (_isOnline && _usersNearbySubscription == null) {
+      listenToNearbyUsers();
     }
 
     notifyListeners();
 
+    // 🟢 CHỈ animateCamera khi vị trí thay đổi đủ lớn (ví dụ > 5-10 mét) hoặc lần đầu tiên,
+    // tránh bị gọi liên tục gây giật màn hình mỗi khi GPS nhích từng cm.
     if (mapController != null) {
-      double currentZoom = await mapController!.getZoomLevel();
-      mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(newPos, currentZoom),
-      );
+      if (_lastAnimatedPosition == null ||
+          Geolocator.distanceBetween(
+                _lastAnimatedPosition!.latitude,
+                _lastAnimatedPosition!.longitude,
+                newPos.latitude,
+                newPos.longitude,
+              ) >
+              5.0) {
+        // Ngưỡng dịch chuyển 5 mét mới ép camera trôi theo
+        _lastAnimatedPosition = newPos;
+        double currentZoom = await mapController!.getZoomLevel();
+        mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(
+            newPos,
+            currentZoom < 16 ? 18.2 : currentZoom,
+          ),
+        );
+      }
     }
   }
 }

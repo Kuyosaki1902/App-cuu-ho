@@ -9,10 +9,10 @@ import 'widgets/terms_box_no_cchn.dart';
 
 class CuuhovienKhongcchn extends StatelessWidget {
   const CuuhovienKhongcchn({super.key});
-  final String currentUserId = 'nguoidung4';
+  final String currentUserId = 'nguoidung6';
   @override
   Widget build(BuildContext context) {
-    String userFullName = 'BS.Nguyễn Xuân Hanh';
+    String userFullName = 'BS.Nguyễn Hoàng Thiên';
     return ChangeNotifierProvider(
       create: (_) => CuuHoVienKhongCCHNController(
         existingFullName: userFullName, // 🟢 Truyền tên vào đây
