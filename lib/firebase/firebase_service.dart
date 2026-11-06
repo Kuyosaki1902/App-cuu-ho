@@ -491,6 +491,62 @@ class FirebaseService {
     }
   }
 
+  // ==================== KIỂM TRA TRẠNG THÁI HỒ SƠ & CHUYỂN VAI TRÒ ====================
+
+  /// Kết quả kiểm tra hồ sơ cứu hộ
+  /// Trả về Map: {'daDuyet': bool, 'coCCHN': bool}
+  Future<Map<String, bool>> kiemTraTrangThaiHoSoCuuHo(String maNguoiDung) async {
+    try {
+      // 1. Kiểm tra trong bảng HoSoCuuHoCoCCHN
+      QuerySnapshot snapCoCCHN = await _firestore
+          .collection('HoSoCuuHoCoCCHN')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .get();
+
+      if (snapCoCCHN.docs.isNotEmpty) {
+        var data = snapCoCCHN.docs.first.data() as Map<String, dynamic>;
+        if (data['maTrangThaiHoSo'] == 'cuuho_trangthai_hoso_daduyet') {
+          return {'daDuyet': true, 'coCCHN': true};
+        }
+      }
+
+      // 2. Kiểm tra trong bảng HoSoCuuHoKhongCCHN
+      QuerySnapshot snapKhongCCHN = await _firestore
+          .collection('HoSoCuuHoKhongCCHN')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .get();
+
+      if (snapKhongCCHN.docs.isNotEmpty) {
+        var data = snapKhongCCHN.docs.first.data() as Map<String, dynamic>;
+        if (data['maTrangThaiHoSo'] == 'cuuho_trangthai_hoso_daduyet') {
+          return {'daDuyet': true, 'coCCHN': false};
+        }
+      }
+    } catch (e) {
+      print('Lỗi kiemTraTrangThaiHoSoCuuHo: $e');
+    }
+
+    return {'daDuyet': false, 'coCCHN': false};
+  }
+
+  /// Xử lý chuyển đổi vai trò khi nhấn nút "Chuyển sang màn hình người cứu hộ"
+  Future<bool> chuyenSangManHinhCuuHo(String maNguoiDung) async {
+    try {
+      Map<String, bool> hoSoState = await kiemTraTrangThaiHoSoCuuHo(maNguoiDung);
+
+      if (hoSoState['daDuyet'] == true) {
+        String vaTroMoi = hoSoState['coCCHN'] == true
+            ? 'vaitro_cuuhococc'
+            : 'vaitro_cuhochuacocc';
+
+        return await capNhatVaiTro(maNguoiDung, vaTroMoi);
+      }
+    } catch (e) {
+      print('Lỗi chuyenSangManHinhCuuHo: $e');
+    }
+    return false;
+  }
+
 
 
 

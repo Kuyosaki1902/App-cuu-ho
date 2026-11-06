@@ -52,6 +52,7 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   flutter_tts: ^4.2.5
   widget_to_marker: ^1.0.6
+  url_launcher: ^6.3.0
  
   
 

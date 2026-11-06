@@ -152,19 +152,22 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
         .where('maNguoiThan', isEqualTo: widget.maNguoiDung)
         .where('trangThai', isEqualTo: 'dangGoi')
         .snapshots()
-        .listen((snapshot) async { // Thêm async ở đây
+        .listen((snapshot) async {
           if (snapshot.docs.isNotEmpty) {
             for (var doc in snapshot.docs) {
               String maNguoiGoi = doc.data()['maNguoiDung'];
 
-              // Truy vấn họ tên từ bảng NguoiDung
-              DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('NguoiDung').doc(maNguoiGoi).get();
-              String hoTen = userDoc.exists ? (userDoc.data() as Map<String, dynamic>)['hoTen'] ?? maNguoiGoi : maNguoiGoi;
+              DocumentSnapshot userDoc = await FirebaseFirestore.instance
+                  .collection('NguoiDung')
+                  .doc(maNguoiGoi)
+                  .get();
+              
+              String hoTen = userDoc.exists 
+                  ? ((userDoc.data() as Map<String, dynamic>)['hoTen'] ?? maNguoiGoi) 
+                  : maNguoiGoi;
 
-              // Hiển thị dialog cảnh báo với họ tên
-              _hienThiManHinhCanhBao(doc.reference, hoTen);
-
-              // Kích hoạt thông báo nền kèm âm thanh và rung
+              // Truyền cả ID người gọi và Họ tên
+              _hienThiManHinhCanhBao(doc.reference, maNguoiGoi, hoTen);
               _phatThongBaoAmThanhVaRung(hoTen, doc.id.hashCode);
             }
           }
@@ -206,12 +209,15 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     await flutterTts.speak("Cảnh báo khẩn cấp. Người thân của bạn đang gặp nguy hiểm. Vui lòng kiểm tra ngay lập tức.");
   }
 
-  void _hienThiManHinhCanhBao(DocumentReference docRef, String maNguoiGoi) {
+  void _hienThiManHinhCanhBao(DocumentReference docRef, String maNguoiGoi, String hoTenNguoiGoi) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Ngăn người dùng bấm ra ngoài để tắt
-      builder: (context) =>
-          ManHinhCanhBao(docRef: docRef, maNguoiGoi: maNguoiGoi),
+      barrierDismissible: false,
+      builder: (context) => ManHinhCanhBao(
+        docRef: docRef,
+        maNguoiGoi: maNguoiGoi,           // Mã ID Firestore
+        hoTenNguoiGoi: hoTenNguoiGoi,     // Tên hiển thị
+      ),
     );
   }
 
@@ -220,7 +226,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     if (state == AppLifecycleState.resumed) {
       // Ứng dụng được mở lại trên màn hình
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, true);
-    } else if (state == AppLifecycleState.paused ||
+    } else if (
         state == AppLifecycleState.detached) {
       // Ứng dụng bị thu nhỏ (paused) hoặc vuốt tắt hoàn toàn (detached)
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
@@ -550,7 +556,9 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   scale: _isPanelExpanded ? 1.0 : 0.85,
                   duration: const Duration(milliseconds: 300),
                   child: GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      
+                    },
                     child: Container(
                       width: 80,
                       height: 80,
