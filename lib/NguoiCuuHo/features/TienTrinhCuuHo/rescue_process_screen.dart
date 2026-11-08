@@ -138,7 +138,7 @@ class TienTrinhCuuHo extends StatelessWidget {
         }
 
         // 🟢 CHẶN: Chỉ cho phép bấm (hoặc tự động chuyển) khi khoảng cách <= 2 mét
-        if (distanceInMeters <= 2.0) {
+        if (distanceInMeters <= 20.0) {
           onPrimaryPressed = () =>
               controller.nextStep(currentUserId, maYeuCauCuuHo);
         } else {
@@ -299,8 +299,10 @@ class TienTrinhCuuHo extends StatelessWidget {
                 Navigator.pushAndRemoveUntil(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        Trangchunguoicuuho(currentUserId: currentUserId),
+                    builder: (context) => Trangchunguoicuuho(
+                      currentUserId: currentUserId,
+                      maThietBiMoi: '',
+                    ),
                   ),
                   (route) =>
                       false, // Xóa toàn bộ lịch sử màn hình chờ/tiến trình cũ

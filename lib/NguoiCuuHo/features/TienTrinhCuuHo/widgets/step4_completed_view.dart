@@ -307,8 +307,10 @@ class Step4CompletedFullView extends StatelessWidget {
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          Trangchunguoicuuho(currentUserId: currentUserId),
+                      builder: (context) => Trangchunguoicuuho(
+                        currentUserId: currentUserId,
+                        maThietBiMoi: '',
+                      ),
                     ),
                     (route) => false,
                   );

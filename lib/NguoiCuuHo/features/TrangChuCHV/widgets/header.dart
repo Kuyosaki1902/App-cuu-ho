@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
-import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,10 +8,8 @@ class LifeguardProfileHeader extends StatelessWidget {
   final bool isOnline;
   final String? name;
   final String? role;
-
-  // Tham số base64Image đại diện cho chuỗi Base64 lấy từ Firestore
+  final String? maVaiTro;
   final String? base64Image;
-
   final ValueChanged<bool> onOnlineChanged;
   final VoidCallback? onExitToUserMode;
 
@@ -22,11 +19,11 @@ class LifeguardProfileHeader extends StatelessWidget {
     required this.onOnlineChanged,
     required this.name,
     required this.role,
+    required this.maVaiTro,
     required this.base64Image,
     this.onExitToUserMode,
   });
 
-  /// Hàm hỗ trợ giải mã Base64 an toàn
   Uint8List? _getDecodedImage(String? base64Str) {
     if (base64Str == null || base64Str.isEmpty) return null;
     try {
@@ -58,7 +55,7 @@ class LifeguardProfileHeader extends StatelessWidget {
             ],
           ),
           content: const Text(
-            'Bạn có chắc chắn muốn chuyển sang trạng thái Ngừng hoạt động không? Hệ thống sẽ tạm dừng chia sẻ GPS và nhận thông báo ca cứu hộ mới.',
+            'Bạn có chắc chắn muốn dừng chế độ trực chiến không? Hệ thống sẽ tạm dừng chia sẻ GPS và nhận ca khẩn cấp.',
             style: TextStyle(fontSize: 13),
           ),
           actions: [
@@ -78,83 +75,7 @@ class LifeguardProfileHeader extends StatelessWidget {
                 onOnlineChanged(false);
               },
               child: const Text(
-                'Xác nhận ngừng',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showExitConfirmationDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.swap_horiz, color: Color(0xFFB71C1C)),
-              SizedBox(width: 8),
-              Text(
-                'Chuyển vai trò',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Bạn có chắc chắn muốn thoát khỏi chế độ Cứu hộ viên và quay lại Màn hình người dùng không?',
-            style: TextStyle(fontSize: 13),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFB71C1C),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-
-                // Gọi hàm cập nhật maVaiTro về 'vaitro_nguoidung' trong Controller
-                final controller = context.read<TrangChuController>();
-                bool success = await controller.chuyenVaiTroNguoiDung();
-
-                if (context.mounted) {
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Đã chuyển sang vai trò Người dùng!'),
-                      ),
-                    );
-                    if (onExitToUserMode != null) {
-                      onExitToUserMode!();
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Chuyển vai trò thất bại. Vui lòng thử lại!',
-                        ),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text(
-                'Đồng ý',
+                'Xác nhận',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -172,121 +93,260 @@ class LifeguardProfileHeader extends StatelessWidget {
     final Uint8List? imageBytes = _getDecodedImage(base64Image);
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.white,
+      color: const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Column(
         children: [
+          // Row 1: Profile & Action Icons
           Row(
             children: [
-              imageBytes != null
-                  ? CircleAvatar(
-                      radius: 24,
-                      backgroundImage: MemoryImage(imageBytes),
-                    )
-                  : const CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.blueAccent,
-                      child: Icon(Icons.person, color: Colors.white, size: 30),
+              // Avatar với indicator online
+              Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isOnline
+                            ? const Color(0xFF10B981)
+                            : Colors.grey.shade400,
+                        width: 2,
+                      ),
                     ),
-              const SizedBox(width: 12),
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFF0284C7),
+                      backgroundImage: imageBytes != null
+                          ? MemoryImage(imageBytes)
+                          : null,
+                      child: imageBytes == null
+                          ? const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 24,
+                            )
+                          : null,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: isOnline
+                            ? const Color(0xFF10B981)
+                            : Colors.grey.shade400,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 10),
+
+              // Name + Badge Cấp
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name ?? 'Đang cập nhật',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            maVaiTro == 'vaitro_cuuhococc'
+                                ? 'BS. ${name ?? 'Đang cập nhật'}'
+                                : 'CHV. ${name ?? 'Đang cập nhật'}',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Builder(
+                          builder: (context) {
+                            // 1. Nếu là Cứu hộ viên có CCHN (Đã duyệt)
+                            if (maVaiTro == 'vaitro_cuuhococc') {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFFDCFCE7,
+                                  ), // Nền xanh lá nhạt
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.verified_rounded,
+                                      size: 12,
+                                      color: Color(
+                                        0xFF166534,
+                                      ), // Icon tích xanh
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'ĐÃ DUYỆT',
+                                      style: TextStyle(
+                                        color: Color(0xFF166534),
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            // 2. Nếu là Cứu hộ viên chưa CCHN -> Hiển thị Cấp độ uy tín (Cấp 1 đến Cấp 3)
+                            else if (maVaiTro == 'vaitro_cuuhochuacocc') {
+                              // Giả định capDoUyTin lấy từ controller hoặc truyền vào (mặc định 1)
+                              int capDoUyTin = 1;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFFEEF2FF,
+                                  ), // Nền tím nhạt
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '• Độ Uy Tín: $capDoUyTin',
+                                  style: const TextStyle(
+                                    color: Color(0xFF4338CA),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            // 3. Mặc định cho các vai trò khác (nếu có)
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      ],
                     ),
-                    Text(
-                      role ?? 'Đang cập nhật',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.shield_outlined,
+                          size: 13,
+                          color: Color(0xFFEF4444),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          role ?? 'Đang cập nhật',
+                          style: const TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
 
-              IconButton(
-                onPressed: () {
-                  if (isOnline) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Bạn đang online. Vui lòng tắt chế độ online để nhận thông báo.',
+              // Notification Badge Icon
+              Stack(
+                children: [
+                  Consumer<TrangChuController>(
+                    builder: (context, controller, child) {
+                      return Badge(
+                        isLabelVisible:
+                            controller.soThongBaoChuaDoc >
+                            0, // Chỉ hiển thị khi có thông báo mới
+                        label: Text(
+                          '${controller.soThongBaoChuaDoc}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Bạn đang offline. Không thể nhận thông báo.',
+                        backgroundColor: Colors.red,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.notifications_none_rounded,
+                            size: 28,
+                            color: Color(0xFF0F172A),
+                          ),
+                          onPressed: () {
+                            // Bấm vào icon để mở ModalBottomSheet xem danh sách thông báo
+                            _showNotificationBottomSheet(context, controller);
+                          },
                         ),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.notifications_none_outlined),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFF3F4F6),
-                  shape: const CircleBorder(),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              IconButton(
-                tooltip: 'Thoát chế độ Cứu hộ viên',
-                onPressed: () {
-                  if (isOnline) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Vui lòng tắt chế độ "Đang sẵn sàng nhận ca" trước khi chuyển vai trò!',
-                        ),
-                        backgroundColor: Colors.orange,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    return;
-                  }
-                  _showExitConfirmationDialog(context);
-                },
-                icon: const Icon(
-                  Icons.change_circle_sharp,
-                  color: Colors.redAccent,
-                  size: 20,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFF1F2),
-                  shape: const CircleBorder(
-                    side: BorderSide(color: Color(0xFFFECDD3), width: 1.2),
+                      );
+                    },
                   ),
-                ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+
           const SizedBox(height: 12),
 
+          // Row 2: Capsule Banner Công tác / Trực chiến
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: isOnline
-                  ? const Color(0xFFF0FDF4)
-                  : const Color.fromARGB(255, 249, 219, 219),
-              borderRadius: BorderRadius.circular(12),
+                  ? const Color(0xFFECFDF5)
+                  : const Color(0xFFFEF2F2),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isOnline
+                    ? const Color(0xFFA7F3D0)
+                    : const Color(0xFFFECACA),
+              ),
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.circle,
-                  color: isOnline
-                      ? ColorCHV.tiep_nhan_yeu_cau
-                      : ColorCHV.ngung_tiep_nhan_yeu_cau,
-                  size: 10,
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isOnline
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFEF4444),
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -294,36 +354,57 @@ class LifeguardProfileHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isOnline ? 'Đang sẵn sàng nhận ca' : 'Ngừng hoạt động',
+                        isOnline
+                            ? 'ĐANG TRỰC CHIẾN - SẴN SÀNG'
+                            : 'NGỪNG TRỰC CHIẾN',
                         style: TextStyle(
                           color: isOnline
-                              ? ColorCHV.tiep_nhan_yeu_cau
-                              : ColorCHV.ngung_tiep_nhan_yeu_cau,
-                          fontWeight: FontWeight.bold,
+                              ? const Color(0xFF065F46)
+                              : const Color(0xFF991B1B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      Text(
-                        isOnline
-                            ? 'Chia sẻ vị trí GPS'
-                            : 'Ngừng chia sẻ vị trí GPS',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_searching_rounded,
+                            size: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isOnline
+                                ? 'GPS trực tiếp • Bán kính 5m'
+                                : 'Đã tắt chia sẻ GPS',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                Switch(
-                  value: isOnline,
-                  activeColor: ColorCHV.tiep_nhan_yeu_cau,
-                  onChanged: (newValue) {
-                    if (!newValue) {
-                      _showOfflineConfirmationDialog(context);
-                    } else {
-                      onOnlineChanged(true);
-                    }
-                  },
+                Transform.scale(
+                  scale: 0.8,
+                  child: Switch(
+                    value: isOnline,
+                    activeColor: Colors.white,
+                    activeTrackColor: const Color(0xFF10B981),
+                    inactiveThumbColor: Colors.white,
+                    inactiveTrackColor: Colors.grey.shade400,
+                    onChanged: (newValue) {
+                      if (!newValue) {
+                        _showOfflineConfirmationDialog(context);
+                      } else {
+                        onOnlineChanged(true);
+                      }
+                    },
+                  ),
                 ),
               ],
             ),
@@ -332,4 +413,116 @@ class LifeguardProfileHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showNotificationBottomSheet(
+  BuildContext context,
+  TrangChuController controller,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (context) {
+      return Container(
+        height: MediaQuery.of(context).size.height * 0.6,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Thông báo cứu hộ',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: controller.danhSachThongBao.isEmpty
+                  ? const Center(
+                      child: Text('Không có thông báo nào trong ngày'),
+                    )
+                  : ListView.builder(
+                      itemCount: controller.danhSachThongBao.length,
+                      itemBuilder: (context, index) {
+                        var item = controller.danhSachThongBao[index];
+                        bool isChuaTiepNhan =
+                            item['maTrangThaiTiepNhan'] ==
+                            'cuuho_trangthai_phancong_chotiepnhan';
+
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isChuaTiepNhan
+                                ? const Color(0xFFFEF2F2)
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isChuaTiepNhan
+                                  ? Colors.red.shade200
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: ListTile(
+                            leading: Icon(
+                              Icons.warning_amber_rounded,
+                              color: isChuaTiepNhan ? Colors.red : Colors.grey,
+                            ),
+                            title: Text(
+                              isChuaTiepNhan
+                                  ? '🚨 Ca cứu hộ mới cần tiếp nhận'
+                                  : 'Thông báo ca cứu hộ',
+                              style: TextStyle(
+                                fontWeight: isChuaTiepNhan
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text('Mã yêu cầu: ${item['id']}'),
+                            trailing: isChuaTiepNhan
+                                ? ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      // Điều hướng tới màn hình nhận ca cấp cứu / Alert Dialog
+                                    },
+                                    child: const Text(
+                                      'Xem ca',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Đã xử lý',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

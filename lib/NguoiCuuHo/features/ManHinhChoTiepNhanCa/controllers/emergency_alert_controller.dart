@@ -159,13 +159,14 @@ class EmergencyAlertController extends ChangeNotifier {
           .collection('DanhSachPhanCong')
           .doc(currentMaYeuCau)
           .set({
-            'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_tuchoi',
+            'maTrangThaiTiepNhan': 'cuuho_trangthai_phancong_dahuy',
           }, SetOptions(merge: true));
 
       // Cho phép nhận ca mới trở lại trên bảng NguoiDung
       await _firestore.collection('NguoiDung').doc(currentDoctorId).set({
-        'nhanCaCuuHo': true,
+        'nhanCaCuuHo': false,
       }, SetOptions(merge: true));
+      await _capNhatThongKeHoSo('soLuongDaKhongNhan');
     } catch (e) {
       debugPrint('Lỗi cập nhật khi đơn bị hủy: $e');
     }
@@ -222,15 +223,15 @@ class EmergencyAlertController extends ChangeNotifier {
               }
             }
 
-            // 🟢 QUAN TRỌNG: Chỉ chạy logic âm thanh và đếm ngược nếu HÃY CÒN MỚI và CHƯA BỊ XỬ LÝ
             if (foundMaYeuCau.isNotEmpty && !_isAssignmentProcessed) {
-              _isAssignmentProcessed =
-                  true; // Khóa lại ngay lập tức để không bị gọi lại nhiều lần
+              _isAssignmentProcessed = true;
               await _playEmergencySound();
+
+              // 🟢 Tăng số lượng ca được phát
+              await _capNhatThongKeHoSo('soLuongCaDuocPhat');
+
               await _fetchVictimRequestDetails(foundMaYeuCau);
               fetchRealtimeRoute();
-
-              // Bắt đầu đếm ngược 3 phút
               _startCountdown();
             }
           }
@@ -280,7 +281,7 @@ class EmergencyAlertController extends ChangeNotifier {
         'nhanCaCuuHo': true,
       }, SetOptions(merge: true));
 
-      debugPrint('Đã tự động từ chối ca do hết 3 phút');
+      await _capNhatThongKeHoSo('soLuongDaKhongNhan');
 
       // c. Tự động chuyển về màn hình chính
       if (currentContext != null && Navigator.canPop(currentContext!)) {
@@ -406,6 +407,7 @@ class EmergencyAlertController extends ChangeNotifier {
             victimName = userData['hoTen'] ?? 'Nạn nhân khẩn cấp';
             victimPhone = userData['soDienThoai'] ?? 'Chưa cập nhật';
 
+            // Nếu trong bảng YeuCauCuuHo chưa có tọa độ, ưu tiên lấy từ bảng NguoiDung của nạn nhân
             if (victimLocation.latitude == 0.0) {
               String? userGeohash = userData['geoHash'] ?? userData['geohash'];
               if (userGeohash != null && userGeohash.isNotEmpty) {
@@ -423,16 +425,57 @@ class EmergencyAlertController extends ChangeNotifier {
 
         notifyListeners();
 
+        // 🟢 LUÔN GỌI LẤY ĐỊA CHỈ NGAY SAU KHI ĐÃ CỐ GẮNG XÁC ĐỊNH TOẠ ĐỘ
         if (victimLocation.latitude != 0.0 && victimLocation.longitude != 0.0) {
           address = await getAddressFromLatLng(
             victimLocation.latitude,
             victimLocation.longitude,
           );
-          notifyListeners();
+        } else {
+          address = 'Không xác định được tọa độ vị trí';
         }
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Lỗi đọc bảng YeuCauCuuHo & NguoiDung: $e');
+    }
+  }
+
+  // 🟢 Hàm xác định bảng hồ sơ theo maVaiTro và tăng chỉ số tương ứng thêm 1
+  Future<void> _capNhatThongKeHoSo(String fieldName) async {
+    if (currentDoctorId.isEmpty) return;
+
+    try {
+      // 1. Kiểm tra maVaiTro trong bảng NguoiDung
+      DocumentSnapshot userDoc = await _firestore
+          .collection('NguoiDung')
+          .doc(currentDoctorId)
+          .get();
+
+      if (!userDoc.exists || userDoc.data() == null) return;
+
+      var userData = userDoc.data() as Map<String, dynamic>;
+      String maVaiTro = (userData['maVaiTro'] ?? '').toString();
+
+      // 2. Xác định Collection cần cập nhật
+      String targetCollection = '';
+      if (maVaiTro == 'vaitro_cuuhococc') {
+        targetCollection = 'HoSoCuuHoCoCCHN';
+      } else if (maVaiTro == 'vaitro_cuhochuacocc' ||
+          maVaiTro == 'vaitro_cuhokhongcocc') {
+        targetCollection = 'HoSoCuuHoKhongCCHN';
+      }
+
+      if (targetCollection.isNotEmpty) {
+        // 3. Tăng trường chỉ định lên 1 đơn vị bằng FieldValue.increment(1)
+        await _firestore.collection(targetCollection).doc(currentDoctorId).set({
+          fieldName: FieldValue.increment(1),
+        }, SetOptions(merge: true));
+
+        debugPrint('✅ Đã tăng $fieldName trong $targetCollection thêm 1.');
+      }
+    } catch (e) {
+      debugPrint('❌ Lỗi cập nhật chỉ số thống kê hồ sơ: $e');
     }
   }
 
@@ -462,6 +505,7 @@ class EmergencyAlertController extends ChangeNotifier {
           'nhanCaCuuHo': true,
         }, SetOptions(merge: true));
 
+        await _capNhatThongKeHoSo('soluongCaDaNhan');
         debugPrint('Đã tiếp nhận ca, đặt nhanCaCuuHo = true thành công.');
       } catch (e) {
         debugPrint('Lỗi cập nhật tiếp nhận ca: $e');
@@ -479,31 +523,43 @@ class EmergencyAlertController extends ChangeNotifier {
     }
   }
 
+  // controllers/emergency_alert_controller.dart
+
   Future<String> getAddressFromLatLng(double lat, double lng) async {
     if (lat == 0.0 || lng == 0.0 || lat.isNaN || lng.isNaN) {
       return 'Đang định vị...';
     }
 
+    // API Reverse Geocoding miễn phí từ Nominatim (OpenStreetMap)
     final url = Uri.parse(
-      'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$googleApiKey&language=vi',
+      'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1&accept-language=vi',
     );
 
     try {
-      final response = await http.get(url);
+      // ⚠️ BẮT BUỘC phải truyền User-Agent để tuân thủ chính sách sử dụng của OSM
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'User-Agent': 'CuuHoKhanCapApp/1.0 (contact@cuhokhancap.com)',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        if (data['status'] == 'OK' &&
-            data['results'] != null &&
-            (data['results'] as List).isNotEmpty) {
-          return data['results'][0]['formatted_address'] ??
-              'Vị trí sự cố thực tế';
+
+        if (data != null && data['display_name'] != null) {
+          // Tối ưu hiển thị chuỗi địa chỉ cho gọn gàng (nếu cần)
+          String fullAddress = data['display_name'];
+          return fullAddress;
         }
       }
     } catch (e) {
-      debugPrint('Lỗi HTTP Geocoding API: $e');
+      debugPrint('Lỗi Reverse Geocoding OSM: $e');
     }
 
-    return 'Vị trí sự cố thực tế';
+    return 'Vị trí sự cố thực tế ($lat, $lng)';
   }
 
   Future<void> fetchRealtimeRoute({bool shouldMoveCamera = true}) async {

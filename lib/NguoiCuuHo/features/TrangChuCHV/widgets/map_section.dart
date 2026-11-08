@@ -33,8 +33,7 @@ class MapSection extends StatefulWidget {
 class _MapSectionState extends State<MapSection> {
   Set<Marker> _userMarkers = {};
   String? _selectedUserId;
-  Map<String, dynamic>?
-  _selectedUserData; // 🟢 Lưu dữ liệu user đang được chọn để hiển thị Card đáy
+  Map<String, dynamic>? _selectedUserData;
 
   @override
   void initState() {
@@ -695,30 +694,6 @@ class _MapSectionState extends State<MapSection> {
               zIndex: 3,
             ),
           },
-        ),
-
-        // Nút cập nhật vị trí
-        Positioned(
-          top: 12,
-          right: 12,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 4),
-              ],
-            ),
-            child: IconButton(
-              icon: Icon(
-                Icons.my_location,
-                color: widget.isOnline
-                    ? ColorCHV.tiep_nhan_yeu_cau
-                    : ColorCHV.ngung_tiep_nhan_yeu_cau,
-              ),
-              onPressed: widget.RefreshLocation,
-            ),
-          ),
         ),
 
         // 🟢 2. THẺ TÓM TẮT (BOTTOM CARD) NỔI LÊN NGAY KHI BẤM CHỌN MỤC TIÊU LẦN 1

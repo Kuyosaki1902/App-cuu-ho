@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class TrangThaiXacThucController extends ChangeNotifier {
   bool isRefreshing = false;
@@ -24,6 +25,12 @@ class TrangThaiXacThucController extends ChangeNotifier {
   TrangThaiXacThucController({required this.userId, this.isCoCCHN = false}) {
     maHoSo = userId;
     listenToTrangThaiHoSo();
+  }
+
+  Future<void> requestNotificationPermission() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
   }
 
   /// 🟢 Lắng nghe thời gian thực theo đúng Collection tương ứng

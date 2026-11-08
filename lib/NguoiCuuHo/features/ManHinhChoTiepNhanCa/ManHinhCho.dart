@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -25,97 +23,116 @@ class Manhinhcho extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (context) {
         final controller = EmergencyAlertController();
-        //Kích hoạt lắng nghe dữ liệu từ YeuCauCuuHo và ChiTietPhanCongCuuHo
         controller.listenForNewAssignment(currentUserId, context);
         return controller;
       },
       child: Consumer<EmergencyAlertController>(
         builder: (context, controller, child) {
+          bool isLevel1 = controller.mucDoKhanCap == 1;
+          Color themeColor = isLevel1
+              ? const Color(0xFFDC2626)
+              : Colors.amber.shade800;
+
           return Scaffold(
-            backgroundColor: const Color(0xFFF4F6F8),
+            backgroundColor: const Color(0xFFF7F8FC),
             body: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
+              child: Column(
+                children: [
+                  // Nội dung cuộn chính
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      child: IntrinsicHeight(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const DoctorHeaderCard(),
-                              const SizedBox(height: 10),
-                              const CriticalAlertCard(),
-                              const SizedBox(height: 10),
-                              const Expanded(child: MapNavigationCard()),
-                              const SizedBox(height: 10),
-                              const VictimInfoCard(),
-                              const SizedBox(height: 12),
-                              // Trong tệp ManHinhCho.dart (hoặc ManHinhCho_2.dart)
-                              SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    // 🟢 Chuyển màu nút dựa vào mức độ khẩn cấp (1: Đỏ, 2: Vàng đậm/Cam)
-                                    backgroundColor:
-                                        controller.mucDoKhanCap == 1
-                                        ? const Color(0xFFE52525)
-                                        : Colors.amber.shade800,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    elevation: 2,
-                                  ),
-                                  onPressed: () async {
-                                    String doctorId =
-                                        controller.currentDoctorId;
-                                    String maYeuCau =
-                                        controller.currentMaYeuCau;
-
-                                    // 🟢 Gọi hàm nhận ca (hàm này đã được bổ sung hủy timer ở trên)
-                                    await controller.acceptAssignment();
-
-                                    if (context.mounted) {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => TienTrinhCuuHo(
-                                            currentUserId: doctorId,
-                                            maYeuCauCuuHo: maYeuCau,
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  icon: const Icon(
-                                    Icons.navigation,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                  label: const Text(
-                                    'CỨU HỘ NGAY',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          DoctorHeaderCard(),
+                          SizedBox(height: 14),
+                          CriticalAlertCard(),
+                          SizedBox(height: 14),
+                          MapNavigationCard(),
+                          SizedBox(height: 14),
+                          VictimInfoCard(),
+                          SizedBox(height: 20),
+                        ],
                       ),
                     ),
-                  );
-                },
+                  ),
+
+                  // Thanh hành động cố định bên dưới
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, -4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              String doctorId = controller.currentDoctorId;
+                              String maYeuCau = controller.currentMaYeuCau;
+
+                              await controller.acceptAssignment();
+
+                              if (context.mounted) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => TienTrinhCuuHo(
+                                      currentUserId: doctorId,
+                                      maYeuCauCuuHo: maYeuCau,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.arrow_drop_up_rounded,
+                              size: 28,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'TIẾP NHẬN & CỨU HỘ NGAY',
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: Colors.white,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              foregroundColor: Colors.white,
+                              elevation: 4,
+                              shadowColor: themeColor.withOpacity(0.4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           );

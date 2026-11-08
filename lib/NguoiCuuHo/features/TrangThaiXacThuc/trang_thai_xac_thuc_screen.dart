@@ -37,6 +37,7 @@ class TrangThaiXacThucScreen extends StatelessWidget {
             MaterialPageRoute(
               builder: (context) => Trangchunguoicuuho(
                 currentUserId: userId,
+                maThietBiMoi: '',
               ), // Truyền userId vào đây
             ),
             (route) => false,

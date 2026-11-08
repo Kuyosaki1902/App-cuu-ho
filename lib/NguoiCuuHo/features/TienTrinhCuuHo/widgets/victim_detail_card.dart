@@ -5,14 +5,13 @@ import '../controllers/rescue_process_controller.dart';
 class VictimDetailCard extends StatelessWidget {
   const VictimDetailCard({super.key});
 
-  // 🚀 HÀM HIỂN THỊ BOTTOM SHEET DANH SÁCH SỐ ĐIỆN THOẠI NGƯỜI NHÀ / LIÊN HỆ
+  // 🚀 BOTTOM SHEET DANH SÁCH LIÊN HỆ KHẨN CẤP
   void _showContactsBottomSheet(
     BuildContext context,
     String victimName,
     String victimPhone,
   ) {
     final controller = context.read<RescueProcessController>();
-
     final List<Map<String, String>> emergencyContacts = [
       {
         'name': victimName.isNotEmpty ? victimName : 'Nạn nhân',
@@ -114,140 +113,725 @@ class VictimDetailCard extends StatelessWidget {
     );
   }
 
-  // 🚀 HÀM HIỂN THỊ CHI TIẾT TÌNH TRẠNG NẠN NHÂN
+  // 🚀 MODAL HIỂN THỊ CHI TIẾT (ĐÃ BỔ SUNG ĐẦY ĐỦ BOX CHAT TRAO ĐỔI NHANH)
   void _showVictimInfoBottomSheet(
     BuildContext context,
     String victimName,
     String victimAddress,
   ) {
+    final rescueController = context.read<RescueProcessController>();
+    final TextEditingController chatController = TextEditingController();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (modalContext) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.9,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: 8,
+        return ChangeNotifierProvider.value(
+          value: rescueController,
+          child: Consumer<RescueProcessController>(
+            builder: (context, controller, child) {
+              return Container(
+                height: MediaQuery.of(context).size.height * 0.92,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Column(
                   children: [
-                    Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
+                    // --- HEADER MODAL ---
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 12,
+                        bottom: 8,
                       ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFFF1F2),
-                            shape: BoxShape.circle,
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.message_outlined,
-                            color: Color(0xFFE52525),
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
                             children: [
-                              const Text(
-                                'Chi tiết tình trạng nạn nhân',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFFF1F2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.videocam_rounded,
+                                  color: Color(0xFFE52525),
+                                  size: 22,
                                 ),
                               ),
-                              Text(
-                                'Họ tên: $victimName',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF10B981),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Video & Tình trạng nạn nhân',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.fiber_manual_record,
+                                          color: Colors.green,
+                                          size: 10,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Trực tiếp từ hiện trường',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.green,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => Navigator.pop(modalContext),
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.grey,
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(modalContext),
-                          icon: const Icon(Icons.close, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1, color: Color(0xFFE2E8F0)),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ĐỊA CHỈ SỰ CỐ THỰC TẾ',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF5F5),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFFFCDD2)),
-                        ),
-                        child: Row(
+                    ),
+                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+                    // --- NỘI DUNG CHI TIẾT CUỘN ---
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              Icons.location_on,
-                              color: Color(0xFFE52525),
-                              size: 20,
+                            // 1. VIDEO HIỆN TRƯỜNG PLAYER MOCKUP
+                            Container(
+                              height: 180,
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFE52525),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow,
+                                        color: Colors.white,
+                                        size: 32,
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 12,
+                                    left: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE52525),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        '🔴 VIDEO HIỆN TRƯỜNG (0:24S)',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 12,
+                                    right: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        '720p',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const Positioned(
+                                    bottom: 12,
+                                    left: 12,
+                                    right: 12,
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '00:08 / 00:24',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                            Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.volume_up,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                                SizedBox(width: 10),
+                                                Icon(
+                                                  Icons.fullscreen,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: 4),
+                                        LinearProgressIndicator(
+                                          value: 0.35,
+                                          backgroundColor: Colors.white24,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Color(0xFFE52525),
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                victimAddress,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF334155),
-                                  fontWeight: FontWeight.w600,
+                            const SizedBox(height: 6),
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.verified,
+                                  color: Color(0xFF10B981),
+                                  size: 14,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Video quay trực tiếp từ người báo tin tại hiện trường',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // 2. MÔ TẢ CHI TIẾT HIỆN TRƯỜNG
+                            const Text(
+                              'MÔ TẢ CHI TIẾT HIỆN TRƯỜNG',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF5F5),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFFFCDD2),
                                 ),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Color(0xFFE52525),
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Nạn nhân cần hỗ trợ khẩn cấp',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFFE52525),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    controller.moTaChiTiet,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF334155),
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  if (controller.trieuChung.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: controller.trieuChung.map((tc) {
+                                        return Chip(
+                                          label: Text(
+                                            tc,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                          backgroundColor: Colors.white,
+                                          labelStyle: const TextStyle(
+                                            color: Color(0xFFE52525),
+                                          ),
+                                          side: const BorderSide(
+                                            color: Color(0xFFFFCDD2),
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.orange.shade200,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.location_on,
+                                          color: Colors.orange,
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Địa chỉ: $victimAddress',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF334155),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // 3. GHI ÂM CUỘC GỌI BÁO TIN
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.mic,
+                                      color: Color(0xFF10B981),
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'GHI ÂM CUỘC GỌI BÁO TIN',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF475569),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE6F4EA),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text(
+                                    '00:24s',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFF10B981),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.play_arrow,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: List.generate(16, (index) {
+                                        return Container(
+                                          width: 3,
+                                          height: (index % 3 == 0)
+                                              ? 22
+                                              : ((index % 2 == 0) ? 14 : 8),
+                                          decoration: BoxDecoration(
+                                            color: index < 8
+                                                ? const Color(0xFF10B981)
+                                                : Colors.grey.shade300,
+                                            borderRadius: BorderRadius.circular(
+                                              2,
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      '1.0x',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // 4. 🟢 BOX CHAT TRAO ĐỔI NHANH (ĐÃ BỔ SUNG)
+                            // 4. 🟢 BOX CHAT TRAO ĐỔI NHANH (HIỂN THỊ TỪ FIRESTORE)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.chat_bubble_outline,
+                                      color: Color(0xFF00897B),
+                                      size: 16,
+                                    ),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'TIN NHẮN TRAO ĐỔI NHANH',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF475569),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFF1F2),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text(
+                                    'Trao đổi trực tiếp',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFFE52525),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+
+                            // 🟢 CONTAINER DANH SÁCH TIN NHẮN
+                            Container(
+                              height:
+                                  250, // Định size cho box chat để cuộn được
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: controller.danhSachTinNhan.isEmpty
+                                  ? const Center(
+                                      child: Text(
+                                        'Chưa có tin nhắn trao đổi',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      reverse:
+                                          true, // Để đẩy tin mới nhất xuống đáy
+                                      itemCount:
+                                          controller.danhSachTinNhan.length,
+                                      itemBuilder: (context, index) {
+                                        final tinNhan =
+                                            controller.danhSachTinNhan[index];
+
+                                        // Kiểm tra xem tin nhắn này là của Bác sĩ (chính mình) hay Người nhà
+                                        final isMyMessage =
+                                            tinNhan.maNguoiGui ==
+                                            controller.currentDoctorId;
+
+                                        return Align(
+                                          alignment: isMyMessage
+                                              ? Alignment.centerRight
+                                              : Alignment.centerLeft,
+                                          child: Container(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: isMyMessage
+                                                  ? const Color(0xFF00897B)
+                                                  : Colors.white,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: isMyMessage
+                                                  ? null
+                                                  : Border.all(
+                                                      color: const Color(
+                                                        0xFFE2E8F0,
+                                                      ),
+                                                    ),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  isMyMessage
+                                                      ? '🟢 Bạn • Vừa xong'
+                                                      : '🔴 Người nhà • Vừa xong',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: isMyMessage
+                                                        ? Colors.white70
+                                                        : Colors.grey,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  tinNhan.noiDung,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isMyMessage
+                                                        ? Colors.white
+                                                        : const Color(
+                                                            0xFF0F172A,
+                                                          ),
+                                                  ),
+                                                ),
+                                                // Xử lý hiển thị kèm hình ảnh nếu có fileDinhKemUrl
+                                                if (tinNhan.fileDinhKemUrl !=
+                                                        null &&
+                                                    tinNhan
+                                                        .fileDinhKemUrl!
+                                                        .isNotEmpty)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 8.0,
+                                                        ),
+                                                    child: ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      child: Image.network(
+                                                        tinNhan.fileDinhKemUrl!,
+                                                        height: 100,
+                                                        width: 150,
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
+
+                            // 🟢 THÊM Ô TEXTFIELD ĐỂ CHAT (TÙY CHỌN NẾU BẠN MUỐN BÁC SĨ NHẮN ĐƯỢC)
+                            const SizedBox(height: 8),
+                            // 🟢 THÊM Ô TEXTFIELD VÀ NÚT GỬI ĐỂ CHAT
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller:
+                                        chatController, // Gắn controller vào đây
+                                    decoration: InputDecoration(
+                                      hintText: 'Nhập tin nhắn...',
+                                      hintStyle: const TextStyle(fontSize: 12),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ),
+                                    // Cho phép gửi bằng phím Enter/Send trên bàn phím ảo
+                                    onSubmitted: (text) {
+                                      if (text.trim().isNotEmpty) {
+                                        controller.guiTinNhan(text.trim());
+                                        chatController
+                                            .clear(); // Xóa trắng ô nhập
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Nút bấm gửi tin nhắn
+                                InkWell(
+                                  onTap: () {
+                                    final text = chatController.text;
+                                    if (text.trim().isNotEmpty) {
+                                      controller.guiTinNhan(
+                                        text.trim(),
+                                      ); // Gọi hàm gửi
+                                      chatController
+                                          .clear(); // Xóa trắng ô nhập
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF00897B),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.send_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              );
+            },
           ),
         );
       },
@@ -256,7 +840,6 @@ class VictimDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 Lấy dữ liệu thực tế từ RescueProcessController
     final controller = context.watch<RescueProcessController>();
 
     final String vName = controller.victimName;
@@ -283,14 +866,13 @@ class VictimDetailCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 🟢 THÊM AVATAR VÀO BÊN TRÁI TÊN NẠN NHÂN
               Expanded(
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    const CircleAvatar(
                       radius: 22,
-                      backgroundColor: const Color(0xFFFFF1F2),
-                      child: const Icon(
+                      backgroundColor: Color(0xFFFFF1F2),
+                      child: Icon(
                         Icons.person,
                         color: Color(0xFFE52525),
                         size: 24,
@@ -327,7 +909,6 @@ class VictimDetailCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // 🟢 ĐÃ XÓA NHÃN "CẤP ĐỘ 2 / Khẩn cấp", CHỈ GIỮ LẠI CÁC NÚT HÀNH ĐỘNG BÊN PHẢI
               Row(
                 children: [
                   InkWell(

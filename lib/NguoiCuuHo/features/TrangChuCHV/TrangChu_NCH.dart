@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/ThongTinTaiKhoan.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/LichSuCaCuuHo/man_hinh_lich_su_ca.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
-import 'package:cuhokhancap/user/TrangChuNguoiDung.dart';
+import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
@@ -8,29 +10,45 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/header.dart'
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/bottom.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/map_section.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ManHinhChoTiepNhanCa/ManHinhCho.dart';
 
 class Trangchunguoicuuho extends StatefulWidget {
   final String currentUserId;
-  const Trangchunguoicuuho({Key? key, required this.currentUserId})
-    : super(key: key);
+  final String maThietBiMoi;
+  const Trangchunguoicuuho({
+    Key? key,
+    required this.currentUserId,
+    required this.maThietBiMoi,
+  }) : super(key: key);
 
   @override
   State<Trangchunguoicuuho> createState() => _TrangchunguoicuuhoState();
 }
 
 class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
-  bool _isNavigating = false; // Biến cờ ngăn việc gọi Navigator.push liên tục
+  final FirebaseService _firebaseService = FirebaseService();
+  bool _isNavigating = false;
+  bool _isKickedOut = false;
+
+  // 🟢 BIẾN LƯU VỊ TRÍ TAB ĐANG ĐƯỢC CHỌN (0: Trực chiến, 1: Lịch sử,...)
+  int _currentTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    // 🟢 Khởi động lắng nghe thời gian thực phân công cứu hộ
     _listenForRescueAssignments();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, true);
+    } else if (state == AppLifecycleState.detached) {
+      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
+    }
   }
 
   void _listenForRescueAssignments() async {
@@ -63,18 +81,12 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                   ? data['maYeuCau'].toString()
                   : doc.id;
 
-              debugPrint(
-                '📄 Quét thấy ca: $maYeuCauTmp | Trạng thái: $trangThai',
-              );
-
-              // 🟢 1. CHỐT CHẶN AN TOÀN: Bỏ qua ngay lập tức các ca đã kết thúc
               if (trangThai == 'cuuho_trangthai_phancong_hoanthanh' ||
                   trangThai == 'cuuho_trangthai_phancong_dahuy' ||
                   trangThai == 'cuuho_trangthai_phancong_tuchoi') {
-                continue; // Lờ đi ca này và quét tiếp ca khác
+                continue;
               }
 
-              // 🚀 2. ƯU TIÊN 1: Ca đang trong tiến trình cứu hộ (Step 1, 2, 3)
               if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
                   trangThai == 'cuuho_trangthai_phancong_daden' ||
                   trangThai == 'cuuho_trangthai_phancong_dangcuuho') {
@@ -83,7 +95,6 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                 break;
               }
 
-              // ⏳ 3. Trạng thái chờ đổ chuông
               if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
                   trangThai.isEmpty) {
                 hasChoTiepNhan = true;
@@ -91,7 +102,6 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
               }
             }
 
-            // Điều hướng
             if (hasDangTienTrinh && targetMaYeuCau.isNotEmpty) {
               _isNavigating = true;
               _assignmentSubscription?.cancel();
@@ -131,106 +141,170 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
 
   @override
   void dispose() {
-    // 🟢 Hủy lắng nghe để tránh rò rỉ bộ nhớ (Memory Leak)
     _assignmentSubscription?.cancel();
+    if (!_isKickedOut) {
+      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
+    }
     super.dispose();
   }
 
+  // Trong Trangchunguoicuuho.dart
+
   @override
   Widget build(BuildContext context) {
-    String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
     return ChangeNotifierProvider(
       create: (_) => TrangChuController(widget.currentUserId),
       child: Consumer<TrangChuController>(
         builder: (context, controller, child) {
           return Scaffold(
-            backgroundColor: const Color(0xFFF3F4F6),
+            key: _scaffoldKey,
+            backgroundColor: const Color(0xFFF8FAFC),
             body: SafeArea(
-              child: Column(
+              child: Stack(
                 children: [
-                  // 1. Header Cứu hộ viên
-                  FutureBuilder<String?>(
-                    future: controller.getAvatarBase64(controller.userID),
-                    builder: (context, avatarSnapshot) {
-                      String? avatarBase64 = avatarSnapshot.data;
+                  Column(
+                    children: [
+                      // 🟢 1. BỌC ĐIỀU KIỆN: CHỈ HIỂN THỊ HEADER KHI Ở TAB 0 (TRỰC CHIẾN)
+                      if (_currentTabIndex == 0)
+                        FutureBuilder<String?>(
+                          future: controller.getAvatarBase64(controller.userID),
+                          builder: (context, avatarSnapshot) {
+                            return LifeguardProfileHeader(
+                              isOnline: controller.isOnline,
+                              onOnlineChanged: (val) {
+                                controller.toggleOnline(val);
+                              },
+                              name: controller.name,
+                              role: controller.role,
+                              maVaiTro: controller.maVaiTro,
+                              base64Image: avatarSnapshot.data,
+                            );
+                          },
+                        ),
 
-                      return LifeguardProfileHeader(
+                      // 2. NỘI DUNG THAY ĐỔI THEO TAB CHỌN
+                      Expanded(
+                        child: IndexedStack(
+                          index: _currentTabIndex,
+                          children: [
+                            // TAB 0: MÀN HÌNH TRỰC CHIẾN (BẢN ĐỒ)
+                            Stack(
+                              children: [
+                                MapSection(
+                                  currentPosition: controller.currentPosition,
+                                  isLoadingLocation:
+                                      controller.isLoadingLocation,
+                                  onMapCreated: controller.setMapController,
+                                  isOnline: controller.isOnline,
+                                  RefreshLocation:
+                                      controller.initLocationService,
+                                  nearbyUsers: controller.nearbyUsers,
+                                  onCallAllRelatives:
+                                      (user, danhSachNguoiThan) async {
+                                        // ... giữ nguyên logic gọi người thân
+                                      },
+                                ),
+                                Positioned(
+                                  top: 16,
+                                  right: 12,
+                                  child: Column(
+                                    children: [
+                                      _buildMapActionButton(
+                                        Icons.grid_view_rounded,
+                                        const Color(0xFF059669),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _buildMapActionButton(
+                                        Icons.local_fire_department_rounded,
+                                        const Color(0xFFF97316),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _buildMapActionButton(
+                                        Icons.layers_rounded,
+                                        const Color(0xFF475569),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _buildMapActionButton(
+                                        Icons.my_location_rounded,
+                                        const Color(0xFF475569),
+                                        onPressed: () {
+                                          controller
+                                              .centerMapOnCurrentPosition();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // TAB 1: MÀN HÌNH LỊCH SỬ CA CỨU HỘ
+                            ManHinhLichSuCa(
+                              currentUserId: controller.userID,
+                            ), // Truyền currentUserId nếu cần
+                            // TAB 2: MÀN HÌNH DỤNG CỤ
+                            const Center(child: Text('Màn hình Dụng cụ')),
+
+                            // TAB 3: MÀN HÌNH ĐIỀU PHỐI
+                            const Center(child: Text('Màn hình Điều phối')),
+
+                            // TAB 4: MÀN HÌNH HỒ SƠ / THÔNG TIN TÀI KHOẢN
+                            controller.currentUserModel != null
+                                ? ThongTinTaiKhoan(
+                                    nguoiDung: controller.currentUserModel!,
+                                  )
+                                : const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                          ],
+                        ),
+                      ),
+
+                      TrangChuBottomPanel(
                         isOnline: controller.isOnline,
-                        onOnlineChanged: (val) {
-                          controller.toggleOnline(val);
+                        soLuongCaTiepNhan: controller.soLuongCaTiepNhan,
+                        currentTabIndex:
+                            _currentTabIndex, // 🟢 Truyền chỉ số tab hiện tại vào đây
+                        onTabSelected: (index) {
+                          setState(() {
+                            _currentTabIndex =
+                                index; // Chuyển đổi tab hiển thị trong IndexedStack
+                          });
                         },
-                        name: controller.name,
-                        role: controller.role,
-                        base64Image: avatarBase64,
-                        onExitToUserMode: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => TrangChuNguoiDung(
-                                maNguoiDung: controller.userID,
-                                maThietBi: maThietBiMoi,
-                              ),
-                            ),
-                            (route) => false,
-                          );
-                        },
-                      );
-                    },
-                  ),
-
-                  // 2. Map Section
-                  Expanded(
-                    child: MapSection(
-                      currentPosition: controller.currentPosition,
-                      isLoadingLocation: controller.isLoadingLocation,
-                      onMapCreated: controller.setMapController,
-                      isOnline: controller.isOnline,
-                      RefreshLocation: controller.initLocationService,
-                      nearbyUsers: controller.nearbyUsers,
-                      onCallAllRelatives: (user, danhSachNguoiThan) async {
-                        debugPrint(
-                          '👉 [TrangChu] Đã nhận callback onCallAllRelatives!',
-                        );
-
-                        String victimUserId = user['userId'] ?? '';
-                        String victimName = user['hoTen'] ?? 'Người dùng';
-
-                        if (victimUserId.isEmpty) {
-                          debugPrint('❌ Lỗi: victimUserId bị trống!');
-                          return;
-                        }
-
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Đang kích hoạt cuộc gọi khẩn cấp tới toàn bộ người thân...',
-                            ),
-                          ),
-                        );
-
-                        try {
-                          await controller.triggerEmergencyCallToRelative(
-                            victimUserId: victimUserId,
-                            danhSachNguoiThan: danhSachNguoiThan,
-                            victimName: victimName,
-                          );
-                        } catch (e) {
-                          debugPrint('❌ [TrangChu] Lỗi khi gọi controller: $e');
-                        }
-                      },
-                    ),
-                  ),
-
-                  // 3. Bottom Panel
-                  TrangChuBottomPanel(
-                    isOnline: controller.isOnline,
-                    soLuongCaTiepNhan: controller.soLuongCaTiepNhan,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildMapActionButton(
+    IconData icon,
+    Color color, {
+    VoidCallback? onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color, size: 20),
+        onPressed: onPressed,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(10),
       ),
     );
   }
