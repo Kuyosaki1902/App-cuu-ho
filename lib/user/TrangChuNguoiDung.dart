@@ -23,6 +23,7 @@ import 'package:cuhokhancap/user/Design/man_hinh_canh_bao.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/firebase/background_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:cuhokhancap/user/TheoDoiTinhTrangYeuCau.dart';
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -43,6 +44,9 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   GoogleMapController? _mapController;
   final FirebaseService _firebaseService = FirebaseService();
+  // Tọa độ khởi tạo của nút AssistTouch (bên phải màn hình)
+  double _fabX = 300.0;
+  double _fabY = 200.0;
 
   LatLng _currentPosition = const LatLng(10.7725, 106.6980);
   double _currentRadius = 3000;
@@ -533,7 +537,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
           ),
 
           // THẺ CHI TIẾT NGƯỜI CỨU HỘ XỔ RA KHI NHẤN VÀO BIỂU TƯỢNG
-          if (_selectedRescuer != null)
+           if (_selectedRescuer != null)
             Positioned(
               top: 115,
               left: 0,
@@ -546,7 +550,52 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                     _selectedRescuer = null;
                   });
                 },
-                onSendRequest: () {
+                onSendRequest: () async {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) =>
+                        const Center(child: CircularProgressIndicator()),
+                  );
+
+                  String? maYeuCauMoi = await _firebaseService
+                      .taoYeuCauTimBacSiTuDong(
+                        maNguoiYeuCau: _selectedRescuer!.maNguoiDung!,
+                        viDo: _currentPosition?.latitude ?? 0.0,
+                        kinhDo: _currentPosition?.longitude ?? 0.0,
+                        trieuChung: MoTaTamThoi.trieuChung,
+                        moTaChiTiet: MoTaTamThoi.moTaChiTiet,
+                        fileAnh: MoTaTamThoi.fileAnh,
+                        fileGhiAm: MoTaTamThoi.fileGhiAm,
+                        maLoaiYeuCau: 'loaiyeucau_choncuuhovien',
+                      );
+
+                  if (context.mounted) Navigator.pop(context);
+
+                  if (maYeuCauMoi != null) {
+                    MoTaTamThoi.clear();
+                    if (context.mounted) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => GiaoDienDangTimKiem(
+                            maYeuCau: maYeuCauMoi,
+                            danhSachChiDinh: [_selectedRescuer!.maNguoiDung!],
+                          ),
+                        ),
+                      );
+                    }
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại!',
+                          ),
+                        ),
+                      );
+                    }
+                  }
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -558,7 +607,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                 },
               ),
             ),
-
           // BẢNG THÔNG TIN BOTTOM SHEET
           Positioned(
             bottom: 0,
@@ -1025,8 +1073,65 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
               ],
             ),
           ),
+
+          // NÚT NỔI KÉO THẢ (ASSISTTOUCH STYLE) THEO DÕI YÊU CẦU
+          Positioned(
+            left: _fabX,
+            top: _fabY,
+            child: GestureDetector(
+              onPanUpdate: (details) {
+                setState(() {
+                  _fabX += details.delta.dx;
+                  _fabY += details.delta.dy;
+
+                  // Giới hạn nút không bị vuốt mất khỏi màn hình
+                  double screenWidth = MediaQuery.of(context).size.width;
+                  double screenHeight = MediaQuery.of(context).size.height;
+                  _fabX = _fabX.clamp(10.0, screenWidth - 70.0);
+                  _fabY = _fabY.clamp(80.0, screenHeight - 140.0);
+                });
+              },
+              onTap: () {
+                // Nhấn nút mở màn hình TheoDoiTinhTrangYeuCau
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TheoDoiTinhTrangYeuCau(),
+                  ),
+                );
+              },
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00695C),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2.5,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.track_changes_outlined,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
+
+      
     );
   }
 
