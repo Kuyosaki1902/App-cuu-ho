@@ -91,4 +91,29 @@ class YeuCauCuuHoModel  {
       ), // 🌟 Đọc từ Firestore
     );
   }
+
+   // 🌟 Hàm copyWith giúp tạo bản sao và sửa đổi giá trị linh hoạt cho các thuộc tính final
+  YeuCauCuuHoModel copyWith({
+    int? soNguoiCuuHo,
+    String? maTinhTrangYeuCau,
+    Map<String, String>? danhSachPhanCongVien,
+  }) {
+    return YeuCauCuuHoModel(
+      maYeuCau: this.maYeuCau,
+      thoiGianTao: this.thoiGianTao,
+      viDo: this.viDo,
+      kinhDo: this.kinhDo,
+      mucDoKhanCap: this.mucDoKhanCap,
+      soNguoiCanCuuHo: this.soNguoiCanCuuHo,
+      soNguoiCuuHo: soNguoiCuuHo ?? this.soNguoiCuuHo,
+      maNguoiYeuCau: this.maNguoiYeuCau,
+      maAdminDieuPhoi: this.maAdminDieuPhoi,
+      thoiGianPhanCong: this.thoiGianPhanCong,
+      thoiGianHoanThanh: this.thoiGianHoanThanh,
+      maLoaiYeuCau: this.maLoaiYeuCau,
+      maTinhTrangYeuCau: maTinhTrangYeuCau ?? this.maTinhTrangYeuCau,
+      danhSachPhanCongVien: danhSachPhanCongVien ?? this.danhSachPhanCongVien,
+    );
+  }
+
 }

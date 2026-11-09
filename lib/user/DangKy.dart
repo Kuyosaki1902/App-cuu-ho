@@ -233,6 +233,7 @@ class _DangKyState extends State<DangKy> {
         _selectedGender == null ||
         _selectedProvince == null ||
         _selectedDistrict == null ||
+        _emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
       _showSnackBar('Vui lòng nhập đủ thông tin ở các ô bắt buộc.', Colors.red);
@@ -371,7 +372,7 @@ class _DangKyState extends State<DangKy> {
           ),
           SizedBox(height: 12),
           Text(
-            'Tạo tài khoản Cứu hộ',
+            'Tạo tài khoản hỗ trợ Cứu hộ',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -527,7 +528,7 @@ class _DangKyState extends State<DangKy> {
           ),
           const SizedBox(height: 16),
           _buildInputField(
-            label: 'Email (Tùy chọn)',
+            label: 'Email (Bắt buộc)',
             hintText: 'Nhập email',
             icon: Icons.email,
             controller: _emailController,

@@ -1,10 +1,10 @@
 // views/card_nguoi_cuu_ho.dart
 
 import 'package:flutter/material.dart';
-import 'package:cuhokhancap/user/ChonNguoiCuuHo/controllers/chon_nguoi_cuu_ho_controller.dart';
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 
 class CardNguoiCuuHoWidget extends StatelessWidget {
-  final ItemNguoiCuuHo item;
+  final Map<String, dynamic> item;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -17,15 +17,19 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatarBg = item.coCCHN
-        ? const Color(0xFFD2F5EC)
-        : const Color(0xFFFEF3C7);
-    final avatarText = item.coCCHN
+    final bool coCCHN = item['coCCHN'] ?? false;
+    final NguoiDungModel nguoiDung = item['nguoiDung'];
+
+    final avatarBg = coCCHN ? const Color(0xFFD2F5EC) : const Color(0xFFFEF3C7);
+    final avatarText = coCCHN
         ? const Color(0xFF0C5C4D)
         : const Color(0xFFB45309);
-    final badgeBg = item.coCCHN
-        ? const Color(0xFFE2F7F2)
-        : const Color(0xFFFFFBEB);
+    final badgeBg = coCCHN ? const Color(0xFFE2F7F2) : const Color(0xFFFFFBEB);
+    final badgeTextColor = coCCHN
+        ? const Color(0xFF0C5C4D)
+        : const Color(0xFFB45309);
+
+    List<String> skills = List<String>.from(item['danhSachKyNang'] ?? []);
 
     return GestureDetector(
       onTap: onTap,
@@ -48,6 +52,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
           ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,7 +68,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          item.initials,
+                          item['initials'] ?? 'CH',
                           style: TextStyle(
                             color: avatarText,
                             fontWeight: FontWeight.bold,
@@ -72,7 +77,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (item.coCCHN)
+                    if (coCCHN)
                       Positioned(
                         bottom: 0,
                         right: 0,
@@ -97,7 +102,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.nguoiDung.hoTen,
+                        nguoiDung.hoTen,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -105,31 +110,13 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
+                      // Đánh giá sao
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: badgeBg,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              item.tenChuyenNganh,
-                              style: TextStyle(
-                                color: avatarText,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           const Icon(Icons.star, color: Colors.amber, size: 12),
                           const SizedBox(width: 2),
                           Text(
-                            '${item.rating}',
+                            '${item['rating']}',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -137,7 +124,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            ' (${item.reviewsCount})',
+                            ' (${item['reviewsCount']})',
                             style: const TextStyle(
                               fontSize: 11,
                               color: Colors.grey,
@@ -146,6 +133,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
+                      // Khoảng cách và thời gian đến
                       Row(
                         children: [
                           const Icon(
@@ -155,7 +143,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            item.formattedDistance,
+                            item['formattedDistance'],
                             style: const TextStyle(
                               fontSize: 11,
                               color: Colors.black87,
@@ -172,7 +160,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            item.timeArrival,
+                            item['thoiGianDen'],
                             style: const TextStyle(
                               fontSize: 11,
                               color: Colors.black87,
@@ -198,6 +186,92 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                 ),
               ],
             ),
+
+            const SizedBox(height: 10),
+
+            // 🌟 THỤT LỀ TRÁI 60PX (Đúng bằng chiều rộng avatar 48 + khoảng cách 12) ĐỂ THẲNG HÀNG VỚI CÁC THÔNG TIN PHÍA TRÊN
+            Padding(
+              padding: const EdgeInsets.only(left: 60),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width:
+                        85, // Chiều rộng cố định cho chữ "Chuyên ngành:" / "Kỹ năng:"
+                    child: Text(
+                      coCCHN ? 'Chuyên ngành:' : 'Kỹ năng:',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: coCCHN
+                        ? Wrap(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: badgeBg,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  item['tenChuyenNganh'],
+                                  style: TextStyle(
+                                    color: badgeTextColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : (skills.isNotEmpty
+                              ? Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: skills
+                                      .map(
+                                        (skill) => Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 3,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: badgeBg,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            skill,
+                                            style: TextStyle(
+                                              color: badgeTextColor,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                )
+                              : const Text(
+                                  'Không có',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey,
+                                  ),
+                                )),
+                  ),
+                ],
+              ),
+            ),
+
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8.0),
               child: Divider(height: 1, color: Color(0xFFF1F5F9)),
@@ -222,7 +296,7 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        item.nguoiDung.soDienThoai,
+                        nguoiDung.soDienThoai,
                         style: const TextStyle(
                           fontSize: 11,
                           color: Colors.black87,
@@ -244,7 +318,9 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      item.coCCHN ? 'Sẵn sàng ngay' : 'Tình nguyện viên',
+                      coCCHN
+                          ? 'Cứu Hộ Có Chứng Chỉ'
+                          : 'Cứu Hộ Chưa Có Chứng Chỉ',
                       style: const TextStyle(
                         color: Color(0xFF10B981),
                         fontSize: 11,

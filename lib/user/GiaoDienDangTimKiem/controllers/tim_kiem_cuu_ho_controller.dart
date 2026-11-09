@@ -39,18 +39,17 @@ class TimKiemCuuHoController {
   YeuCauCuuHoModel? yeuCauCuuHo;
   ChiTietMoTaHienTruongModel? chiTietMoTa;
   List<LuuAnhModel> danhSachAnhBase64 = [];
-  // 🌟 Map lưu Vị trí ban đầu của cứu hộ viên lúc được cấp phát
+
   Map<String, LatLng> initialRescuerLocations = {};
   LatLng currentDeviceLocation = const LatLng(10.7769, 106.6993);
 
   final Set<Circle> circles = {};
   final Set<Marker> markers = {};
 
-  // 🌟 Mở rộng bán kính: 1000m (1km) -> 3000m (3km) -> 5000m (5km)
   int currentScanStep = 0;
   final List<double> scanRadii = [1000, 3000, 5000];
 
-  Timer? _step15sTimer;
+  Timer? _radarPeriodicTimer;
   Timer? _secondsTimer;
   StreamSubscription<List<ChiTietPhanCongCuuHoModel>>? _phanCongSubscription;
 
@@ -58,6 +57,7 @@ class TimKiemCuuHoController {
   List<Map<String, dynamic>> rescuerList = [];
   List<String> acceptedRescuerIds = [];
   Set<String> assignedRescuerIds = {};
+  bool _isOverdueHandled = false;
 
   Map<String, dynamic>? aiAnalysisResult;
 
@@ -71,7 +71,9 @@ class TimKiemCuuHoController {
   }
 
   bool _hasNavigated = false;
-  // 🌟 Cập nhật tham số của initSearch
+  // Lấy giới hạn số người cần cứu hộ
+  int get limitCans => yeuCauCuuHo?.soNguoiCanCuuHo ?? 3;
+
   Future<void> initSearch(
     String maYeuCau,
     Function() onUpdate, {
@@ -80,30 +82,25 @@ class TimKiemCuuHoController {
   }) async {
     isLoading = true;
     _hasNavigated = false;
+    _isOverdueHandled = false;
 
-    // 🌟 RESET SẠCH CACHE TỪ PHIÊN TRƯỚC ĐỂ KHÔNG BỊ KẸT SỐ LIỆU CŨ
     assignedRescuerIds.clear();
     initialRescuerLocations.clear();
     acceptedRescuerIds.clear();
-    rescuerList.clear(); // 👈 Xóa sạch danh sách cứu hộ cũ ở đây!
-    elapsedSeconds = 0; // Reset luôn thời gian quét về 0
-    markers.clear(); // Xóa sạch marker cũ trên bản đồ
-    circles.clear(); // Xóa sạch vòng tròn cũ
+    rescuerList.clear();
+    elapsedSeconds = 0;
+    markers.clear();
+    circles.clear();
     onUpdate();
 
     try {
-      // 1. LẤY DỮ LIỆU YÊU CẦU TỪ FIREBASE TRƯỚC
       yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
 
-      // 🌟 2. RESET SẠCH DANH SÁCH BỊ KẸT TRÊN FIREBASE (Đưa về trống hoặc hủy các đơn treo cũ)
       if (yeuCauCuuHo != null) {
-        yeuCauCuuHo!.danhSachPhanCongVien.clear(); // Xóa trên model local
-
-        // Cập nhật lên Firestore để xóa trắng Map danhSachPhanCongVien cũ kỹ đi
+        yeuCauCuuHo!.danhSachPhanCongVien.clear();
         await _firebaseService.saveYeuCauCuuHo(yeuCauCuuHo!);
       }
 
-      // 3. GÁN TỌA ĐỘ TỪ YÊU CẦU CỨU HỘ VÀO BẢN ĐỒ
       if (yeuCauCuuHo != null &&
           yeuCauCuuHo!.viDo != null &&
           yeuCauCuuHo!.kinhDo != null) {
@@ -115,7 +112,6 @@ class TimKiemCuuHoController {
 
       moveToCurrentLocation();
 
-      // 4. BẮN THÔNG BÁO NGƯỜI THÂN QUA RTDB
       if (yeuCauCuuHo != null) {
         await _firebaseService.notifyConnectedRelatives(
           maNguoiYeuCau: yeuCauCuuHo!.maNguoiYeuCau,
@@ -125,40 +121,31 @@ class TimKiemCuuHoController {
         );
       }
 
-      // 5. ĐỌC MÔ TẢ & ẢNH BASE64 ĐỂ GEMINI PHÂN TÍCH
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
       if (chiTietMoTa != null) {
         danhSachAnhBase64 = await _firebaseService.getImagesByMoTaId(
           chiTietMoTa!.maYeuCau,
         );
 
-        aiAnalysisResult = await _geminiService.analyzeSceneAndSuggestSkills(
-          moTa: chiTietMoTa!,
-          danhSachAnhBase64: danhSachAnhBase64,
-        );
+        if (yeuCauCuuHo?.maLoaiYeuCau != 'loaiyeucau_sos') {
+          aiAnalysisResult = await _geminiService.analyzeSceneAndSuggestSkills(
+            moTa: chiTietMoTa!,
+            danhSachAnhBase64: danhSachAnhBase64,
+          );
+        }
       }
 
       await updateMapOverlays();
-
-      // 6. STREAM THEO DÕI CÁC BẢN GHI PHÂN CÔNG MỚI
       _listenToPhanCongChanges(maYeuCau, onUpdate, onRescuerAccepted);
 
-      // Đếm thời gian nhảy từng giây
-      _secondsTimer?.cancel();
-      _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        elapsedSeconds++;
-        onUpdate();
-      });
-      // 🌟 KIỂM TRA LUỒNG CHẠY
       if (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' &&
           danhSachChiDinh != null &&
           danhSachChiDinh.isNotEmpty) {
         manualSelectedCount = danhSachChiDinh.length;
-        // 1. TÍNH TOÁN KHOẢNG CÁCH ĐẾN NGƯỜI Ở XA NHẤT TRONG DANH SÁCH ĐƯỢC CHỌN
         List<NguoiDungModel> targetUsers = await _firebaseService.getUsersByIds(
           danhSachChiDinh,
         );
-        double maxDistanceMeters = 1000.0; // Mặc định tối thiểu 1km
+        double maxDistanceMeters = 1000.0;
 
         for (var user in targetUsers) {
           if (user.viDo != null && user.kinhDo != null) {
@@ -174,48 +161,77 @@ class TimKiemCuuHoController {
           }
         }
 
-        // 2. TỰ ĐỘNG CHỌN MỐC QUÉT (SCAN STEP) PHÙ HỢP HOẶC MỞ RỘNG TỐI ĐA NẾU QUÁ XA
         if (maxDistanceMeters <= 1000) {
-          currentScanStep = 0; // Mốc 1km
+          currentScanStep = 0;
         } else if (maxDistanceMeters <= 3000) {
-          currentScanStep = 1; // Mốc 3km
+          currentScanStep = 1;
         } else {
-          currentScanStep = 2; // Mốc 5km (hoặc vượt quá thì nằm ở mức max)
+          currentScanStep = 2;
         }
 
-        await updateMapOverlays(); // Vẽ lại vòng tròn bản đồ theo mốc vừa tính
-
-        // 3. Gán đơn cho các bác sĩ được chọn
+        await updateMapOverlays();
         await _assignToSpecificRescuers(maYeuCau, danhSachChiDinh, onUpdate);
 
-        // 4. Đếm ngược 60 giây chờ đợi phản hồi, nếu tạch thì fallback sang AI tự tìm
         _fallbackTimer = Timer(const Duration(seconds: 60), () async {
-          if (acceptedRescuerIds.isEmpty) {
+          if (acceptedRescuerIds.isEmpty && !_isOverdueHandled) {
             debugPrint(
-              '⏳ Quá 60s không ai nhận đơn tự chọn, chuyển sang AI quét tự động!',
+              '⏳ Quá 60s nhóm chỉ định không nhận đơn, tự động chuyển sang AI quét tự động!',
             );
-
             await _firebaseService.updateTinhTrangYeuCau(
               maYeuCau,
               'user_tinhtrang_chotiepnhan',
             );
-
             startAdaptiveAIRadar(maYeuCau, onUpdate);
           }
         });
       } else {
-        // LUỒNG 2: TÌM TỰ ĐỘNG BẰNG AI RADAR (Bắt đầu từ 1km)
         startAdaptiveAIRadar(maYeuCau, onUpdate);
       }
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
-      isLoading = false;
+      isLoading = false; // Mọi thứ đã load xong
       onUpdate();
+
+      _secondsTimer?.cancel();
+      _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+        elapsedSeconds++;
+
+        // 🌟 Xác định mốc quá hạn tùy theo loại yêu cầu
+        int maxTimeout =
+            (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien')
+            ? 120
+            : 60;
+
+        if (elapsedSeconds >= maxTimeout &&
+            acceptedRescuerIds.isEmpty &&
+            !_isOverdueHandled) {
+          _isOverdueHandled = true;
+          _stopAllTimers();
+
+          debugPrint(
+            '⏳ Đã quá ${maxTimeout}s không có ai nhận, chuyển sang QUÁ HẠN!',
+          );
+          await _firebaseService.updateTinhTrangYeuCau(
+            maYeuCau,
+            'user_tinhtrang_quahandieuphoi', // 🌟 Cập nhật trạng thái quá hạn điều phối
+          );
+
+          await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
+
+          for (var maCuuHo in assignedRescuerIds) {
+            await _firebaseService.updateUserOnlineStatus(
+              userId: maCuuHo,
+              isOnline: true,
+              nhanCaCuuHo: false,
+            );
+          }
+        }
+        onUpdate();
+      });
     }
   }
 
-  // 🌟 HÀM MỚI: Chỉ gán đơn cho những người được chỉ định
   Future<void> _assignToSpecificRescuers(
     String maYeuCau,
     List<String> targetIds,
@@ -224,18 +240,20 @@ class TimKiemCuuHoController {
     List<NguoiDungModel> targetUsers = await _firebaseService.getUsersByIds(
       targetIds,
     );
+    bool hasNewAssignment = false;
 
     for (var user in targetUsers) {
-      debugPrint('🔍 Đang kiểm tra cứu hộ viên: ${user.hoTen}');
-
       if (user.viDo == null || user.kinhDo == null) {
-        debugPrint('❌ Bị bỏ qua do thiếu tọa độ GPS: ${user.hoTen}');
+        debugPrint('⚠️ Bỏ qua ${user.maNguoiDung} vì chưa có tọa độ GPS!');
         continue;
       }
       if (user.nhanCaCuuHo == true) {
-        debugPrint('❌ Bị bỏ qua do nhanCaCuuHo == true: ${user.hoTen}');
+        debugPrint(
+          '⚠️ Bỏ qua ${user.maNguoiDung} vì đang kẹt ca (nhanCaCuuHo = true)',
+        );
         continue;
       }
+
       double distanceMeters = Geolocator.distanceBetween(
         currentDeviceLocation.latitude,
         currentDeviceLocation.longitude,
@@ -255,121 +273,134 @@ class TimKiemCuuHoController {
 
       _addRescuerMarker(user, distanceMeters);
       await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
+      hasNewAssignment = true;
     }
 
+    if (hasNewAssignment && yeuCauCuuHo != null) {
+      await _firebaseService.sendRequestToRealtimeDB(
+        maNanNhan: yeuCauCuuHo!.maNguoiYeuCau,
+        maYeuCau: maYeuCau,
+        viDo: currentDeviceLocation.latitude,
+        kinhDo: currentDeviceLocation.longitude,
+        listCuuHoVienIds: assignedRescuerIds.toList(),
+      );
+    }
     onUpdate();
   }
 
-  // 🌟 Cập nhật tham số và thêm đoạn chuyển trang vào _listenToPhanCongChanges
   void _listenToPhanCongChanges(
     String maYeuCau,
     Function() onUpdate,
-    Function(Map<String, LatLng>)?
-    onRescuerAccepted, // ✅ Thêm Map<String, LatLng> vào đây
+    Function(Map<String, LatLng>)? onRescuerAccepted,
   ) {
     _phanCongSubscription?.cancel();
     _phanCongSubscription = _firebaseService.streamPhanCongByYeuCau(maYeuCau).listen((
       phanCongList,
     ) async {
-      acceptedRescuerIds.clear();
-      bool hasAccepted = false;
-
       for (var pc in phanCongList) {
-        // 🌟 YÊU CẦU 1: TỰ ĐỘNG ĐỒNG BỘ TRẠNG THÁI TỪ CỨU HỘ VIÊN VÀO YÊU CẦU CỨU HỘ
-        if (yeuCauCuuHo?.danhSachPhanCongVien[pc.maNguoiCuuHo] !=
-            pc.maTrangThaiTiepNhan) {
+        String? trangThaiCu =
+            yeuCauCuuHo?.danhSachPhanCongVien[pc.maNguoiCuuHo];
+
+        if (trangThaiCu != pc.maTrangThaiTiepNhan) {
           await _firebaseService.updateDanhSachPhanCongVien(
             maYeuCau: maYeuCau,
             maNguoiCuuHo: pc.maNguoiCuuHo,
             trangThai: pc.maTrangThaiTiepNhan,
           );
-          // Cập nhật luôn biến local để khỏi phải load lại YeuCauCuuHo
-          yeuCauCuuHo?.danhSachPhanCongVien[pc.maNguoiCuuHo] =
-              pc.maTrangThaiTiepNhan;
+
+          Map<String, String> updatedMap = Map.from(
+            yeuCauCuuHo?.danhSachPhanCongVien ?? {},
+          );
+          updatedMap[pc.maNguoiCuuHo] = pc.maTrangThaiTiepNhan;
+          yeuCauCuuHo = yeuCauCuuHo?.copyWith(danhSachPhanCongVien: updatedMap);
+
+          if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan') {
+            int newSoLuong = (yeuCauCuuHo?.soNguoiCuuHo ?? 0) + 1;
+            yeuCauCuuHo = yeuCauCuuHo?.copyWith(soNguoiCuuHo: newSoLuong);
+
+            await FirebaseFirestore.instance
+                .collection('YeuCauCuuHo')
+                .doc(maYeuCau)
+                .update({'soNguoiCuuHo': FieldValue.increment(1)});
+          } else if (trangThaiCu == 'cuuho_trangthai_phancong_tiepnhan') {
+            if ((yeuCauCuuHo?.soNguoiCuuHo ?? 0) > 0) {
+              int newSoLuong = (yeuCauCuuHo!.soNguoiCuuHo) - 1;
+              yeuCauCuuHo = yeuCauCuuHo?.copyWith(soNguoiCuuHo: newSoLuong);
+
+              await FirebaseFirestore.instance
+                  .collection('YeuCauCuuHo')
+                  .doc(maYeuCau)
+                  .update({'soNguoiCuuHo': FieldValue.increment(-1)});
+            }
+          }
         }
 
-        // Kiểm tra những ai đã chấp nhận
         if (pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan') {
-          hasAccepted = true;
           if (!acceptedRescuerIds.contains(pc.maNguoiCuuHo)) {
             acceptedRescuerIds.add(pc.maNguoiCuuHo);
           }
+        } else if (trangThaiCu == 'cuuho_trangthai_phancong_tiepnhan') {
+          acceptedRescuerIds.remove(pc.maNguoiCuuHo);
         }
       }
 
-      // 🛑 ĐIỀU KIỆN 1: CÓ ÍT NHẤT 1 NGƯỜI NHẬN CA
-      if (hasAccepted) {
-        _stop15sRadarTimer(); // CHỈ TẮT VÒNG QUÉT (Ngưng tìm thêm người mới)
+      // 🌟 Nếu có ít nhất 1 người nhận ca, cập nhật tình trạng yêu cầu thành user_tinhtrang_daphancong
+      if (acceptedRescuerIds.isNotEmpty) {
+        await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
 
+        // Kiểm tra biến local để đảm bảo chỉ cập nhật Firebase 1 lần duy nhất
         if (yeuCauCuuHo?.maTinhTrangYeuCau != 'user_tinhtrang_daphancong') {
           await _firebaseService.updateTinhTrangYeuCau(
             maYeuCau,
             'user_tinhtrang_daphancong',
           );
+          // Cập nhật ngay local để khóa chặn các lần gọi tiếp theo
+          yeuCauCuuHo = yeuCauCuuHo?.copyWith(
+            maTinhTrangYeuCau: 'user_tinhtrang_daphancong',
+          );
         }
 
-        // Nhảy màn hình 1 lần duy nhất
         if (!_hasNavigated && onRescuerAccepted != null) {
           _hasNavigated = true;
-          onRescuerAccepted(initialRescuerLocations); // 🌟 Truyền dữ liệu đi
+          onRescuerAccepted(initialRescuerLocations);
         }
       }
 
-      // 🛑 ĐIỀU KIỆN 2: KHI ĐÃ ĐỦ 3 NGƯỜI TIẾP NHẬN
-      if (acceptedRescuerIds.length >= 3) {
-        // 1. Tắt toàn bộ Timer và ngắt Stream theo dõi
+      // 🌟 Thay đổi điều kiện dừng: Số người tiếp nhận >= Số người cần cứu hộ
+      if (acceptedRescuerIds.length >= limitCans) {
         _stopAllTimers();
         _phanCongSubscription?.cancel();
-
-        // 2. Hủy các đơn thừa trong bảng ChiTietPhanCongCuuHo
-        await _firebaseService.cancelRemainingAssignments(maYeuCau);
-
-        // 3. 🌟 YÊU CẦU 3: Dọn dẹp nốt những người thừa trong danhSachPhanCongVien của Yêu Cầu
-        if (yeuCauCuuHo != null) {
-          for (var key in yeuCauCuuHo!.danhSachPhanCongVien.keys.toList()) {
-            if (yeuCauCuuHo!.danhSachPhanCongVien[key] ==
-                'cuuho_trangthai_phancong_chotiepnhan') {
-              await _firebaseService.updateDanhSachPhanCongVien(
-                maYeuCau: maYeuCau,
-                maNguoiCuuHo: key,
-                trangThai: 'cuuho_trangthai_phancong_dahuy',
-              );
-            }
-          }
-        }
-        debugPrint(
-          '🎯 Đã đủ 3 cứu hộ viên tiếp nhận! Chốt sổ và hủy các đơn chờ còn lại.',
-        );
       }
 
       onUpdate();
     });
   }
 
-  /// 🌟 RADAR 15S MỞ RỘNG BÁN KÍNH (1km -> 3km -> 5km)
   void startAdaptiveAIRadar(String maYeuCau, Function() onUpdate) async {
-    currentScanStep = 0; // 1km
+    if (_isOverdueHandled) return;
+    currentScanStep = 0;
     await _executeAIScanAndAssign(maYeuCau, onUpdate);
 
-    _schedule15sNextStep(maYeuCau, onUpdate);
-  }
-
-  void _schedule15sNextStep(String maYeuCau, Function() onUpdate) {
-    _step15sTimer?.cancel();
-    _step15sTimer = Timer(const Duration(seconds: 15), () async {
-      // Nếu CHƯA CÓ AI nhận đơn VÀ chưa đạt mức tối đa 5km (bước 2)
-      if (acceptedRescuerIds.isEmpty &&
-          currentScanStep < scanRadii.length - 1) {
-        currentScanStep++; // Tăng từ 1km (bước 0) -> 3km (bước 1) -> 5km (bước 2)
-        await updateMapOverlays();
-        await _executeAIScanAndAssign(maYeuCau, onUpdate);
-
-        _schedule15sNextStep(maYeuCau, onUpdate);
+    _radarPeriodicTimer?.cancel();
+    _radarPeriodicTimer = Timer.periodic(const Duration(seconds: 3), (
+      timer,
+    ) async {
+      if (acceptedRescuerIds.isNotEmpty || _isOverdueHandled) {
+        timer.cancel();
+        return;
       }
+
+      if (elapsedSeconds > 0 &&
+          elapsedSeconds % 6 == 0 &&
+          currentScanStep < scanRadii.length - 1) {
+        currentScanStep++;
+        await updateMapOverlays();
+      }
+
+      await _executeAIScanAndAssign(maYeuCau, onUpdate);
     });
   }
 
-  /// 🌟 QUÉT AI VÀ SẮP XẾP ƯU TIÊN PHÂN CÔNG (Đã tích hợp kiểm tra danhSachPhanCongVien có sẵn)
   Future<void> _executeAIScanAndAssign(
     String maYeuCau,
     Function() onUpdate,
@@ -381,23 +412,23 @@ class TimKiemCuuHoController {
     if (onlineRescuers.isEmpty) return;
 
     List<Map<String, dynamic>> scoredRescuers = [];
-
-    bool hasMoTa =
-        chiTietMoTa != null &&
-        chiTietMoTa!.ghiChuText != null &&
-        chiTietMoTa!.ghiChuText.toString().isNotEmpty;
-
-    String loaiYeuCau = yeuCauCuuHo?.maLoaiYeuCau ?? 'loaiyeucau_sos';
-
-    bool shouldAIControl =
-        (loaiYeuCau == 'loaiyeucau_choncuuhovien' ||
-        loaiYeuCau == 'loaiyeucau_timtudong');
+    bool isSos = yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_sos';
 
     for (var rescuer in onlineRescuers) {
       if (rescuer.maNguoiDung == yeuCauCuuHo?.maNguoiYeuCau) continue;
       if (assignedRescuerIds.contains(rescuer.maNguoiDung)) continue;
-      if (rescuer.viDo == null || rescuer.kinhDo == null) continue;
-      if (rescuer.nhanCaCuuHo == true) continue;
+      if (rescuer.viDo == null || rescuer.kinhDo == null) {
+        debugPrint(
+          '⚠️ Bỏ qua AI ${rescuer.maNguoiDung} vì chưa có tọa độ GPS!',
+        );
+        continue;
+      }
+      if (rescuer.nhanCaCuuHo == true) {
+        debugPrint(
+          '⚠️ Bỏ qua AI ${rescuer.maNguoiDung} vì đang kẹt ca (nhanCaCuuHo = true)',
+        );
+        continue;
+      }
 
       double distanceMeters = Geolocator.distanceBetween(
         currentDeviceLocation.latitude,
@@ -408,13 +439,10 @@ class TimKiemCuuHoController {
 
       if (distanceMeters <= maxDistanceMeters) {
         double score = 0.0;
-
-        if (hasMoTa && shouldAIControl) {
-          // Có mô tả + Chọn CHV/Tìm tự động -> AI tính điểm chuyên ngành/kỹ năng
-          score = await _calculateAIScore(rescuer, distanceMeters);
-        } else {
-          // Không mô tả hoặc SOS thường -> Ưu tiên khoảng cách gần nhất
+        if (isSos) {
           score = 10000.0 - distanceMeters;
+        } else {
+          score = await _calculateAIScore(rescuer, distanceMeters);
         }
 
         scoredRescuers.add({
@@ -425,28 +453,23 @@ class TimKiemCuuHoController {
       }
     }
 
-    // Sắp xếp giảm dần theo điểm số
     scoredRescuers.sort(
       (a, b) => (b['score'] as double).compareTo(a['score'] as double),
     );
 
+    bool hasNewAssignment = false;
+
     for (var item in scoredRescuers) {
-      // 🌟 Giới hạn dừng lại khi đủ 3 người nhận
-      if (acceptedRescuerIds.length >= 3) break;
+      if (acceptedRescuerIds.length >= limitCans) break;
 
       NguoiDungModel user = item['user'];
       String maNguoiCuuHo = user.maNguoiDung!;
 
-      // 🌟 Lấy trạng thái từ danhSachPhanCongVien đã có sẵn trong model yêu cầu cứu hộ
       String? trangThaiCu = yeuCauCuuHo?.danhSachPhanCongVien[maNguoiCuuHo];
-
-      // Nếu người này ĐÃ TỪ CHỐI trước đó -> Chặn hoàn toàn, không quét/phân công lại
       if (trangThaiCu == 'cuuho_trangthai_phancong_tuchoi' ||
           trangThaiCu == 'tuchoi') {
         continue;
       }
-
-      // Nếu đã có trong danh sách với bất kỳ trạng thái nào khác (đang chờ, đã nhận...) -> Bỏ qua không cấp phát trùng
       if (trangThaiCu != null && trangThaiCu.isNotEmpty) {
         continue;
       }
@@ -454,7 +477,6 @@ class TimKiemCuuHoController {
       double distanceKm = (item['distanceMeters'] as double) / 1000;
 
       assignedRescuerIds.add(maNguoiCuuHo);
-      // 🌟 LƯU TỌA ĐỘ BAN ĐẦU CỦA NGƯỜI NÀY LẠI
       initialRescuerLocations[maNguoiCuuHo] = LatLng(user.viDo!, user.kinhDo!);
       rescuerList.add({
         'user': user,
@@ -462,9 +484,18 @@ class TimKiemCuuHoController {
       });
 
       _addRescuerMarker(user, (item['distanceMeters'] as double));
-
-      // 🌟 Tạo phân công và cập nhật trực tiếp vào danhSachPhanCongVien
       await _createAssignmentRecord(maYeuCau, maNguoiCuuHo);
+      hasNewAssignment = true;
+    }
+
+    if (hasNewAssignment && yeuCauCuuHo != null) {
+      await _firebaseService.sendRequestToRealtimeDB(
+        maNanNhan: yeuCauCuuHo!.maNguoiYeuCau,
+        maYeuCau: maYeuCau,
+        viDo: currentDeviceLocation.latitude,
+        kinhDo: currentDeviceLocation.longitude,
+        listCuuHoVienIds: assignedRescuerIds.toList(),
+      );
     }
 
     onUpdate();
@@ -482,31 +513,29 @@ class TimKiemCuuHoController {
       aiAnalysisResult?['kyNangYeuCau'] ?? [],
     );
 
-    // 1. Khớp Hồ sơ CÓ CCHN
     final hoSoCoCCHN = await _firebaseService.getHoSoCoCCHN(user.maNguoiDung!);
     if (hoSoCoCCHN != null) {
       String cn = hoSoCoCCHN.tenChuyenNganh.toLowerCase();
       for (var req in reqChuyenNganh) {
         if (cn.contains(req.toLowerCase())) {
-          score += 5000.0;
+          score += 8000.0;
         }
       }
     }
 
-    // 2. Khớp Kỹ năng Subcollection
     List<String> userSkillIds = await _firebaseService.getSkillIdsByUserId(
       user.maNguoiDung!,
     );
     for (var skId in userSkillIds) {
       for (var req in reqKyNang) {
-        if (skId.toLowerCase().contains(req.toLowerCase())) {
-          score += 2000.0;
+        if (skId.toLowerCase().contains(req.toLowerCase()) ||
+            req.toLowerCase().contains(skId.toLowerCase())) {
+          score += 5000.0;
         }
       }
     }
 
-    // 3. Phạt điểm nhẹ theo khoảng cách xa
-    score -= (distanceMeters * 0.5);
+    score += (10000.0 - distanceMeters);
     return score;
   }
 
@@ -528,20 +557,17 @@ class TimKiemCuuHoController {
         maTrangThaiTiepNhan: 'cuuho_trangthai_phancong_chotiepnhan',
       );
 
-      // 1. Ghi Subcollection theo ngày
       await _firebaseService.createPhanCongTheoNgay(
         maNguoiCuuHo: maNguoiCuuHo,
         phanCong: phanCong,
       );
 
-      // 2. Cập nhật trực tiếp qua FirebaseService
       await _firebaseService.updateDanhSachPhanCongVien(
         maYeuCau: maYeuCau,
         maNguoiCuuHo: maNguoiCuuHo,
         trangThai: 'cuuho_trangthai_phancong_chotiepnhan',
       );
 
-      // Cập nhật local model
       yeuCauCuuHo?.danhSachPhanCongVien[maNguoiCuuHo] =
           'cuuho_trangthai_phancong_chotiepnhan';
     } catch (e) {
@@ -569,22 +595,19 @@ class TimKiemCuuHoController {
     }
   }
 
-  // 🌟 Hàm cắt lấy 2 chữ cái đầu/cuối của tên (Ví dụ: "Phạm Nhật Động" -> "PĐ")
   String _getInitials(String name) {
     if (name.trim().isEmpty) return '?';
     List<String> words = name.trim().split(RegExp(r'\s+'));
     if (words.length == 1) {
       return words[0].substring(0, 1).toUpperCase();
     }
-    return '${words.first[0]}${words.last[0]}'.toUpperCase();
+    return '${words.first[0]}'.toUpperCase();
   }
 
-  // 🌟 Tạo Marker Cứu hộ viên với Avatar hoặc Chữ viết tắt
   Future<void> _addRescuerMarker(
     NguoiDungModel user,
     double distanceMeters,
   ) async {
-    // 1. Lấy dữ liệu Avatar từ Firebase
     String? avatarData = await _firebaseService.getUserAvatarUrl(
       user.maNguoiDung!,
     );
@@ -594,7 +617,6 @@ class TimKiemCuuHoController {
       if (avatarData.startsWith('http')) {
         avatarProvider = NetworkImage(avatarData);
       } else {
-        // Giải mã chuỗi Base64
         String base64Str = avatarData.contains(',')
             ? avatarData.split(',').last
             : avatarData;
@@ -606,15 +628,12 @@ class TimKiemCuuHoController {
       }
     }
 
-    // 2. Định dạng khoảng cách (Dưới 1km hiện mét "m", trên 1km hiện "km")
     String distanceText = distanceMeters < 1000
         ? '${distanceMeters.toStringAsFixed(0)} m'
         : '${(distanceMeters / 1000).toStringAsFixed(1)} km';
 
-    // 3. Lấy chữ cái viết tắt tên nạn nhân/bác sĩ
     String initials = _getInitials(user.hoTen);
 
-    // 4. Dựng Widget Custom Marker
     Widget rescuerMarkerWidget = Directionality(
       textDirection: TextDirection.ltr,
       child: Material(
@@ -622,7 +641,6 @@ class TimKiemCuuHoController {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // --- KHUNG AVATAR ---
             Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
@@ -637,7 +655,6 @@ class TimKiemCuuHoController {
               ),
               child: CircleAvatar(
                 radius: 20,
-                // Có ảnh -> Nền trắng chứa ảnh; Không ảnh -> Nền xanh chứa chữ viết tắt
                 backgroundColor: avatarProvider != null
                     ? Colors.white
                     : const Color(0xFF006A55),
@@ -654,10 +671,7 @@ class TimKiemCuuHoController {
                     : null,
               ),
             ),
-
             const SizedBox(height: 4),
-
-            // --- THẺ KHẢNG CÁCH SỐ MẾT / KM BÊN DƯỚI ---
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -681,8 +695,6 @@ class TimKiemCuuHoController {
                 ),
               ),
             ),
-
-            // --- MŨI TÊN CHỈ XUỐNG VỊ TRÍ MAP ---
             Transform.translate(
               offset: const Offset(0, -1),
               child: ClipPath(
@@ -699,7 +711,6 @@ class TimKiemCuuHoController {
       ),
     );
 
-    // Chuyển Widget thành Bitmap để hiển thị trên Google Maps
     BitmapDescriptor customIcon = await rescuerMarkerWidget
         .toBitmapDescriptor();
 
@@ -717,7 +728,6 @@ class TimKiemCuuHoController {
     circles.clear();
     markers.removeWhere((m) => m.markerId.value == 'current_device_marker');
 
-    // 🌟 1. TẠO MARKER NẠN NHÂN (MÀU ĐỎ + SOS)
     Widget victimMarkerWidget = Directionality(
       textDirection: TextDirection.ltr,
       child: Material(
@@ -725,11 +735,10 @@ class TimKiemCuuHoController {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // --- 1. ICON NẠN NHÂN (Tròn, màu đỏ khẩn cấp) ---
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFC81E1E), // Đỏ khẩn cấp
+                color: const Color(0xFFC81E1E),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2.5),
                 boxShadow: const [
@@ -746,8 +755,6 @@ class TimKiemCuuHoController {
                 size: 24,
               ),
             ),
-
-            // --- 2. MŨI TÊN ĐỎ ---
             Transform.translate(
               offset: const Offset(0, -1),
               child: ClipPath(
@@ -759,10 +766,8 @@ class TimKiemCuuHoController {
                 ),
               ),
             ),
-
-            // --- 3. THẺ CHỮ "SOS" HOẶC "VỊ TRÍ CỦA BẠN" NẰM DƯỚI MŨI TÊN ---
             Transform.translate(
-              offset: const Offset(0, -2), // Kéo sát vào mũi tên
+              offset: const Offset(0, -2),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -783,7 +788,6 @@ class TimKiemCuuHoController {
                     ),
                   ],
                 ),
-                // Xóa chữ const ở Text và dùng toán tử 3 ngôi kiểm tra loại yêu cầu
                 child: Text(
                   yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_sos'
                       ? 'SOS'
@@ -792,8 +796,7 @@ class TimKiemCuuHoController {
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                     color: Color(0xFFC81E1E),
-                    letterSpacing:
-                        0.5, // Giảm letterSpacing lại một chút để chữ dài nhìn gọn hơn
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
@@ -803,21 +806,17 @@ class TimKiemCuuHoController {
       ),
     );
 
-    // Chuyển đổi Widget thành hình ảnh Bitmap
     BitmapDescriptor victimIcon = await victimMarkerWidget.toBitmapDescriptor();
 
-    // 🌟 2. THÊM MARKER NẠN NHÂN LÊN BẢN ĐỒ
     markers.add(
       Marker(
         markerId: const MarkerId('current_device_marker'),
         position: currentDeviceLocation,
         icon: victimIcon,
-        // Dời tâm mỏ neo xuống khoảng 75% chiều cao widget để mũi tên chỉ đúng tọa độ
         anchor: const Offset(0.5, 0.75),
       ),
     );
 
-    // 🌟 3. VẼ VÒNG TRÒN RADAR QUÉT (Giữ nguyên màu xanh thương hiệu)
     circles.add(
       Circle(
         circleId: const CircleId('scan_radius_outer'),
@@ -837,10 +836,7 @@ class TimKiemCuuHoController {
 
   Future<void> moveToCurrentLocation() async {
     if (mapController != null) {
-      // 1. Lấy mức zoom hiện tại trên màn hình của người dùng
       double currentZoom = await mapController!.getZoomLevel();
-
-      // 2. Cập nhật vị trí (target) mới nhưng giữ nguyên currentZoom
       mapController!.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(target: currentDeviceLocation, zoom: currentZoom),
@@ -849,58 +845,45 @@ class TimKiemCuuHoController {
     }
   }
 
-  void _stop15sRadarTimer() {
-    _step15sTimer?.cancel();
-  }
-
   void _stopAllTimers() {
-    _step15sTimer?.cancel();
+    _radarPeriodicTimer?.cancel();
     _secondsTimer?.cancel();
+    _fallbackTimer?.cancel();
   }
 
   void dispose() {
-    _fallbackTimer?.cancel();
     _stopAllTimers();
     _phanCongSubscription?.cancel();
   }
 
-  /// 🌟 HỦY TÌM KIẾM CỨU HỘ & DỌN DẸP DỮ LIỆU (Cập nhật trạng thái hủy + tắt nhanCaCuuHo)
   Future<void> cancelSearch(String maYeuCau) async {
     try {
       isLoading = true;
-
-      // 1. Dừng mọi luồng quét và bộ đếm thời gian
       _stopAllTimers();
       _phanCongSubscription?.cancel();
 
-      // 2. Lấy mã nạn nhân hiện tại
       String? maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
-
       if (maNanNhan != null) {
-        // 3. Xóa thông báo khẩn cấp trên Realtime DB của người thân
         await _firebaseService.removeEmergencyNotification(
           maNanNhan: maNanNhan,
         );
       }
 
-      // 4. Cập nhật trạng thái các đơn phân công thành 'cuuho_trangthai_phancong_dahuy'
       await _firebaseService.cancelRemainingAssignments(maYeuCau);
-
-      // 5. Cập nhật trạng thái tổng của Yêu cầu cứu hộ thành 'user_tinhtrang_dahuy'
       await _firebaseService.updateTinhTrangYeuCau(
         maYeuCau,
         'user_tinhtrang_dahuy',
       );
 
-      // 6. 🌟 Cập nhật nhanCaCuuHo thành false cho tất cả các cứu hộ viên đang bị gán trong đơn này
+      await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
+
       if (yeuCauCuuHo != null && yeuCauCuuHo!.danhSachPhanCongVien.isNotEmpty) {
         for (var maCuuHo in yeuCauCuuHo!.danhSachPhanCongVien.keys) {
           try {
             await _firebaseService.updateUserOnlineStatus(
               userId: maCuuHo,
-              isOnline:
-                  true, // Vẫn giữ trạng thái online của họ, chỉ tắt cờ nhận ca
-              nhanCaCuuHo: false, // 👈 Đưa nhanCaCuuHo về false
+              isOnline: true,
+              nhanCaCuuHo: false,
             );
           } catch (e) {
             debugPrint('Lỗi cập nhật nhanCaCuuHo cho $maCuuHo: $e');
@@ -909,7 +892,7 @@ class TimKiemCuuHoController {
       }
 
       debugPrint(
-        '✅ Đã hủy tìm kiếm, thu hồi đơn và tắt cờ nhận ca của các cứu hộ viên thành công!',
+        '✅ Đã hủy tìm kiếm, thu hồi đơn và reset trạng thái thành công!',
       );
     } catch (e) {
       debugPrint('❌ Lỗi khi hủy tìm kiếm: $e');

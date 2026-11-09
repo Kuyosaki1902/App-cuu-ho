@@ -24,7 +24,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/firebase/background_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
-
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
   final String maThietBi;
@@ -75,6 +74,11 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     _yeuCauQuyenThongBaoVaKhoiChayService();
     WidgetsBinding.instance.addObserver(this);
 
+    _firebaseService.capNhatVaiTro(
+      widget.maNguoiDung,
+      'vaitro_nguoidung',
+    );
+
     _gianhQuyenDangNhap().then((_) {
       _langNgheBiDaVang();
     });
@@ -84,10 +88,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
       widget.maThietBi,
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkPermissionAndListenLocation();
-    });
-
     _langNgheCanhBaoKhanCap();
   }
 
@@ -96,6 +96,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     if (await Permission.notification.isDenied) {
       await Permission.notification.request();
     }
+
+    _checkPermissionAndListenLocation();
 
     // Khởi chạy Foreground Service
     await initializeService();
@@ -161,9 +163,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   .collection('NguoiDung')
                   .doc(maNguoiGoi)
                   .get();
-              
-              String hoTen = userDoc.exists 
-                  ? ((userDoc.data() as Map<String, dynamic>)['hoTen'] ?? maNguoiGoi) 
+
+              String hoTen = userDoc.exists
+                  ? ((userDoc.data() as Map<String, dynamic>)['hoTen'] ??
+                        maNguoiGoi)
                   : maNguoiGoi;
 
               // Truyền cả ID người gọi và Họ tên
@@ -175,23 +178,30 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
   }
 
   Future<void> _phatThongBaoAmThanhVaRung(String hoTen, int id) async {
-    final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
+    final FlutterLocalNotificationsPlugin plugin =
+        FlutterLocalNotificationsPlugin();
 
-    const AndroidInitializationSettings initSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initSettings = InitializationSettings(android: initSettingsAndroid);
+    const AndroidInitializationSettings initSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings = InitializationSettings(
+      android: initSettingsAndroid,
+    );
     await plugin.initialize(initSettings);
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'sos_channel_id_v3', // Tiếp tục đổi ID để phá cache
-      'Cảnh báo khẩn cấp',
-      importance: Importance.max,
-      priority: Priority.high,
-      playSound: true,
-      enableVibration: true,
-      fullScreenIntent: true,
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+          'sos_channel_id_v3', // Tiếp tục đổi ID để phá cache
+          'Cảnh báo khẩn cấp',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          fullScreenIntent: true,
+        );
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
     );
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
-    
+
     // Hiển thị thông báo nền
     await plugin.show(
       id,
@@ -204,19 +214,25 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     FlutterTts flutterTts = FlutterTts();
     await flutterTts.setLanguage("vi-VN");
     await flutterTts.setSpeechRate(0.5); // Tốc độ đọc
-    await flutterTts.setVolume(1.0);     // Âm lượng tối đa
+    await flutterTts.setVolume(1.0); // Âm lượng tối đa
     await flutterTts.setPitch(1.0);
-    await flutterTts.speak("Cảnh báo khẩn cấp. Người thân của bạn đang gặp nguy hiểm. Vui lòng kiểm tra ngay lập tức.");
+    await flutterTts.speak(
+      "Cảnh báo khẩn cấp. Người thân của bạn đang gặp nguy hiểm. Vui lòng kiểm tra ngay lập tức.",
+    );
   }
 
-  void _hienThiManHinhCanhBao(DocumentReference docRef, String maNguoiGoi, String hoTenNguoiGoi) {
+  void _hienThiManHinhCanhBao(
+    DocumentReference docRef,
+    String maNguoiGoi,
+    String hoTenNguoiGoi,
+  ) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => ManHinhCanhBao(
         docRef: docRef,
-        maNguoiGoi: maNguoiGoi,           // Mã ID Firestore
-        hoTenNguoiGoi: hoTenNguoiGoi,     // Tên hiển thị
+        maNguoiGoi: maNguoiGoi, // Mã ID Firestore
+        hoTenNguoiGoi: hoTenNguoiGoi, // Tên hiển thị
       ),
     );
   }
@@ -226,8 +242,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     if (state == AppLifecycleState.resumed) {
       // Ứng dụng được mở lại trên màn hình
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, true);
-    } else if (
-        state == AppLifecycleState.detached) {
+    } else if (state == AppLifecycleState.detached) {
       // Ứng dụng bị thu nhỏ (paused) hoặc vuốt tắt hoàn toàn (detached)
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
     }
@@ -556,8 +571,59 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   scale: _isPanelExpanded ? 1.0 : 0.85,
                   duration: const Duration(milliseconds: 300),
                   child: GestureDetector(
-                    onTap: () {
-                      
+                    onTap: () async {
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (BuildContext context) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        },
+                      );
+
+                      // Gọi hàm từ FirebaseService
+                      // Thay vì nhận bool success, nay ta nhận String? maYeuCauMoi
+                      String? maYeuCauMoi = await _firebaseService
+                          .taoYeuCauTimBacSiSOS(
+                            maNguoiYeuCau: widget.maNguoiDung,
+                            viDo: _currentPosition.latitude,
+                            kinhDo: _currentPosition.longitude,
+                            trieuChung: MoTaTamThoi.trieuChung,
+                            moTaChiTiet: MoTaTamThoi.moTaChiTiet,
+                            fileAnh: MoTaTamThoi.fileAnh,
+                            fileGhiAm: MoTaTamThoi.fileGhiAm,
+                          );
+
+                      // Tắt loading
+                      Navigator.pop(context);
+
+                      if (maYeuCauMoi != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Tạo yêu cầu tìm bác sĩ tự động thành công!',
+                            ),
+                          ),
+                        );
+                        // Xóa dữ liệu tạm sau khi gửi thành công
+                        MoTaTamThoi.clear();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                GiaoDienDangTimKiem(maYeuCau: maYeuCauMoi),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại.',
+                            ),
+                          ),
+                        );
+                      }
                     },
                     child: Container(
                       width: 80,
