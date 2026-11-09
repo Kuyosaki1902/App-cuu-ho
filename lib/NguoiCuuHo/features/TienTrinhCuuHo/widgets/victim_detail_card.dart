@@ -113,7 +113,7 @@ class VictimDetailCard extends StatelessWidget {
     );
   }
 
-  // 🚀 MODAL HIỂN THỊ CHI TIẾT (ĐÃ BỔ SUNG ĐẦY ĐỦ BOX CHAT TRAO ĐỔI NHANH)
+  // 🚀 MODAL HIỂN THỊ CHI TIẾT MÔ TẢ HIỆN TRƯỜNG (HIỂN THỊ HÌNH ẢNH THAY CHO VIDEO)
   void _showVictimInfoBottomSheet(
     BuildContext context,
     String victimName,
@@ -167,7 +167,7 @@ class VictimDetailCard extends StatelessWidget {
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
-                                  Icons.videocam_rounded,
+                                  Icons.image_rounded,
                                   color: Color(0xFFE52525),
                                   size: 22,
                                 ),
@@ -178,7 +178,7 @@ class VictimDetailCard extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Video & Tình trạng nạn nhân',
+                                      'Hình ảnh & Tình trạng nạn nhân',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -228,119 +228,74 @@ class VictimDetailCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 1. VIDEO HIỆN TRƯỜNG PLAYER MOCKUP
-                            Container(
-                              height: 180,
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Stack(
-                                children: [
-                                  Center(
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFE52525),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.play_arrow,
-                                        color: Colors.white,
-                                        size: 32,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 12,
-                                    left: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE52525),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        '🔴 VIDEO HIỆN TRƯỜNG (0:24S)',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 12,
-                                    right: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black54,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        '720p',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const Positioned(
-                                    bottom: 12,
-                                    left: 12,
-                                    right: 12,
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '00:08 / 00:24',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                              ),
-                                            ),
-                                            Row(
+                            // 1. HÌNH ẢNH HIỆN TRƯỜNG (LẤY TỪ FIRESTORE QUA CONTROLLER)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Container(
+                                height: 200,
+                                width: double.infinity,
+                                color: const Color(0xFFF1F5F9),
+                                child: controller.hinhAnhUrl.isNotEmpty
+                                    ? Image.network(
+                                        controller.hinhAnhUrl,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder:
+                                            (context, child, loadingProgress) {
+                                              if (loadingProgress == null)
+                                                return child;
+                                              return const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      color: Color(0xFFE52525),
+                                                    ),
+                                              );
+                                            },
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return const Center(
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
                                               children: [
                                                 Icon(
-                                                  Icons.volume_up,
-                                                  color: Colors.white,
-                                                  size: 16,
+                                                  Icons.broken_image_outlined,
+                                                  color: Colors.grey,
+                                                  size: 36,
                                                 ),
-                                                SizedBox(width: 10),
-                                                Icon(
-                                                  Icons.fullscreen,
-                                                  color: Colors.white,
-                                                  size: 16,
+                                                SizedBox(height: 6),
+                                                Text(
+                                                  'Không thể tải hình ảnh hiện trường',
+                                                  style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12,
+                                                  ),
                                                 ),
                                               ],
                                             ),
+                                          );
+                                        },
+                                      )
+                                    : const Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons
+                                                  .image_not_supported_outlined,
+                                              color: Colors.grey,
+                                              size: 36,
+                                            ),
+                                            SizedBox(height: 6),
+                                            Text(
+                                              'Không có hình ảnh hiện trường',
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 12,
+                                              ),
+                                            ),
                                           ],
                                         ),
-                                        SizedBox(height: 4),
-                                        LinearProgressIndicator(
-                                          value: 0.35,
-                                          backgroundColor: Colors.white24,
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                                Color(0xFFE52525),
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                      ),
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -353,7 +308,7 @@ class VictimDetailCard extends StatelessWidget {
                                 ),
                                 SizedBox(width: 4),
                                 Text(
-                                  'Video quay trực tiếp từ người báo tin tại hiện trường',
+                                  'Hình ảnh chụp trực tiếp từ người báo tin tại hiện trường',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.grey,
@@ -589,8 +544,7 @@ class VictimDetailCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 20),
 
-                            // 4. 🟢 BOX CHAT TRAO ĐỔI NHANH (ĐÃ BỔ SUNG)
-                            // 4. 🟢 BOX CHAT TRAO ĐỔI NHANH (HIỂN THỊ TỪ FIRESTORE)
+                            // 4. BOX CHAT TRAO ĐỔI NHANH
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -634,10 +588,9 @@ class VictimDetailCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
 
-                            // 🟢 CONTAINER DANH SÁCH TIN NHẮN
+                            // CONTAINER DANH SÁCH TIN NHẮN
                             Container(
-                              height:
-                                  250, // Định size cho box chat để cuộn được
+                              height: 250,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF8FAFC),
@@ -657,15 +610,12 @@ class VictimDetailCard extends StatelessWidget {
                                       ),
                                     )
                                   : ListView.builder(
-                                      reverse:
-                                          true, // Để đẩy tin mới nhất xuống đáy
+                                      reverse: true,
                                       itemCount:
                                           controller.danhSachTinNhan.length,
                                       itemBuilder: (context, index) {
                                         final tinNhan =
                                             controller.danhSachTinNhan[index];
-
-                                        // Kiểm tra xem tin nhắn này là của Bác sĩ (chính mình) hay Người nhà
                                         final isMyMessage =
                                             tinNhan.maNguoiGui ==
                                             controller.currentDoctorId;
@@ -720,7 +670,6 @@ class VictimDetailCard extends StatelessWidget {
                                                           ),
                                                   ),
                                                 ),
-                                                // Xử lý hiển thị kèm hình ảnh nếu có fileDinhKemUrl
                                                 if (tinNhan.fileDinhKemUrl !=
                                                         null &&
                                                     tinNhan
@@ -752,16 +701,12 @@ class VictimDetailCard extends StatelessWidget {
                                     ),
                             ),
 
-                            // 🟢 THÊM Ô TEXTFIELD ĐỂ CHAT (TÙY CHỌN NẾU BẠN MUỐN BÁC SĨ NHẮN ĐƯỢC)
-                            const SizedBox(height: 8),
-                            // 🟢 THÊM Ô TEXTFIELD VÀ NÚT GỬI ĐỂ CHAT
                             const SizedBox(height: 8),
                             Row(
                               children: [
                                 Expanded(
                                   child: TextField(
-                                    controller:
-                                        chatController, // Gắn controller vào đây
+                                    controller: chatController,
                                     decoration: InputDecoration(
                                       hintText: 'Nhập tin nhắn...',
                                       hintStyle: const TextStyle(fontSize: 12),
@@ -785,27 +730,21 @@ class VictimDetailCard extends StatelessWidget {
                                         ),
                                       ),
                                     ),
-                                    // Cho phép gửi bằng phím Enter/Send trên bàn phím ảo
                                     onSubmitted: (text) {
                                       if (text.trim().isNotEmpty) {
                                         controller.guiTinNhan(text.trim());
-                                        chatController
-                                            .clear(); // Xóa trắng ô nhập
+                                        chatController.clear();
                                       }
                                     },
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                // Nút bấm gửi tin nhắn
                                 InkWell(
                                   onTap: () {
                                     final text = chatController.text;
                                     if (text.trim().isNotEmpty) {
-                                      controller.guiTinNhan(
-                                        text.trim(),
-                                      ); // Gọi hàm gửi
-                                      chatController
-                                          .clear(); // Xóa trắng ô nhập
+                                      controller.guiTinNhan(text.trim());
+                                      chatController.clear();
                                     }
                                   },
                                   borderRadius: BorderRadius.circular(24),

@@ -27,11 +27,6 @@
         android:label="cuhokhancap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="true"
-            tools:ignore="Instantiatable" />
         <meta-data 
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDkN_9EJ9WUlWgap-TJV7ig93Yvqt1olps"/>

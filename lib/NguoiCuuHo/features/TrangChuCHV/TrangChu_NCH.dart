@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'package:cuhokhancap/BackgroundService/background_service.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/DangNhap.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/ThongTinTaiKhoan.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/LichSuCaCuuHo/man_hinh_lich_su_ca.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
+import 'package:firebase_database/firebase_database.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
@@ -26,10 +30,12 @@ class Trangchunguoicuuho extends StatefulWidget {
   State<Trangchunguoicuuho> createState() => _TrangchunguoicuuhoState();
 }
 
-class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
+class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho>
+    with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
   final FirebaseService _firebaseService = FirebaseService();
+  StreamSubscription<DatabaseEvent>? _kickOutSubscription;
   bool _isNavigating = false;
   bool _isKickedOut = false;
 
@@ -39,7 +45,17 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _gianhQuyenDangNhap().then((_) {
+      _langNgheBiDaVang();
+    });
+
+    _firebaseService.thietLapTrangThaiOnline(
+      widget.currentUserId,
+      widget.maThietBiMoi,
+    );
     _listenForRescueAssignments();
+    EmergencyNotificationService().startListening(widget.currentUserId);
   }
 
   @override
@@ -49,6 +65,50 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
     } else if (state == AppLifecycleState.detached) {
       _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
     }
+  }
+
+  Future<void> _gianhQuyenDangNhap() async {
+    final rtdb = FirebaseDatabase.instanceFor(
+      app: Firebase.app(),
+      databaseURL:
+          'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
+    );
+    await rtdb
+        .ref('NguoiDung/${widget.currentUserId}/maThietBi')
+        .set(widget.maThietBiMoi);
+  }
+
+  void _langNgheBiDaVang() {
+    final rtdb = FirebaseDatabase.instanceFor(
+      app: Firebase.app(),
+      databaseURL:
+          'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
+    );
+
+    _kickOutSubscription = rtdb
+        .ref('NguoiDung/${widget.currentUserId}/maThietBi')
+        .onValue
+        .listen((event) {
+          final thietBiTrenServer = event.snapshot.value?.toString();
+          if (thietBiTrenServer != null &&
+              thietBiTrenServer != widget.maThietBiMoi) {
+            _hienThiThongBaoBiDaVang();
+          }
+        });
+  }
+
+  void _hienThiThongBaoBiDaVang() {
+    if (!mounted) return;
+    _isKickedOut = true;
+    _firebaseService.huyOnDisconnect(widget.currentUserId);
+    _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const DangNhap(hienThongBaoBiDaVang: true),
+      ),
+      (route) => false,
+    );
   }
 
   void _listenForRescueAssignments() async {
@@ -141,7 +201,11 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _kickOutSubscription?.cancel();
     _assignmentSubscription?.cancel();
+    EmergencyNotificationService().stopListening();
+
     if (!_isKickedOut) {
       _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
     }
@@ -209,21 +273,21 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                                   right: 12,
                                   child: Column(
                                     children: [
-                                      _buildMapActionButton(
-                                        Icons.grid_view_rounded,
-                                        const Color(0xFF059669),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      _buildMapActionButton(
-                                        Icons.local_fire_department_rounded,
-                                        const Color(0xFFF97316),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      _buildMapActionButton(
-                                        Icons.layers_rounded,
-                                        const Color(0xFF475569),
-                                      ),
-                                      const SizedBox(height: 10),
+                                      // _buildMapActionButton(
+                                      //   Icons.grid_view_rounded,
+                                      //   const Color(0xFF059669),
+                                      // ),
+                                      // const SizedBox(height: 10),
+                                      // _buildMapActionButton(
+                                      //   Icons.local_fire_department_rounded,
+                                      //   const Color(0xFFF97316),
+                                      // ),
+                                      // const SizedBox(height: 10),
+                                      // _buildMapActionButton(
+                                      //   Icons.layers_rounded,
+                                      //   const Color(0xFF475569),
+                                      // ),
+                                      // const SizedBox(height: 10),
                                       _buildMapActionButton(
                                         Icons.my_location_rounded,
                                         const Color(0xFF475569),

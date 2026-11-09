@@ -10,19 +10,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. Khởi tạo Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await Permission.notification.request();
-  await initializeBackgroundService();
+  await EmergencyNotificationService().initialize();
   // 2. Kiểm tra xem người dùng đã chọn "Ghi nhớ đăng nhập" từ trước chưa
   final prefs = await SharedPreferences.getInstance();
   final String? maNguoiDungDaLuu = prefs.getString('maNguoiDung_daLuu');
-
-  // if (maNguoiDungDaLuu != null && maNguoiDungDaLuu.isNotEmpty) {
-  //   await initializeService();
-  // }
-  // 3. Khởi chạy app và truyền biến kiểm tra vào
   runApp(MyApp(maNguoiDungDaLuu: maNguoiDungDaLuu));
 }
 
@@ -56,8 +49,7 @@ class MyApp extends StatelessWidget {
       home: (maNguoiDungDaLuu != null && maNguoiDungDaLuu!.isNotEmpty)
           ? Trangchunguoicuuho(
               currentUserId: maNguoiDungDaLuu!,
-              maThietBiMoi:
-                  maThietBiMoi, // SỬA LỖI TẠI ĐÂY: Truyền mã thiết bị vào
+              maThietBiMoi: maThietBiMoi,
             )
           : const DangNhap(),
     );

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // THÊM THƯ VIỆ
 import 'DangNhap.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/BackgroundService/background_service.dart';
 
 class ThongTinTaiKhoan extends StatefulWidget {
   final NguoiDungModel nguoiDung;
@@ -528,7 +529,7 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
           // 2. Xóa thông tin mã người dùng đã lưu trong máy
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('maNguoiDung_daLuu');
-
+          EmergencyNotificationService().stopListening();
           // 3. Chuyển hướng về màn hình Đăng Nhập
           if (context.mounted) {
             Navigator.pushAndRemoveUntil(

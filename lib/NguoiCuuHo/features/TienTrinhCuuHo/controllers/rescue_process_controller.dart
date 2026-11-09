@@ -49,7 +49,7 @@ class RescueProcessController extends ChangeNotifier {
   String moTaChiTiet = 'Đang tải...';
   List<String> trieuChung = [];
   String ghiAmUrl = '';
-  String videoUrl = '';
+  String hinhAnhUrl = '';
 
   // Danh sách đội ngũ cùng tiếp nhận ca
   List<Map<String, dynamic>> teamMembers = [];
@@ -202,24 +202,27 @@ class RescueProcessController extends ChangeNotifier {
           .get();
 
       if (doc.exists && doc.data() != null) {
-        // Map dữ liệu vào Model
-        moTaHienTruongModel = ChiTietMoTaHienTruongModel.fromMap(
-          doc.data() as Map<String, dynamic>,
-          doc.id,
-        );
+        var data = doc.data() as Map<String, dynamic>;
 
-        // Đổ dữ liệu từ Model ra các biến cũ để UI không bị lỗi
-        var ghiChuText = moTaHienTruongModel?.ghiChuText;
+        // Map dữ liệu vào Model
+        moTaHienTruongModel = ChiTietMoTaHienTruongModel.fromMap(data, doc.id);
+
+        // Đổ dữ liệu từ Model ra các biến UI
+        var ghiChuText = data['ghiChuText'];
         if (ghiChuText != null && ghiChuText is Map) {
           moTaChiTiet = ghiChuText['moTaChiTiet'] ?? 'Chưa có mô tả chi tiết';
           var rawTrieuChung = ghiChuText['trieuChung'];
           if (rawTrieuChung is List) {
             trieuChung = rawTrieuChung.map((e) => e.toString()).toList();
           }
+        } else {
+          moTaChiTiet = 'Chưa có mô tả chi tiết';
+          trieuChung = [];
         }
 
-        ghiAmUrl = moTaHienTruongModel?.ghiAmUrl ?? '';
-        videoUrl = moTaHienTruongModel?.videoUrl ?? '';
+        ghiAmUrl = data['ghiAmUrl'] ?? '';
+        // Trường lưu trên Firestore đặt tên là 'videoUrl' nhưng chứa URL của ảnh
+        hinhAnhUrl = data['videoUrl'] ?? '';
 
         notifyListeners();
       }

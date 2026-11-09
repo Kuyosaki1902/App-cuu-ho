@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:intl/intl.dart';
 
 class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
@@ -63,36 +64,12 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
   TrangChuController(String userId) {
     _userID = userId;
     WidgetsBinding.instance.addObserver(this);
-
-    debugPrint('👉 [Controller Init] Đang khởi tạo cho userID: "$_userID"');
-
-    // 🟢 1. Cập nhật trạng thái true ngay lập tức
     _isOnline = true;
-    _updateUserOnlineStatusInFirestore(true);
-
-    // 🟢 2. CHỐNG GHI ĐÈ: Liên tục "bồi" lại true trong 3 giây đầu tiên (mỗi 500ms một lần)
-    // Để triệt tiêu hoàn toàn mọi lệnh `false` trễ hạn từ dispose bên phía người dùng.
-    int counter = 0;
-    _antiOverrideTimer = Timer.periodic(const Duration(milliseconds: 500), (
-      timer,
-    ) {
-      if (_isDisposed || counter >= 6) {
-        // Chạy trong vòng 3 giây (6 lần) là đủ quét sạch mọi lệnh delay cũ
-        timer.cancel();
-        return;
-      }
-      counter++;
-      _updateUserOnlineStatusInFirestore(true);
-    });
-
     initLocationService();
     _initAndCheckNewDayTimer();
     fetchFullUserData(_userID);
     _listenToTodayCompletedRescues();
-    // 🟢 Đảm bảo khởi chạy Service khi userID hợp lệ
-    if (_isOnline && _userID.isNotEmpty) {
-      _startBackgroundService();
-    }
+    _listenToNotifications();
   }
 
   @override
@@ -161,17 +138,6 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
             notifyListeners();
           }
         });
-  }
-
-  Future<void> _startBackgroundService() async {
-    final service = FlutterBackgroundService();
-    bool isRunning = await service.isRunning();
-    if (!isRunning) {
-      await service.startService();
-      // Đợi 1 giây để Isolate ngầm sẵn sàng nhận message
-      await Future.delayed(const Duration(seconds: 1));
-    }
-    service.invoke('startListening', {'userId': _userID});
   }
 
   // 🟢 Hàm lắng nghe số ca có trangThai = 'cuuho_trangthai_phancong_hoanthanh' trong ngày hôm nay
@@ -245,26 +211,24 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     if (_isOnline) {
       _startTimer();
       listenToNearbyUsers();
-      await _startBackgroundService();
     } else {
       _stopTimer();
       _usersNearbySubscription?.cancel(); // Dừng lắng nghe từ Firestore
       _nearbyUsers = [];
-      FlutterBackgroundService().invoke('stopListening');
     }
-    _updateUserOnlineStatusInFirestore(_isOnline);
+    _updateUserNhanCaStatusInFirestore(!_isOnline);
     notifyListeners();
   }
 
-  /// Cập nhật thuộc tính isOnline vào Firestore NguoiDung
-  Future<void> _updateUserOnlineStatusInFirestore(bool status) async {
+  /// Cập nhật thuộc tính nhanCaCuuHo vào Firestore NguoiDung
+  Future<void> _updateUserNhanCaStatusInFirestore(bool status) async {
     try {
       await _firestore.collection('NguoiDung').doc(_userID).set({
-        'isOnline': status,
+        'nhanCaCuuHo': status,
       }, SetOptions(merge: true));
-      debugPrint('Đã cập nhật isOnline = $status cho user $_userID');
+      debugPrint('Đã cập nhật nhanCaCuuHo = $status cho user $_userID');
     } catch (e) {
-      debugPrint('Lỗi cập nhật isOnline trên Firestore: $e');
+      debugPrint('Lỗi cập nhật nhanCaCuuHo trên Firestore: $e');
     }
   }
 
@@ -394,7 +358,7 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
         name = userData['hoTen'] ?? 'Chưa cập nhật';
         maVaiTro = userData['maVaiTro'] ?? '';
         _isOnline = true;
-        _updateUserOnlineStatusInFirestore(true);
+        //_updateUserOnlineStatusInFirestore(true);
       }
 
       if (maVaiTro == 'vaitro_cuuhococc') {

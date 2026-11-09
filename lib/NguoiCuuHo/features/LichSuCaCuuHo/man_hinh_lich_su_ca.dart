@@ -32,7 +32,6 @@ class ManHinhLichSuCa extends StatelessWidget {
                       const SizedBox(height: 4),
                       const _DatePickerWithArrowsRow(),
                       const SizedBox(height: 4),
-
                       Expanded(
                         child: _RescueHistoryList(currentUserId: currentUserId),
                       ),
@@ -330,23 +329,20 @@ class _RescueHistoryList extends StatelessWidget {
           }).toList();
         }
 
-        // 🟢 Lọc trạng thái trực tiếp từ các nút Thống kê bấm chọn
+        // Lọc trạng thái trực tiếp từ các nút Thống kê bấm chọn
         if (statusFilterIndex == 1) {
-          // Lọc Hoàn thành
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             return data['maTrangThaiTiepNhan'] ==
                 'cuuho_trangthai_phancong_hoanthanh';
           }).toList();
         } else if (statusFilterIndex == 2) {
-          // Lọc Đã hủy
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             return data['maTrangThaiTiepNhan'] ==
                 'cuuho_trangthai_phancong_dahuy';
           }).toList();
         } else if (statusFilterIndex == 3) {
-          // Lọc Chờ / Đang xử lý
           docs = docs.where((doc) {
             var data = doc.data() as Map<String, dynamic>;
             String st = data['maTrangThaiTiepNhan'] ?? '';
@@ -357,7 +353,6 @@ class _RescueHistoryList extends StatelessWidget {
 
         return Column(
           children: [
-            // 🟢 Thanh thống kê hỗ trợ bấm để lọc
             _StatisticSummaryRow(stats: stats),
             const SizedBox(height: 12),
             Expanded(
@@ -368,7 +363,7 @@ class _RescueHistoryList extends StatelessWidget {
                   : ListView.separated(
                       itemCount: docs.length,
                       separatorBuilder: (context, index) =>
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         var itemData =
                             docs[index].data() as Map<String, dynamic>;
@@ -393,18 +388,77 @@ class _RescueCardItem extends StatelessWidget {
 
   const _RescueCardItem({required this.docId, required this.data});
 
+  // Truy vấn động Tên nạn nhân và Địa chỉ từ YeuCauCuuHo & NguoiDung
+  Future<Map<String, String>> _fetchVictimAndAddressInfo(
+    BuildContext context,
+  ) async {
+    String victimName = (data['tenVictim'] ?? '').toString();
+    String address = (data['diaChiCuaVictim'] ?? '').toString();
+
+    if (victimName.isNotEmpty && address.isNotEmpty) {
+      return {'victimName': victimName, 'address': address};
+    }
+
+    String maYeuCau = (data['maYeuCau'] ?? docId).toString();
+    final firestore = FirebaseFirestore.instance;
+    final controller = context.read<ManHinhLichSuCaController>();
+
+    try {
+      DocumentSnapshot yeuCauSnap = await firestore
+          .collection('YeuCauCuuHo')
+          .doc(maYeuCau)
+          .get();
+
+      if (yeuCauSnap.exists && yeuCauSnap.data() != null) {
+        var ycData = yeuCauSnap.data() as Map<String, dynamic>;
+
+        // 1. Lấy tên địa chỉ hoặc Reverse Geocode từ tọa độ
+        if (address.isEmpty) {
+          address = (ycData['diaChi'] ?? ycData['diaChiCuaVictim'] ?? '')
+              .toString();
+          if (address.isEmpty &&
+              ycData['viDo'] != null &&
+              ycData['kinhDo'] != null) {
+            double lat = (ycData['viDo'] as num).toDouble();
+            double lng = (ycData['kinhDo'] as num).toDouble();
+            address = await controller.getAddressFromLatLng(lat, lng);
+          }
+        }
+
+        // 2. Lấy tên nạn nhân từ NguoiDung
+        if (victimName.isEmpty) {
+          String maVictim = (ycData['maNguoiYeuCau'] ?? '').toString();
+
+          if (maVictim.isNotEmpty) {
+            DocumentSnapshot userSnap = await firestore
+                .collection('NguoiDung')
+                .doc(maVictim)
+                .get();
+            if (userSnap.exists && userSnap.data() != null) {
+              var uData = userSnap.data() as Map<String, dynamic>;
+              victimName = (uData['hoTen'] ?? 'Nạn nhân khẩn cấp').toString();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Lỗi truy vấn thông tin nạn nhân: $e');
+    }
+
+    return {
+      'victimName': victimName.isNotEmpty ? victimName : 'Nạn nhân khẩn cấp',
+      'address': address.isNotEmpty ? address : 'Chưa cập nhật địa chỉ',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.read<ManHinhLichSuCaController>();
     String maTrangThai = data['maTrangThaiTiepNhan'] ?? '';
     Map<String, dynamic> statusStyle = controller.getStatusStyle(maTrangThai);
 
-    String code =
-        '#${docId.length > 8 ? docId.substring(0, 8).toUpperCase() : docId}';
+    String code = '#${docId.toUpperCase()}';
     String timeBadgeText = controller.formatTimeText(data['thoiGianTao']);
-    String address = data['diaChiCuaVictim'] ?? 'Chưa cập nhật địa chỉ';
-    String victimName =
-        data['tenVictim'] ?? data['maVictim'] ?? 'Người cần giúp đỡ';
 
     String t1 =
         'Tiếp nhận: ${controller.formatTimeText(data['thoiGianTiepNhan'])}';
@@ -462,7 +516,7 @@ class _RescueCardItem extends StatelessWidget {
                                 color: Color(0xFF0F172A),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 20),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
@@ -516,45 +570,65 @@ class _RescueCardItem extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.location_on_outlined,
-                    size: 16,
-                    color: Color(0xFFDC2626),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      address,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: Color(0xFF334155),
-                        fontWeight: FontWeight.w500,
+
+              // Dùng FutureBuilder để load và hiển thị Tên & Địa chỉ thực tế
+              FutureBuilder<Map<String, String>>(
+                future: _fetchVictimAndAddressInfo(context),
+                builder: (context, infoSnapshot) {
+                  String address = infoSnapshot.hasData
+                      ? infoSnapshot.data!['address']!
+                      : 'Đang tải địa chỉ...';
+                  String victimName = infoSnapshot.hasData
+                      ? infoSnapshot.data!['victimName']!
+                      : 'Đang tải tên nạn nhân...';
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 16,
+                            color: Color(0xFFDC2626),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              address,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: Color(0xFF334155),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.person_outline_rounded,
+                            size: 14,
+                            color: Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Nạn nhân: $victimName',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.person_outline_rounded,
-                    size: 14,
-                    color: Color(0xFF64748B),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Nạn nhân: $victimName',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                ],
-              ),
+
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),
@@ -614,7 +688,6 @@ class _RescueCardItem extends StatelessWidget {
   }
 }
 
-// 🟢 Widget thanh thống kê tự động hỗ trợ BẤM VÀO ĐỂ LỌC
 class _StatisticSummaryRow extends StatelessWidget {
   final Map<String, int> stats;
 

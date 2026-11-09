@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
 class ManHinhLichSuCaController extends ChangeNotifier {
@@ -9,7 +11,7 @@ class ManHinhLichSuCaController extends ChangeNotifier {
   DateTime _selectedDate = DateTime.now();
   int _timeModeIndex = 0; // 0: Hôm nay, 1: Tuần này, 2: Tháng này
   int _statusFilterIndex =
-      0; // 🟢 0: Tất cả, 1: Hoàn thành, 2: Đã hủy, 3: Chờ/Đang xử lý
+      0; // 0: Tất cả, 1: Hoàn thành, 2: Đã hủy, 3: Chờ/Đang xử lý
   String _searchQuery = '';
   bool _isDisposed = false;
 
@@ -71,13 +73,13 @@ class ManHinhLichSuCaController extends ChangeNotifier {
         Duration(days: _selectedDate.weekday - 1),
       );
       DateTime sunday = monday.add(const Duration(days: 6));
-      return '${DateFormat('dd/MM').format(monday)} - ${DateFormat('dd/MM/yyyy').format(sunday)}';
+      return '${DateFormat('dd/MM').format(monday)} -${DateFormat('dd/MM/yyyy').format(sunday)}';
     } else {
       return 'Tháng ${DateFormat('MM/yyyy').format(_selectedDate)}';
     }
   }
 
-  // 🟢 Lấy Stream và Cache lại để tránh bị Re-subscribe gây giật lag
+  // Lấy Stream và Cache lại để tránh bị Re-subscribe gây giật lag
   Stream<QuerySnapshot> getRescueHistoryStream(String userId) {
     String dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
@@ -138,7 +140,7 @@ class ManHinhLichSuCaController extends ChangeNotifier {
     }
   }
 
-  // 🟢 Hàm tính toán số lượng thống kê theo danh sách snapshot từ Firestore
+  // Hàm tính toán số lượng thống kê theo danh sách snapshot từ Firestore
   Map<String, int> calculateStatistics(List<QueryDocumentSnapshot> docs) {
     int tongSoCa = docs.length;
     int hoanThanh = 0;
@@ -189,6 +191,40 @@ class ManHinhLichSuCaController extends ChangeNotifier {
       }
     }
     return '--:--';
+  }
+
+  Future<String> getAddressFromLatLng(double lat, double lng) async {
+    if (lat == 0.0 || lng == 0.0 || lat.isNaN || lng.isNaN) {
+      return 'Đang định vị...';
+    }
+
+    final url = Uri.parse(
+      'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1&accept-language=vi',
+    );
+
+    try {
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'User-Agent': 'CuuHoKhanCapApp/1.0 (contact@cuhokhancap.com)',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data != null && data['display_name'] != null) {
+          String fullAddress = data['display_name'];
+          return fullAddress;
+        }
+      }
+    } catch (e) {
+      debugPrint('Lỗi Reverse Geocoding OSM: $e');
+    }
+
+    return 'Vị trí sự cố thực tế ($lat,$lng)';
   }
 
   @override
