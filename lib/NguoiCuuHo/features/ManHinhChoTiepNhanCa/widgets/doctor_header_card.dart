@@ -1,150 +1,118 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../controllers/emergency_alert_controller.dart';
 
+import '../controllers/emergency_alert_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/rescue_theme.dart';
+
+/// Thẻ nổi phía trên bản đồ: cứu hộ viên + nút tắt chuông + cảnh báo GPS.
 class DoctorHeaderCard extends StatelessWidget {
   const DoctorHeaderCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<EmergencyAlertController>();
+    final c = context.watch<EmergencyAlertController>();
+    final hasUrl = c.doctorAvatarUrl != null && c.doctorAvatarUrl!.isNotEmpty;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: RC.line),
+            boxShadow: RC.shadow,
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
+          child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0D9488).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.medical_services_rounded,
-                  color: Color(0xFF0D9488),
-                  size: 26,
-                ),
-              ),
-              Positioned(
-                bottom: -2,
-                right: -2,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      controller.doctorName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'ĐỘI #04',
-                        style: TextStyle(
-                          fontSize: 11,
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: RC.blueSoft,
+                backgroundImage: hasUrl ? NetworkImage(c.doctorAvatarUrl!) : null,
+                onBackgroundImageError: hasUrl ? (_, __) {} : null,
+                child: hasUrl
+                    ? null
+                    : Text(
+                        c.doctorInitials,
+                        style: const TextStyle(
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF64748B),
+                          color: RC.blue,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.verified_outlined,
-                      size: 13,
-                      color: Color(0xFF0D9488),
-                    ),
-                    const SizedBox(width: 4),
                     Text(
-                      controller.doctorRole,
+                      c.doctorName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF0D9488),
-                        letterSpacing: 0.2,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: RC.ink,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        // Dấu xác thực chỉ hiện khi có chứng chỉ hành nghề thật.
+                        if (c.doctorHasLicense) ...[
+                          const Icon(Icons.verified, size: 14, color: RC.green),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            c.doctorRoleLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: RC.muted),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-              ],
+              ),
+              if (c.isSoundOn)
+                IconButton(
+                  tooltip: 'Tắt chuông',
+                  onPressed: c.stopEmergencySound,
+                  icon: const Icon(Icons.volume_off_outlined, color: RC.ink),
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                ),
+            ],
+          ),
+        ),
+        if (c.locationWarning != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: RC.amberSoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: RC.amberLine),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.gps_off, size: 16, color: RC.amber),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      c.locationWarning!,
+                      style: const TextStyle(fontSize: 12.5, color: RC.amber),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFECFDF5),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xFFA7F3D0)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  'Sẵn sàng',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF065F46),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }

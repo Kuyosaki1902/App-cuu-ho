@@ -8,16 +8,18 @@ import 'widgets/section_hospital.dart';
 import 'widgets/terms_and_info_box.dart';
 
 class CuuhovienCocchn extends StatelessWidget {
+  final String currentUserId;
   final String? userFullName;
-  const CuuhovienCocchn({super.key, this.userFullName});
-  final currentUserId = 'nguoidung8';
-
+  const CuuhovienCocchn({
+    super.key,
+    this.userFullName,
+    required this.currentUserId,
+  });
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => CuuHoVienCoCCHNController(
-        existingFullName: userFullName ?? 'BS. NGUYỄN VĂN A',
-      ),
+      create: (_) =>
+          CuuHoVienCoCCHNController(existingFullName: userFullName ?? ''),
       child: Consumer<CuuHoVienCoCCHNController>(
         builder: (context, controller, child) {
           return Scaffold(

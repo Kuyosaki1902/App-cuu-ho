@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -11,7 +11,7 @@ class MapSection extends StatefulWidget {
   final bool isOnline;
   final List<Map<String, dynamic>> nearbyUsers;
   final Function(GoogleMapController) onMapCreated;
-  final VoidCallback RefreshLocation;
+  final VoidCallback onRefreshLocation; // đổi tên từ RefreshLocation
   final Function(Map<String, dynamic> user, List<dynamic> danhSachNguoiThan)
   onCallAllRelatives;
 
@@ -20,7 +20,7 @@ class MapSection extends StatefulWidget {
     required this.currentPosition,
     required this.isLoadingLocation,
     required this.onMapCreated,
-    required this.RefreshLocation,
+    required this.onRefreshLocation,
     required this.isOnline,
     required this.onCallAllRelatives,
     this.nearbyUsers = const [],
@@ -35,58 +35,77 @@ class _MapSectionState extends State<MapSection> {
   String? _selectedUserId;
   Map<String, dynamic>? _selectedUserData;
 
+  // Chống chạy chồng: lần vẽ cũ hoàn thành sau không được ghi đè lần mới
+  int _markerSeq = 0;
+  // Cache icon marker: tránh vẽ lại toàn bộ marker mỗi lần tap / cập nhật
+  final Map<String, BitmapDescriptor> _iconCache = {};
+
   @override
   void initState() {
     super.initState();
-    _generateCustomMarkers();
+    // Cần context (devicePixelRatio) nên chờ khung hình đầu tiên
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _generateCustomMarkers();
+    });
   }
+
+  double _num(dynamic v) => (v as num?)?.toDouble() ?? 0.0;
 
   @override
   void didUpdateWidget(covariant MapSection oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Kiểm tra kỹ nếu danh sách thay đổi thực sự (hoặc khoảng cách dịch chuyển đáng kể) mới tạo lại marker
-    bool isListChanged =
+    bool changed =
+        oldWidget.isOnline != widget.isOnline ||
         oldWidget.nearbyUsers.length != widget.nearbyUsers.length;
 
-    if (!isListChanged) {
+    if (!changed) {
       for (int i = 0; i < widget.nearbyUsers.length; i++) {
-        if (oldWidget.nearbyUsers[i]['userId'] !=
-                widget.nearbyUsers[i]['userId'] ||
-            oldWidget.nearbyUsers[i]['location'] !=
-                widget.nearbyUsers[i]['location'] ||
-            oldWidget.nearbyUsers[i]['distance'] !=
-                widget.nearbyUsers[i]['distance']) {
-          isListChanged = true;
+        final o = oldWidget.nearbyUsers[i];
+        final n = widget.nearbyUsers[i];
+        if (o['userId'] != n['userId'] ||
+            (_num(o['distance']) - _num(n['distance'])).abs() > 2.0 ||
+            o['location'] != n['location']) {
+          changed = true;
           break;
         }
       }
     }
 
-    if (isListChanged || oldWidget.isOnline != widget.isOnline) {
-      _generateCustomMarkers();
+    if (changed) {
+      // Cập nhật dữ liệu người đang chọn TRƯỚC khi vẽ marker
       if (_selectedUserId != null) {
-        try {
-          _selectedUserData = widget.nearbyUsers.firstWhere(
-            (u) => u['userId'] == _selectedUserId,
-          );
-        } catch (_) {
+        final idx = widget.nearbyUsers.indexWhere(
+          (u) => u['userId'] == _selectedUserId,
+        );
+        if (idx >= 0) {
+          _selectedUserData = widget.nearbyUsers[idx];
+        } else {
           _selectedUserId = null;
           _selectedUserData = null;
         }
       }
+      _generateCustomMarkers();
     }
   }
 
   String _getFirstName(String fullName) {
     fullName = fullName.trim();
     if (fullName.isEmpty) return 'Người dùng';
-    List<String> parts = fullName.split(RegExp(r'\s+'));
+    final parts = fullName.split(RegExp(r'\s+'));
     return parts.last;
   }
 
+  void _clearSelection() {
+    setState(() {
+      _selectedUserId = null;
+      _selectedUserData = null;
+    });
+    _generateCustomMarkers();
+  }
+
   Future<void> _generateCustomMarkers() async {
-    Set<Marker> newMarkers = {};
+    final int seq = ++_markerSeq;
 
     if (!widget.isOnline) {
       if (mounted) {
@@ -98,15 +117,18 @@ class _MapSectionState extends State<MapSection> {
       }
       return;
     }
+    if (!mounted) return;
 
-    Map<String, dynamic>? selectedUser = _selectedUserData;
+    final double dpr = MediaQuery.of(context).devicePixelRatio;
+    final Set<Marker> newMarkers = {};
+    final Map<String, dynamic>? selectedUser = _selectedUserData;
 
-    Map<String, String> relativeRelationMap = {};
+    final Map<String, String> relativeRelationMap = {};
     if (selectedUser != null) {
-      List<dynamic> listNT = selectedUser['danhSachNguoiThan'] ?? [];
+      final List<dynamic> listNT = selectedUser['danhSachNguoiThan'] ?? [];
       for (var nt in listNT) {
         if (nt is Map) {
-          String ntId = (nt['maNguoiThan'] ?? '').toString();
+          final ntId = (nt['maNguoiThan'] ?? '').toString();
           if (ntId.isNotEmpty) {
             relativeRelationMap[ntId] = (nt['moiQuanHe'] ?? 'Thân').toString();
           }
@@ -114,9 +136,10 @@ class _MapSectionState extends State<MapSection> {
       }
     }
 
-    for (var user in widget.nearbyUsers) {
-      String userId = (user['userId'] ?? '').toString();
-      Uint8List? avatarBytes = user['avatarBytes'];
+    final users = List<Map<String, dynamic>>.from(widget.nearbyUsers);
+    for (final user in users) {
+      final String userId = (user['userId'] ?? '').toString();
+      final Uint8List? avatarBytes = user['avatarBytes'];
 
       Color markerColor = Colors.white;
       String? relationBadge;
@@ -124,48 +147,75 @@ class _MapSectionState extends State<MapSection> {
 
       if (_selectedUserId != null && selectedUser != null) {
         if (userId == _selectedUserId) {
-          markerColor = const ui.Color.fromARGB(255, 214, 39, 39);
-          String full = user['hoTen'] ?? 'Người dùng';
-          relationBadge = _getFirstName(full);
+          markerColor = const Color.fromARGB(255, 214, 39, 39);
+          relationBadge = _getFirstName(
+            (user['hoTen'] ?? 'Người dùng').toString(),
+          );
           isSelectedUser = true;
         } else if (relativeRelationMap.containsKey(userId)) {
-          markerColor = const ui.Color.fromARGB(255, 202, 23, 178);
+          markerColor = const Color.fromARGB(255, 202, 23, 178);
           relationBadge = relativeRelationMap[userId];
         }
       }
 
-      BitmapDescriptor customIcon = await createCustomUserMarker(
-        distance: (user['distance'] as num?)?.toDouble() ?? 0.0,
+      final icon = await _getMarkerIcon(
+        distance: _num(user['distance']),
         avatarBytes: avatarBytes,
-        primaryColor: markerColor,
-        relationBadge: relationBadge,
-        isSelectedUser: isSelectedUser,
+        color: markerColor,
+        badge: relationBadge,
+        isSelected: isSelectedUser,
+        dpr: dpr,
       );
+
+      // Đã có lần vẽ mới hơn (hoặc widget đã dispose) -> bỏ kết quả này
+      if (seq != _markerSeq || !mounted) return;
 
       newMarkers.add(
         Marker(
           markerId: MarkerId(userId),
           position: user['location'],
-          icon: customIcon,
+          icon: icon,
           anchor: const Offset(0.5, 0.5),
           consumeTapEvents: true,
-          onTap: () async {
-            // 🟢 Bấm lần 1: Chọn ngay lập tức và hiển thị Card thông tin ở đáy
+          onTap: () {
             setState(() {
               _selectedUserId = userId;
               _selectedUserData = user;
             });
-            await _generateCustomMarkers();
+            _generateCustomMarkers();
           },
         ),
       );
     }
 
-    if (mounted) {
-      setState(() {
-        _userMarkers = newMarkers;
-      });
-    }
+    if (seq != _markerSeq || !mounted) return;
+    setState(() => _userMarkers = newMarkers);
+  }
+
+  Future<BitmapDescriptor> _getMarkerIcon({
+    required double distance,
+    Uint8List? avatarBytes,
+    required Color color,
+    String? badge,
+    required bool isSelected,
+    required double dpr,
+  }) async {
+    final key =
+        '${distance.toStringAsFixed(1)}|${avatarBytes?.length ?? 0}|${color.value}|${badge ?? ''}|$isSelected|$dpr';
+    final cached = _iconCache[key];
+    if (cached != null) return cached;
+
+    final icon = await createCustomUserMarker(
+      distance: distance,
+      avatarBytes: avatarBytes,
+      primaryColor: color,
+      relationBadge: badge,
+      isSelectedUser: isSelected,
+      dpr: dpr,
+    );
+    if (_iconCache.length > 150) _iconCache.clear();
+    _iconCache[key] = icon;
+    return icon;
   }
 
   void _drawDefaultIcon(
@@ -174,7 +224,7 @@ class _MapSectionState extends State<MapSection> {
     double radius,
     Color color,
   ) {
-    TextPainter iconPainter = TextPainter(
+    final TextPainter iconPainter = TextPainter(
       text: TextSpan(
         text: String.fromCharCode(Icons.person.codePoint),
         style: TextStyle(
@@ -201,19 +251,21 @@ class _MapSectionState extends State<MapSection> {
     Color primaryColor = Colors.white,
     String? relationBadge,
     bool isSelectedUser = false,
+    double dpr = 1.0,
   }) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
+    canvas.scale(dpr, dpr); // 🟢 vẽ theo độ phân giải màn hình -> không bị mờ
 
     const double avatarRadius = 20.0;
     const double padding = 6.0;
-    String distanceText = '${distance.toStringAsFixed(1)}m';
+    final String distanceText = '${distance.toStringAsFixed(1)}m';
 
-    bool isWhite = primaryColor == Colors.white;
-    Color textColor = isWhite ? const Color(0xFF1F2937) : primaryColor;
-    Color borderColor = isWhite ? const Color(0xFFCBD5E1) : primaryColor;
+    final bool isWhite = primaryColor == Colors.white;
+    final Color textColor = isWhite ? const Color(0xFF1F2937) : primaryColor;
+    final Color borderColor = isWhite ? const Color(0xFFCBD5E1) : primaryColor;
 
-    TextPainter distancePainter = TextPainter(
+    final TextPainter distancePainter = TextPainter(
       text: TextSpan(
         text: distanceText,
         style: TextStyle(
@@ -227,14 +279,14 @@ class _MapSectionState extends State<MapSection> {
 
     TextPainter? badgeTextPainter;
     TextPainter? subBadgeTextPainter;
-    double badgeHeight = 15.0;
+    const double badgeHeight = 15.0;
     double badgeWidth = 0;
-    double subBadgeHeight = 15.0;
+    const double subBadgeHeight = 15.0;
     double subBadgeWidth = 0;
 
-    double avatarDiameter = avatarRadius * 2;
-    double baseContentWidth = distancePainter.width;
-    double cardWidth =
+    const double avatarDiameter = avatarRadius * 2;
+    final double baseContentWidth = distancePainter.width;
+    final double cardWidth =
         (baseContentWidth + padding * 2) < (avatarDiameter + padding * 2)
         ? (avatarDiameter + padding * 2)
         : (baseContentWidth + padding * 2);
@@ -273,56 +325,62 @@ class _MapSectionState extends State<MapSection> {
       }
     }
 
-    double cardHeight =
+    final double cardHeight =
         avatarDiameter + distancePainter.height + (padding * 2.2);
-
-    double topExtraHeight = subBadgeTextPainter != null
+    final double topExtraHeight = subBadgeTextPainter != null
         ? (subBadgeHeight / 2 + 6)
         : 0;
-    double bottomExtraHeight = badgeTextPainter != null ? (badgeHeight / 2) : 0;
-    double totalCanvasHeight = cardHeight + topExtraHeight + bottomExtraHeight;
+    final double bottomExtraHeight = badgeTextPainter != null
+        ? (badgeHeight / 2)
+        : 0;
+    final double totalCanvasHeight =
+        cardHeight + topExtraHeight + bottomExtraHeight;
 
     canvas.save();
-    canvas.translate(0, topExtraHeight);
+    canvas.translate(2, topExtraHeight + 1);
 
-    Paint shadowPaint = Paint()
+    final Paint shadowPaint = Paint()
       ..color = Colors.black26
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    RRect bgRRect = RRect.fromRectAndRadius(
+    final RRect bgRRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, cardWidth, cardHeight),
       const Radius.circular(14),
     );
     canvas.drawRRect(bgRRect.shift(const Offset(2, 2)), shadowPaint);
+    canvas.drawRRect(bgRRect, Paint()..color = Colors.white);
 
-    Paint bgPaint = Paint()..color = Colors.white;
-    canvas.drawRRect(bgRRect, bgPaint);
+    canvas.drawRRect(
+      bgRRect,
+      Paint()
+        ..color = borderColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isWhite ? 1.5 : 2.5,
+    );
 
-    Paint borderPaint = Paint()
-      ..color = borderColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = isWhite ? 1.5 : 2.5;
-    canvas.drawRRect(bgRRect, borderPaint);
-
-    Offset avatarCenter = Offset(cardWidth / 2, padding + avatarRadius);
-    Paint avatarBgPaint = Paint()
-      ..color = isWhite
-          ? const Color(0xFFF1F5F9)
-          : primaryColor.withOpacity(0.15);
-    canvas.drawCircle(avatarCenter, avatarRadius, avatarBgPaint);
+    final Offset avatarCenter = Offset(cardWidth / 2, padding + avatarRadius);
+    canvas.drawCircle(
+      avatarCenter,
+      avatarRadius,
+      Paint()
+        ..color = isWhite
+            ? const Color(0xFFF1F5F9)
+            : primaryColor.withOpacity(0.15),
+    );
 
     if (avatarBytes != null && avatarBytes.isNotEmpty) {
+      ui.Codec? codec;
+      ui.Image? image;
       try {
-        ui.Codec codec = await ui.instantiateImageCodec(avatarBytes);
-        ui.FrameInfo fi = await codec.getNextFrame();
-        ui.Image image = fi.image;
+        codec = await ui.instantiateImageCodec(avatarBytes);
+        final ui.FrameInfo fi = await codec.getNextFrame();
+        image = fi.image;
 
         canvas.save();
-        Path clipPath = Path()
-          ..addOval(
+        canvas.clipPath(
+          Path()..addOval(
             Rect.fromCircle(center: avatarCenter, radius: avatarRadius - 1.5),
-          );
-        canvas.clipPath(clipPath);
-
+          ),
+        );
         canvas.drawImageRect(
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
@@ -332,95 +390,89 @@ class _MapSectionState extends State<MapSection> {
         canvas.restore();
       } catch (_) {
         _drawDefaultIcon(canvas, avatarCenter, avatarRadius, primaryColor);
+      } finally {
+        image?.dispose(); // 🟢 giải phóng bộ nhớ native
+        codec?.dispose();
       }
     } else {
       _drawDefaultIcon(canvas, avatarCenter, avatarRadius, primaryColor);
     }
 
-    double distanceY = padding + avatarDiameter + 2;
     distancePainter.paint(
       canvas,
-      Offset((cardWidth - distancePainter.width) / 2, distanceY),
+      Offset(
+        (cardWidth - distancePainter.width) / 2,
+        padding + avatarDiameter + 2,
+      ),
     );
 
-    if (badgeTextPainter != null) {
-      double badgeY = cardHeight - (badgeHeight / 2);
-      double badgeX = (cardWidth - badgeWidth) / 2;
-
-      Rect badgeRect = Rect.fromLTWH(badgeX, badgeY, badgeWidth, badgeHeight);
-      RRect badgeRRect = RRect.fromRectAndRadius(
-        badgeRect,
+    void drawBadge(
+      TextPainter painter,
+      double w,
+      double h,
+      double x,
+      double y,
+    ) {
+      final RRect r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, w, h),
         const Radius.circular(6),
       );
-
-      Paint badgeBg = Paint()..color = primaryColor;
-      canvas.drawRRect(badgeRRect, badgeBg);
-
-      Paint badgeBorder = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2;
-      canvas.drawRRect(badgeRRect, badgeBorder);
-
-      badgeTextPainter.paint(
+      canvas.drawRRect(r, Paint()..color = primaryColor);
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+      painter.paint(
         canvas,
-        Offset(
-          badgeX + (badgeWidth - badgeTextPainter.width) / 2,
-          badgeY + (badgeHeight - badgeTextPainter.height) / 2,
-        ),
+        Offset(x + (w - painter.width) / 2, y + (h - painter.height) / 2),
       );
     }
 
+    if (badgeTextPainter != null) {
+      drawBadge(
+        badgeTextPainter,
+        badgeWidth,
+        badgeHeight,
+        (cardWidth - badgeWidth) / 2,
+        cardHeight - (badgeHeight / 2),
+      );
+    }
     if (subBadgeTextPainter != null) {
-      double subBadgeY = -(subBadgeHeight / 2);
-      double subBadgeX = (cardWidth - subBadgeWidth) / 2;
-
-      Rect subBadgeRect = Rect.fromLTWH(
-        subBadgeX,
-        subBadgeY,
+      drawBadge(
+        subBadgeTextPainter,
         subBadgeWidth,
         subBadgeHeight,
-      );
-      RRect subBadgeRRect = RRect.fromRectAndRadius(
-        subBadgeRect,
-        const Radius.circular(6),
-      );
-
-      Paint subBadgeBg = Paint()..color = primaryColor;
-      canvas.drawRRect(subBadgeRRect, subBadgeBg);
-
-      Paint subBadgeBorder = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2;
-      canvas.drawRRect(subBadgeRRect, subBadgeBorder);
-
-      subBadgeTextPainter.paint(
-        canvas,
-        Offset(
-          subBadgeX + (subBadgeWidth - subBadgeTextPainter.width) / 2,
-          subBadgeY + (subBadgeHeight - subBadgeTextPainter.height) / 2,
-        ),
+        (cardWidth - subBadgeWidth) / 2,
+        -(subBadgeHeight / 2),
       );
     }
 
     canvas.restore();
 
-    final ui.Image renderedImage = await pictureRecorder.endRecording().toImage(
-      cardWidth.toInt() + 20,
-      totalCanvasHeight.toInt() + 20,
+    final ui.Picture picture = pictureRecorder.endRecording();
+    final ui.Image renderedImage = await picture.toImage(
+      ((cardWidth + 10) * dpr).ceil(),
+      ((totalCanvasHeight + 10) * dpr).ceil(),
     );
+    picture.dispose();
     final ByteData? byteData = await renderedImage.toByteData(
       format: ui.ImageByteFormat.png,
     );
+    renderedImage.dispose();
 
-    return BitmapDescriptor.bytes(byteData!.buffer.asUint8List());
+    if (byteData == null) return BitmapDescriptor.defaultMarker;
+    return BitmapDescriptor.bytes(
+      byteData.buffer.asUint8List(),
+      imagePixelRatio: dpr,
+    );
   }
 
-  // 🟢 Hàm gọi mở modal chi tiết đầy đủ (dùng khi bấm nút "Xem chi tiết" trên Card ở đáy)
   void _showUserInfoModal(BuildContext context, Map<String, dynamic> user) {
-    List<dynamic> danhSachNguoiThan = user['danhSachNguoiThan'] ?? [];
-    bool coNguoiThan = danhSachNguoiThan.isNotEmpty;
+    final List<dynamic> danhSachNguoiThan = user['danhSachNguoiThan'] ?? [];
+    final bool coNguoiThan = danhSachNguoiThan.isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -428,7 +480,7 @@ class _MapSectionState extends State<MapSection> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -459,7 +511,7 @@ class _MapSectionState extends State<MapSection> {
                           ),
                         ),
                         Text(
-                          'Trong phạm vi: ${user['distance']?.toStringAsFixed(1)}m',
+                          'Trong phạm vi: ${_num(user['distance']).toStringAsFixed(1)}m',
                           style: const TextStyle(
                             color: Colors.green,
                             fontSize: 13,
@@ -502,7 +554,7 @@ class _MapSectionState extends State<MapSection> {
                     separatorBuilder: (context, index) =>
                         const SizedBox(height: 8),
                     itemBuilder: (context, index) {
-                      var nt = danhSachNguoiThan[index];
+                      final nt = danhSachNguoiThan[index];
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -579,7 +631,7 @@ class _MapSectionState extends State<MapSection> {
                   ),
                   onPressed: () {
                     if (!coNguoiThan) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
                         const SnackBar(
                           content: Text(
                             'Người dùng này không có người thân để liên hệ!',
@@ -588,7 +640,7 @@ class _MapSectionState extends State<MapSection> {
                       );
                       return;
                     }
-                    Navigator.pop(context);
+                    Navigator.pop(sheetContext);
                     widget.onCallAllRelatives(user, danhSachNguoiThan);
                   },
                   icon: const Icon(Icons.phone_forwarded, color: Colors.white),
@@ -615,7 +667,14 @@ class _MapSectionState extends State<MapSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Color(0xFFC80815)),
+            if (widget.isLoadingLocation)
+              const CircularProgressIndicator(color: Color(0xFFC80815))
+            else
+              const Icon(
+                Icons.location_off_rounded,
+                size: 40,
+                color: Colors.grey,
+              ),
             const SizedBox(height: 12),
             Text(
               widget.isLoadingLocation
@@ -623,53 +682,50 @@ class _MapSectionState extends State<MapSection> {
                   : 'Chưa thể lấy vị trí. Vui lòng bật GPS và thử lại.',
               style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
+            // 🟢 Nút thử lại (trước đây có callback nhưng không có nút)
+            if (!widget.isLoadingLocation) ...[
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: widget.isLoadingLocation
+                    ? null
+                    : widget.onRefreshLocation,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Thử lại'),
+              ),
+            ],
           ],
         ),
       );
     }
 
+    final Color statusColor = widget.isOnline
+        ? ColorCHV.tiep_nhan_yeu_cau
+        : ColorCHV.ngung_tiep_nhan_yeu_cau;
+
     return Stack(
       children: [
         GoogleMap(
-          key: ValueKey(
-            '${widget.currentPosition!.latitude}_${widget.currentPosition!.longitude}',
-          ),
+          // 🟢 ĐÃ BỎ key theo tọa độ: map không bị dựng lại mỗi lần GPS nhích.
+          // Camera được controller điều khiển bằng animateCamera.
           initialCameraPosition: CameraPosition(
             target: widget.currentPosition!,
-            zoom: 18.2,
+            zoom: 24,
           ),
           onMapCreated: widget.onMapCreated,
           myLocationEnabled: false,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           markers: _userMarkers,
-
-          // 🟢 Bấm ra ngoài bản đồ -> Hủy chọn, ẩn Card đáy và đưa marker về màu trắng
-          onTap: (_) async {
-            if (_selectedUserId != null) {
-              setState(() {
-                _selectedUserId = null;
-                _selectedUserData = null;
-              });
-              await _generateCustomMarkers();
-            }
+          onTap: (_) {
+            if (_selectedUserId != null) _clearSelection();
           },
-
           circles: {
             Circle(
-              circleId: const CircleId('circle_100m_boundary'),
+              circleId: const CircleId('circle_nearby_boundary'),
               center: widget.currentPosition!,
-              radius: 100.0,
-              fillColor:
-                  (widget.isOnline
-                          ? ColorCHV.tiep_nhan_yeu_cau
-                          : ColorCHV.ngung_tiep_nhan_yeu_cau)
-                      .withOpacity(0.18),
-              strokeColor:
-                  (widget.isOnline
-                          ? ColorCHV.tiep_nhan_yeu_cau
-                          : ColorCHV.ngung_tiep_nhan_yeu_cau)
-                      .withOpacity(0.6),
+              radius: TrangChuController.kNearbyRadiusMeters,
+              fillColor: statusColor.withOpacity(0.18),
+              strokeColor: statusColor.withOpacity(0.6),
               strokeWidth: 2,
               zIndex: 1,
             ),
@@ -686,9 +742,7 @@ class _MapSectionState extends State<MapSection> {
               circleId: const CircleId('center_dot_my_location'),
               center: widget.currentPosition!,
               radius: 0.8,
-              fillColor: widget.isOnline
-                  ? ColorCHV.tiep_nhan_yeu_cau
-                  : ColorCHV.ngung_tiep_nhan_yeu_cau,
+              fillColor: statusColor,
               strokeColor: Colors.transparent,
               strokeWidth: 0,
               zIndex: 3,
@@ -696,7 +750,7 @@ class _MapSectionState extends State<MapSection> {
           },
         ),
 
-        // 🟢 2. THẺ TÓM TẮT (BOTTOM CARD) NỔI LÊN NGAY KHI BẤM CHỌN MỤC TIÊU LẦN 1
+        // Thẻ tóm tắt khi chọn mục tiêu
         if (_selectedUserId != null && _selectedUserData != null)
           Positioned(
             left: 16,
@@ -736,20 +790,13 @@ class _MapSectionState extends State<MapSection> {
                           ),
                         ),
                       ),
-                      // Nút đóng card
                       IconButton(
                         icon: const Icon(
                           Icons.close,
                           size: 20,
                           color: Colors.grey,
                         ),
-                        onPressed: () async {
-                          setState(() {
-                            _selectedUserId = null;
-                            _selectedUserData = null;
-                          });
-                          await _generateCustomMarkers();
-                        },
+                        onPressed: _clearSelection,
                       ),
                     ],
                   ),
@@ -763,7 +810,7 @@ class _MapSectionState extends State<MapSection> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Khoảng cách: ${_selectedUserData!['distance']?.toStringAsFixed(1) ?? '0'}m',
+                        'Khoảng cách: ${_num(_selectedUserData!['distance']).toStringAsFixed(1)}m',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -794,7 +841,6 @@ class _MapSectionState extends State<MapSection> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Nút thao tác nhanh
                   Row(
                     children: [
                       Expanded(
@@ -806,9 +852,8 @@ class _MapSectionState extends State<MapSection> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          onPressed: () {
-                            _showUserInfoModal(context, _selectedUserData!);
-                          },
+                          onPressed: () =>
+                              _showUserInfoModal(context, _selectedUserData!),
                           icon: const Icon(Icons.info_outline, size: 16),
                           label: const Text('Ds người thân'),
                         ),
@@ -823,7 +868,7 @@ class _MapSectionState extends State<MapSection> {
                             ),
                           ),
                           onPressed: () {
-                            List<dynamic> listNT =
+                            final List<dynamic> listNT =
                                 _selectedUserData!['danhSachNguoiThan'] ?? [];
                             if (listNT.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(

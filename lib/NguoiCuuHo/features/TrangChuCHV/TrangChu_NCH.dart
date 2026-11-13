@@ -3,105 +3,69 @@ import 'package:cuhokhancap/BackgroundService/background_service.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/DangNhap.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/ThongTinTaiKhoan.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/LichSuCaCuuHo/man_hinh_lich_su_ca.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/thanh_tich_screen.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/rescue_process_screen.dart';
-import 'package:cuhokhancap/firebase/firebase_service.dart';
-import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/xep_hang_screen.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/header.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/widgets/bottom.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'widgets/map_section.dart';
+import 'package:cuhokhancap/firebase/presence_service.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ManHinhChoTiepNhanCa/ManHinhCho.dart';
 
 class Trangchunguoicuuho extends StatefulWidget {
   final String currentUserId;
-  final String maThietBiMoi;
-  const Trangchunguoicuuho({
-    Key? key,
-    required this.currentUserId,
-    required this.maThietBiMoi,
-  }) : super(key: key);
+  const Trangchunguoicuuho({Key? key, required this.currentUserId})
+    : super(key: key);
 
   @override
   State<Trangchunguoicuuho> createState() => _TrangchunguoicuuhoState();
 }
 
-class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho>
-    with WidgetsBindingObserver {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
   StreamSubscription<QuerySnapshot>? _assignmentSubscription;
-  final FirebaseService _firebaseService = FirebaseService();
-  StreamSubscription<DatabaseEvent>? _kickOutSubscription;
+  Timer? _midnightTimer;
   bool _isNavigating = false;
-  bool _isKickedOut = false;
+  // thêm vào _TrangchunguoicuuhoState
+  final Set<int> _builtTabs = {0};
 
-  // 🟢 BIẾN LƯU VỊ TRÍ TAB ĐANG ĐƯỢC CHỌN (0: Trực chiến, 1: Lịch sử,...)
+  // Tab đang chọn (0: Trực chiến, 1: Lịch sử, 2: Dụng cụ, 3: Điều phối, 4: Hồ sơ)
   int _currentTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _gianhQuyenDangNhap().then((_) {
-      _langNgheBiDaVang();
-    });
-
-    _firebaseService.thietLapTrangThaiOnline(
-      widget.currentUserId,
-      widget.maThietBiMoi,
-    );
+    PresenceService()
+        .start(widget.currentUserId, onKicked: _hienThiThongBaoBiDaVang)
+        .catchError((Object e) {
+          debugPrint('Presence.start lỗi: $e');
+        });
     _listenForRescueAssignments();
+    _scheduleMidnightRefresh();
     EmergencyNotificationService().startListening(widget.currentUserId);
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, true);
-    } else if (state == AppLifecycleState.detached) {
-      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
+  /// Bị thiết bị khác giành phiên. CHỈ điều hướng, KHÔNG ghi isOnline
+  /// (nếu ghi false sẽ đè lên phiên của máy mới).
+  Future<void> _hienThiThongBaoBiDaVang() async {
+    // 🟢 Dừng nghe thông báo khẩn của tài khoản này trên máy cũ.
+    // An toàn vì trang kế tiếp là DangNhap (không dựng listener mới).
+    try {
+      EmergencyNotificationService().stopListening();
+    } catch (e) {
+      debugPrint('stopListening lỗi: $e');
     }
-  }
-
-  Future<void> _gianhQuyenDangNhap() async {
-    final rtdb = FirebaseDatabase.instanceFor(
-      app: Firebase.app(),
-      databaseURL:
-          'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
-    );
-    await rtdb
-        .ref('NguoiDung/${widget.currentUserId}/maThietBi')
-        .set(widget.maThietBiMoi);
-  }
-
-  void _langNgheBiDaVang() {
-    final rtdb = FirebaseDatabase.instanceFor(
-      app: Firebase.app(),
-      databaseURL:
-          'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
-    );
-
-    _kickOutSubscription = rtdb
-        .ref('NguoiDung/${widget.currentUserId}/maThietBi')
-        .onValue
-        .listen((event) {
-          final thietBiTrenServer = event.snapshot.value?.toString();
-          if (thietBiTrenServer != null &&
-              thietBiTrenServer != widget.maThietBiMoi) {
-            _hienThiThongBaoBiDaVang();
-          }
-        });
-  }
-
-  void _hienThiThongBaoBiDaVang() {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('maNguoiDung_daLuu');
+    } catch (_) {}
     if (!mounted) return;
-    _isKickedOut = true;
-    _firebaseService.huyOnDisconnect(widget.currentUserId);
-    _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
@@ -111,12 +75,24 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho>
     );
   }
 
-  void _listenForRescueAssignments() async {
-    String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  /// 🟢 Qua 00:00 listener phải trỏ sang doc của ngày mới, nếu không CHV
+  /// trực đêm sẽ không nhận được ca nào sau nửa đêm.
+  void _scheduleMidnightRefresh() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1, 0, 0, 5);
+    _midnightTimer = Timer(nextMidnight.difference(now), () {
+      if (!mounted) return;
+      _listenForRescueAssignments(); // tính lại todayStr
+      _scheduleMidnightRefresh();
+    });
+  }
 
-    if (_isNavigating) return;
+  void _listenForRescueAssignments() {
+    if (_isNavigating) return; // sẽ nghe lại khi quay về từ màn hình ca
+    final String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
     _assignmentSubscription?.cancel();
-
     _assignmentSubscription = FirebaseFirestore.instance
         .collection('ChiTietPhanCongCuuHo')
         .doc(widget.currentUserId)
@@ -126,93 +102,134 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho>
         .snapshots()
         .listen((snapshot) {
           if (!mounted || _isNavigating) return;
+          if (snapshot.docs.isEmpty) return;
 
-          if (snapshot.docs.isNotEmpty) {
-            String targetMaYeuCau = '';
-            bool hasDangTienTrinh = false;
-            bool hasChoTiepNhan = false;
+          String targetMaYeuCau = '';
+          bool hasDangTienTrinh = false;
+          bool hasChoTiepNhan = false;
 
-            for (var doc in snapshot.docs) {
-              Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-              String trangThai = (data['maTrangThaiTiepNhan'] ?? '').toString();
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final String trangThai = (data['maTrangThaiTiepNhan'] ?? '')
+                .toString();
 
-              String maYeuCauTmp =
-                  (data['maYeuCau'] ?? '').toString().isNotEmpty
-                  ? data['maYeuCau'].toString()
-                  : doc.id;
+            final String maYeuCauTmp =
+                (data['maYeuCau'] ?? '').toString().isNotEmpty
+                ? data['maYeuCau'].toString()
+                : doc.id;
 
-              if (trangThai == 'cuuho_trangthai_phancong_hoanthanh' ||
-                  trangThai == 'cuuho_trangthai_phancong_dahuy' ||
-                  trangThai == 'cuuho_trangthai_phancong_tuchoi') {
-                continue;
-              }
-
-              if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
-                  trangThai == 'cuuho_trangthai_phancong_daden' ||
-                  trangThai == 'cuuho_trangthai_phancong_dangcuuho') {
-                hasDangTienTrinh = true;
-                targetMaYeuCau = maYeuCauTmp;
-                break;
-              }
-
-              if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
-                  trangThai.isEmpty) {
-                hasChoTiepNhan = true;
-                targetMaYeuCau = maYeuCauTmp;
-              }
+            if (trangThai == 'cuuho_trangthai_phancong_hoanthanh' ||
+                trangThai == 'cuuho_trangthai_phancong_dahuy' ||
+                trangThai == 'cuuho_trangthai_phancong_tuchoi') {
+              continue;
             }
 
-            if (hasDangTienTrinh && targetMaYeuCau.isNotEmpty) {
-              _isNavigating = true;
-              _assignmentSubscription?.cancel();
+            if (trangThai == 'cuuho_trangthai_phancong_tiepnhan' ||
+                trangThai == 'cuuho_trangthai_phancong_daden' ||
+                trangThai == 'cuuho_trangthai_phancong_dangcuuho') {
+              hasDangTienTrinh = true;
+              targetMaYeuCau = maYeuCauTmp;
+              break;
+            }
 
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TienTrinhCuuHo(
-                    currentUserId: widget.currentUserId,
-                    maYeuCauCuuHo: targetMaYeuCau,
-                  ),
-                ),
-              ).then((_) {
-                _isNavigating = false;
-                _listenForRescueAssignments();
-              });
-            } else if (hasChoTiepNhan && targetMaYeuCau.isNotEmpty) {
-              _isNavigating = true;
-              _assignmentSubscription?.cancel();
-
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => Manhinhcho(
-                    currentUserId: widget.currentUserId,
-                    maYeuCauCuuHo: targetMaYeuCau,
-                  ),
-                ),
-              ).then((_) {
-                _isNavigating = false;
-                _listenForRescueAssignments();
-              });
+            if (trangThai == 'cuuho_trangthai_phancong_chotiepnhan' ||
+                trangThai.isEmpty) {
+              hasChoTiepNhan = true;
+              targetMaYeuCau = maYeuCauTmp;
             }
           }
-        });
+
+          if (targetMaYeuCau.isEmpty) return;
+
+          if (hasDangTienTrinh) {
+            _openCaScreen(
+              TienTrinhCuuHo(
+                currentUserId: widget.currentUserId,
+                maYeuCauCuuHo: targetMaYeuCau,
+              ),
+            );
+          } else if (hasChoTiepNhan) {
+            _openCaScreen(
+              Manhinhcho(
+                currentUserId: widget.currentUserId,
+                maYeuCauCuuHo: targetMaYeuCau,
+              ),
+            );
+          }
+        }, onError: (e) => debugPrint('Lỗi nghe phân công: $e'));
   }
+
+  void _openCaScreen(Widget screen) {
+    _isNavigating = true;
+    _assignmentSubscription?.cancel();
+
+    Navigator.push(context, MaterialPageRoute(builder: (_) => screen)).then((
+      _,
+    ) {
+      _isNavigating = false;
+      if (mounted) _listenForRescueAssignments();
+    });
+  }
+
+  Widget _lazyTab(int index, Widget Function() builder) =>
+      _builtTabs.contains(index) ? builder() : const SizedBox.shrink();
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _kickOutSubscription?.cancel();
     _assignmentSubscription?.cancel();
-    EmergencyNotificationService().stopListening();
-
-    if (!_isKickedOut) {
-      _firebaseService.capNhatTrangThaiOnline(widget.currentUserId, false);
-    }
+    _midnightTimer?.cancel();
+    // KHÔNG stopListening()/đặt offline ở đây: pushAndRemoveUntil dựng trang mới
+    // (initState) TRƯỚC khi trang cũ dispose, nên sẽ tắt nhầm listener của trang mới.
+    // Gọi EmergencyNotificationService().stopListening() và
+    // PresenceService().stop() khi ĐĂNG XUẤT.
     super.dispose();
   }
 
-  // Trong Trangchunguoicuuho.dart
+  Future<void> _xuLyGoiNguoiThan(
+    TrangChuController controller,
+    Map<String, dynamic> user,
+    List<dynamic> danhSachNguoiThan,
+  ) async {
+    final String hoTen = (user['hoTen'] ?? 'Người dùng').toString();
+
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Gọi toàn bộ người thân?'),
+        content: Text(
+          'Hệ thống sẽ gọi tự động khẩn cấp cho ${danhSachNguoiThan.length} người thân của $hoTen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Gọi ngay'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final bool created = await controller.triggerEmergencyCallToRelative(
+      victimUserId: (user['userId'] ?? '').toString(),
+      danhSachNguoiThan: danhSachNguoiThan,
+      victimName: hoTen,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          created
+              ? 'Đã gửi yêu cầu gọi người thân của $hoTen'
+              : 'Đang gọi người thân hoặc gửi yêu cầu thất bại',
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -221,122 +238,101 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho>
       child: Consumer<TrangChuController>(
         builder: (context, controller, child) {
           return Scaffold(
-            key: _scaffoldKey,
             backgroundColor: const Color(0xFFF8FAFC),
             body: SafeArea(
-              child: Stack(
+              child: Column(
                 children: [
-                  Column(
-                    children: [
-                      // 🟢 1. BỌC ĐIỀU KIỆN: CHỈ HIỂN THỊ HEADER KHI Ở TAB 0 (TRỰC CHIẾN)
-                      if (_currentTabIndex == 0)
-                        FutureBuilder<String?>(
-                          future: controller.getAvatarBase64(controller.userID),
-                          builder: (context, avatarSnapshot) {
-                            return LifeguardProfileHeader(
-                              isOnline: controller.isOnline,
-                              onOnlineChanged: (val) {
-                                controller.toggleOnline(val);
-                              },
-                              name: controller.name,
-                              role: controller.role,
-                              maVaiTro: controller.maVaiTro,
-                              base64Image: avatarSnapshot.data,
-                            );
-                          },
-                        ),
+                  // Header chỉ hiển thị ở tab Trực chiến
+                  if (_currentTabIndex == 0)
+                    LifeguardProfileHeader(
+                      isOnline: controller.isOnline,
+                      onOnlineChanged: controller.toggleOnline,
+                      name: controller.name,
+                      role: controller.role,
+                      maVaiTro: controller.maVaiTro,
+                      capDoUyTin: controller.capDoUyTin,
+                      // 🟢 avatar đã cache ở controller, không còn FutureBuilder
+                      avatarBytes: controller.avatarBytes,
+                    ),
 
-                      // 2. NỘI DUNG THAY ĐỔI THEO TAB CHỌN
-                      Expanded(
-                        child: IndexedStack(
-                          index: _currentTabIndex,
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentTabIndex,
+                      children: [
+                        // TAB 0: TRỰC CHIẾN (BẢN ĐỒ)
+                        Stack(
                           children: [
-                            // TAB 0: MÀN HÌNH TRỰC CHIẾN (BẢN ĐỒ)
-                            Stack(
-                              children: [
-                                MapSection(
-                                  currentPosition: controller.currentPosition,
-                                  isLoadingLocation:
-                                      controller.isLoadingLocation,
-                                  onMapCreated: controller.setMapController,
-                                  isOnline: controller.isOnline,
-                                  RefreshLocation:
-                                      controller.initLocationService,
-                                  nearbyUsers: controller.nearbyUsers,
-                                  onCallAllRelatives:
-                                      (user, danhSachNguoiThan) async {
-                                        // ... giữ nguyên logic gọi người thân
-                                      },
-                                ),
-                                Positioned(
-                                  top: 16,
-                                  right: 12,
-                                  child: Column(
-                                    children: [
-                                      // _buildMapActionButton(
-                                      //   Icons.grid_view_rounded,
-                                      //   const Color(0xFF059669),
-                                      // ),
-                                      // const SizedBox(height: 10),
-                                      // _buildMapActionButton(
-                                      //   Icons.local_fire_department_rounded,
-                                      //   const Color(0xFFF97316),
-                                      // ),
-                                      // const SizedBox(height: 10),
-                                      // _buildMapActionButton(
-                                      //   Icons.layers_rounded,
-                                      //   const Color(0xFF475569),
-                                      // ),
-                                      // const SizedBox(height: 10),
-                                      _buildMapActionButton(
-                                        Icons.my_location_rounded,
-                                        const Color(0xFF475569),
-                                        onPressed: () {
-                                          controller
-                                              .centerMapOnCurrentPosition();
-                                        },
-                                      ),
-                                    ],
+                            MapSection(
+                              currentPosition: controller.currentPosition,
+                              isLoadingLocation: controller.isLoadingLocation,
+                              onMapCreated: controller.setMapController,
+                              isOnline: controller.isOnline,
+                              onRefreshLocation: controller.initLocationService,
+                              nearbyUsers: controller.nearbyUsers,
+                              // 🟢 Đã nối vào controller (trước đây là stub rỗng)
+                              onCallAllRelatives: (user, danhSachNguoiThan) =>
+                                  _xuLyGoiNguoiThan(
+                                    controller,
+                                    user,
+                                    danhSachNguoiThan,
                                   ),
-                                ),
-                              ],
                             ),
-
-                            // TAB 1: MÀN HÌNH LỊCH SỬ CA CỨU HỘ
-                            ManHinhLichSuCa(
-                              currentUserId: controller.userID,
-                            ), // Truyền currentUserId nếu cần
-                            // TAB 2: MÀN HÌNH DỤNG CỤ
-                            const Center(child: Text('Màn hình Dụng cụ')),
-
-                            // TAB 3: MÀN HÌNH ĐIỀU PHỐI
-                            const Center(child: Text('Màn hình Điều phối')),
-
-                            // TAB 4: MÀN HÌNH HỒ SƠ / THÔNG TIN TÀI KHOẢN
-                            controller.currentUserModel != null
-                                ? ThongTinTaiKhoan(
-                                    nguoiDung: controller.currentUserModel!,
-                                  )
-                                : const Center(
-                                    child: CircularProgressIndicator(),
+                            Positioned(
+                              top: 16,
+                              right: 12,
+                              child: Column(
+                                children: [
+                                  _buildMapActionButton(
+                                    Icons.my_location_rounded,
+                                    const Color(0xFF475569),
+                                    onPressed:
+                                        controller.currentPosition == null
+                                        ? controller.initLocationService
+                                        : controller.centerMapOnCurrentPosition,
                                   ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
-                      ),
 
-                      TrangChuBottomPanel(
-                        isOnline: controller.isOnline,
-                        soLuongCaTiepNhan: controller.soLuongCaTiepNhan,
-                        currentTabIndex:
-                            _currentTabIndex, // 🟢 Truyền chỉ số tab hiện tại vào đây
-                        onTabSelected: (index) {
-                          setState(() {
-                            _currentTabIndex =
-                                index; // Chuyển đổi tab hiển thị trong IndexedStack
-                          });
-                        },
-                      ),
-                    ],
+                        _lazyTab(
+                          1,
+                          () =>
+                              ManHinhLichSuCa(currentUserId: controller.userID),
+                        ),
+                        _lazyTab(
+                          2,
+                          () => ThanhTichScreen(userId: controller.userID),
+                        ),
+                        _lazyTab(
+                          3,
+                          () => XepHangScreen(userId: controller.userID),
+                        ),
+                        _lazyTab(
+                          4,
+                          () => controller.currentUserModel != null
+                              ? ThongTinTaiKhoan(
+                                  nguoiDung: controller.currentUserModel!,
+                                )
+                              : const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  TrangChuBottomPanel(
+                    isOnline: controller.isOnline,
+                    soLuongCaHoanThanh: controller.soLuongCaHoanThanh,
+                    currentTabIndex: _currentTabIndex,
+                    onTabSelected: (index) {
+                      setState(() {
+                        _currentTabIndex = index;
+                        _builtTabs.add(index);
+                      });
+                    },
                   ),
                 ],
               ),

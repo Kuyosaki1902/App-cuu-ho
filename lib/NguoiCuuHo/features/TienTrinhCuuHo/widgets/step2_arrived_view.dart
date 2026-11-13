@@ -1,61 +1,97 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../controllers/rescue_process_controller.dart';
 
+import '../controllers/rescue_process_controller.dart';
+import 'rescue_theme.dart';
+
+/// Bước 2: đã có mặt tại hiện trường. Toàn bộ số liệu là dữ liệu thật.
 class Step2ArrivedHeader extends StatelessWidget {
   const Step2ArrivedHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // 🟢 Lấy controller để đọc địa chỉ và tọa độ thực tế của nạn nhân
-    final controller = context.watch<RescueProcessController>();
+    final c = context.watch<RescueProcessController>();
+    final acc = c.gpsAccuracyMeters;
 
     return Container(
       width: double.infinity,
-      height: 95,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFB71C1C),
-        borderRadius: BorderRadius.circular(16),
+        color: RC.green,
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text(
-                '📍 ĐÃ ĐẾN VỊ TRÍ NẠN NHÂN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 26),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Đã đến hiện trường',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
                 ),
               ),
               Text(
-                'Tiếp cận 100%',
-                style: TextStyle(color: Colors.white70, fontSize: 10),
+                clock(c.arrivedAt),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white70,
+                  fontFeatures: RC.tabular,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          // 🟢 Hiển thị tọa độ thực tế từ controller của nạn nhân
+          const SizedBox(height: 10),
           Text(
-            'Tọa độ: ${controller.victimLocation.latitude.toStringAsFixed(4)}° N, ${controller.victimLocation.longitude.toStringAsFixed(4)}° E (Sai số: ±3m)',
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
-          ),
-          const SizedBox(height: 2),
-          // 🟢 Hiển thị địa chỉ text thực tế đã geocode từ Firestore
-          Text(
-            controller.victimAddress,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
+            c.victimAddress,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13.5,
+              height: 1.35,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            [
+              if (c.hasVictimLocation)
+                'Toạ độ ${c.victimLocation.latitude.toStringAsFixed(5)}, '
+                    '${c.victimLocation.longitude.toStringAsFixed(5)}',
+              if (acc != null) 'GPS sai số ±${acc.round()} m',
+            ].join('   '),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white70,
+              fontFeatures: RC.tabular,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white12,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.shield_outlined, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Kiểm tra an toàn hiện trường trước khi tiếp cận nạn nhân.',
+                    style: TextStyle(fontSize: 12.5, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

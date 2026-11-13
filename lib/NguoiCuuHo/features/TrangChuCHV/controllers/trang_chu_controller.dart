@@ -2,64 +2,73 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
+
+// ngoài class:
+Uint8List? _decodeB64(String? s) => TrangChuController.bytesFromBase64(s);
 
 class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
+  /// Bán kính quét người xung quanh (dùng chung cho controller, map, header).
+  static const double kNearbyRadiusMeters = 10.0;
   GoogleMapController? mapController;
   StreamSubscription<Position>? _positionStreamSubscription;
-  StreamSubscription<QuerySnapshot>? _usersNearbySubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _usersNearbySubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _completedRescuesSubscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _notificationSubscription;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  StreamSubscription<QuerySnapshot>? _completedRescuesSubscription;
 
-  // --- NƠI LƯU TRỮ TRẠNG THÁI (STATE) ---
+  // --- STATE ---
   LatLng? _currentPosition;
+  double? _gpsAccuracy;
   bool _isLoadingLocation = true;
+  bool _locationReady = false;
   bool _isOnline = true;
   String? name;
   String? role;
-  String? image;
   String? maVaiTro;
-  Timer? _timer;
+  int capDoUyTin = 1;
   bool _isDisposed = false;
   String _userID = '';
-  int _soLuongCaTiepNhan = 0;
-  int _onlineSeconds = 0;
-  String _todayDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  int _soLuongCaHoanThanh = 0;
   List<Map<String, dynamic>> _nearbyUsers = [];
   NguoiDungModel? _currentUserModel;
+  Uint8List? _avatarBytes;
+
+  // --- Bộ đếm giờ trực (theo đồng hồ thực, không notify toàn cục) ---
+  Timer? _timer;
+  int _onlineSeconds = 0;
+  int _baseSeconds = 0;
+  DateTime? _onlineSince;
+  String _todayDateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final ValueNotifier<int> onlineSecondsNotifier = ValueNotifier<int>(0);
+
+  // --- Thông báo ca ---
+  List<Map<String, dynamic>> _danhSachThongBao = [];
+  int _soThongBaoChuaDoc = 0;
+
+  // --- Getters ---
   NguoiDungModel? get currentUserModel => _currentUserModel;
-
-  // Lấy UID động từ FirebaseAuth, nếu chưa đăng nhập mới dùng ID mặc định
-  Future<void> getUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    _userID = prefs.getString('maNguoiDung_daLuu') ?? '';
-  }
-
-  //String get _userID => FirebaseAuth.instance.currentUser?.uid ?? 'nguoidung2';
-
-  // Getters cho UI đọc dữ liệu
   LatLng? get currentPosition => _currentPosition;
+  double? get gpsAccuracy => _gpsAccuracy;
   bool get isLoadingLocation => _isLoadingLocation;
   bool get isOnline => _isOnline;
-  Timer? get timer => _timer;
-  int get soLuongCaTiepNhan => _soLuongCaTiepNhan;
+  int get soLuongCaHoanThanh => _soLuongCaHoanThanh;
   String get userID => _userID;
   int get onlineSeconds => _onlineSeconds;
   List<Map<String, dynamic>> get nearbyUsers => _nearbyUsers;
-  Timer? _antiOverrideTimer;
-  // 🟢 1. Khai báo biến lưu danh sách thông báo & số lượng chưa đọc
-  List<Map<String, dynamic>> _danhSachThongBao = [];
-  int _soThongBaoChuaDoc = 0;
   List<Map<String, dynamic>> get danhSachThongBao => _danhSachThongBao;
   int get soThongBaoChuaDoc => _soThongBaoChuaDoc;
-  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  Uint8List? get avatarBytes => _avatarBytes;
 
   TrangChuController(String userId) {
     _userID = userId;
@@ -67,25 +76,27 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     _isOnline = true;
     initLocationService();
     _initAndCheckNewDayTimer();
-    fetchFullUserData(_userID);
+    fetchFullUserData(_userID).then((_) => _loadAvatar());
     _listenToTodayCompletedRescues();
     _listenToNotifications();
+    // Đồng bộ trạng thái "đang trực" lên Firestore ngay khi mở app
+    _pushDutyStatus(true);
   }
 
   @override
   void dispose() {
     _isDisposed = true;
-    WidgetsBinding.instance.removeObserver(this); // Hủy đăng ký
-    _antiOverrideTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _positionStreamSubscription?.cancel();
     _usersNearbySubscription?.cancel();
-    mapController?.dispose();
     _completedRescuesSubscription?.cancel();
+    _notificationSubscription?.cancel(); // 🟢 trước đây bị bỏ sót
     _timer?.cancel();
+    mapController?.dispose();
+    onlineSecondsNotifier.dispose();
     super.dispose();
   }
 
-  // 3. Ghi đè hàm này để chặn tuyệt đối việc gọi khi đã dispose
   @override
   void notifyListeners() {
     if (!_isDisposed) {
@@ -96,98 +107,100 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Khi ứng dụng bị thu nhỏ hoặc chuyển hướng sang màn hình khác / app khác
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      _positionStreamSubscription?.cancel();
+    if (_isDisposed) return;
+    if (state == AppLifecycleState.resumed) {
+      _checkDayRollover();
+      if (_locationReady) {
+        _startPositionStream();
+      } else {
+        initLocationService(); // trước đó thiếu GPS/quyền -> thử lại
+      }
     }
   }
 
-  // 🟢 2. Trong hàm lắng nghe Realtime thông báo
+  String _todayStr() => DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+  // ---------------------------------------------------------------------------
+  // THÔNG BÁO / SỐ CA
+  // ---------------------------------------------------------------------------
+  CollectionReference<Map<String, dynamic>> _assignmentsRef(String dayStr) {
+    return _firestore
+        .collection('ChiTietPhanCongCuuHo')
+        .doc(_userID)
+        .collection('DanhSachNgay')
+        .doc(dayStr)
+        .collection('DanhSachPhanCong');
+  }
+
   void _listenToNotifications() {
     _notificationSubscription?.cancel();
     if (_userID.isEmpty) return;
 
-    String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    // Không dùng orderBy trên Firestore: doc thiếu 'thoiGianTao' sẽ bị loại ngầm.
+    _notificationSubscription = _assignmentsRef(_todayStr()).snapshots().listen(
+      (snapshot) {
+        if (_isDisposed) return;
+        final list = snapshot.docs.map((doc) {
+          final data = Map<String, dynamic>.from(doc.data());
+          data['id'] = doc.id;
+          return data;
+        }).toList();
 
-    _notificationSubscription = _firestore
-        .collection('ChiTietPhanCongCuuHo')
-        .doc(_userID)
-        .collection('DanhSachNgay')
-        .doc(todayStr)
-        .collection('DanhSachPhanCong')
-        .orderBy('thoiGianTao', descending: true) // Sắp xếp ca mới nhất lên đầu
-        .snapshots()
-        .listen((snapshot) {
-          if (!_isDisposed) {
-            _danhSachThongBao = snapshot.docs.map((doc) {
-              var data = doc.data();
-              data['id'] = doc.id;
-              return data;
-            }).toList();
+        int ms(dynamic v) => v is Timestamp ? v.millisecondsSinceEpoch : 0;
+        list.sort(
+          (a, b) => ms(b['thoiGianTao']).compareTo(ms(a['thoiGianTao'])),
+        );
 
-            // Đếm các ca đang chờ tiếp nhận (chưa đọc / chưa xử lý)
-            _soThongBaoChuaDoc = _danhSachThongBao
-                .where(
-                  (item) =>
-                      item['maTrangThaiTiepNhan'] ==
-                      'cuuho_trangthai_phancong_chotiepnhan',
-                )
-                .length;
-
-            notifyListeners();
-          }
-        });
+        _danhSachThongBao = list;
+        _soThongBaoChuaDoc = list
+            .where(
+              (i) =>
+                  i['maTrangThaiTiepNhan'] ==
+                  'cuuho_trangthai_phancong_chotiepnhan',
+            )
+            .length;
+        notifyListeners();
+      },
+      onError: (e) => debugPrint('Lỗi nghe thông báo: $e'),
+    );
   }
 
-  // 🟢 Hàm lắng nghe số ca có trangThai = 'cuuho_trangthai_phancong_hoanthanh' trong ngày hôm nay
   void _listenToTodayCompletedRescues() {
     _completedRescuesSubscription?.cancel();
+    if (_userID.isEmpty) return;
 
-    String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    _completedRescuesSubscription = _firestore
-        .collection('ChiTietPhanCongCuuHo')
-        .doc(_userID)
-        .collection('DanhSachNgay')
-        .doc(todayStr)
-        .collection('DanhSachPhanCong')
+    final todayStr = _todayStr();
+    _completedRescuesSubscription = _assignmentsRef(todayStr)
         .where(
           'maTrangThaiTiepNhan',
           isEqualTo: 'cuuho_trangthai_phancong_hoanthanh',
         )
         .snapshots()
-        .listen(
-          (snapshot) {
-            if (!_isDisposed) {
-              _soLuongCaTiepNhan = snapshot.docs.length;
-              notifyListeners(); // Cập nhật lại UI ở TrangChuBottomPanel
-              debugPrint(
-                '✅ Số ca hoàn thành hôm nay ($todayStr): $_soLuongCaTiepNhan',
-              );
-            }
-          },
-          onError: (e) {
-            debugPrint('Lỗi đếm số ca hoàn thành: $e');
-          },
-        );
+        .listen((snapshot) {
+          if (_isDisposed) return;
+          _soLuongCaHoanThanh = snapshot.docs.length;
+          notifyListeners();
+          debugPrint(
+            '✅ Số ca hoàn thành hôm nay ($todayStr): $_soLuongCaHoanThanh',
+          );
+        }, onError: (e) => debugPrint('Lỗi đếm số ca hoàn thành: $e'));
   }
 
   void setMapController(GoogleMapController controller) {
     mapController = controller;
   }
 
-  // 🟢 1. Khởi tạo thời gian từ SharedPreferences và kiểm tra ngày mới
+  // ---------------------------------------------------------------------------
+  // GIỜ TRỰC
+  // ---------------------------------------------------------------------------
   Future<void> _initAndCheckNewDayTimer() async {
     final prefs = await SharedPreferences.getInstance();
-    String currentDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final currentDate = _todayStr();
 
-    // Tạo key riêng biệt theo từng User ID
-    String dateKey = 'saved_online_date_$_userID';
-    String secondsKey = 'saved_online_seconds_$_userID';
+    final dateKey = 'saved_online_date_$_userID';
+    final secondsKey = 'saved_online_seconds_$_userID';
 
-    String? savedDate = prefs.getString(dateKey);
-
+    final savedDate = prefs.getString(dateKey);
     if (savedDate == null || savedDate != currentDate) {
       _onlineSeconds = 0;
       await prefs.setString(dateKey, currentDate);
@@ -196,180 +209,319 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
       _onlineSeconds = prefs.getInt(secondsKey) ?? 0;
     }
     _todayDateStr = currentDate;
-    notifyListeners();
+    onlineSecondsNotifier.value = _onlineSeconds;
 
-    if (_isOnline) {
+    if (_isOnline && !_isDisposed) {
       _startTimer();
     }
   }
 
-  // 🟢 2. Cập nhật Bật/Tắt Online & Cập nhật Firestore
-  void toggleOnline(bool val) async {
+  /// Bật/tắt trực chiến.
+  void toggleOnline(bool val) {
     _checkDayRollover();
     _isOnline = val;
 
-    if (_isOnline) {
+    if (val) {
       _startTimer();
+      _lastPushedAt = null; // ép đẩy vị trí ngay
       listenToNearbyUsers();
+      if (_currentPosition != null) {
+        _pushLocationThrottled(_currentPosition!);
+      }
     } else {
       _stopTimer();
-      _usersNearbySubscription?.cancel(); // Dừng lắng nghe từ Firestore
+      _usersNearbySubscription?.cancel();
+      _usersNearbySubscription = null;
       _nearbyUsers = [];
     }
-    _updateUserNhanCaStatusInFirestore(!_isOnline);
     notifyListeners();
+    _pushDutyStatus(val);
   }
 
-  /// Cập nhật thuộc tính nhanCaCuuHo vào Firestore NguoiDung
-  Future<void> _updateUserNhanCaStatusInFirestore(bool status) async {
+  /// Ghi trạng thái trực lên Firestore (đã sửa lỗi đảo ngược `!_isOnline`).
+  Future<void> _pushDutyStatus(bool onDuty) async {
+    if (_userID.isEmpty) return;
     try {
       await _firestore.collection('NguoiDung').doc(_userID).set({
-        'nhanCaCuuHo': status,
+        'nhanCaCuuHo': onDuty,
+        'isOnline': onDuty,
       }, SetOptions(merge: true));
-      debugPrint('Đã cập nhật nhanCaCuuHo = $status cho user $_userID');
     } catch (e) {
-      debugPrint('Lỗi cập nhật nhanCaCuuHo trên Firestore: $e');
+      debugPrint('Lỗi cập nhật trạng thái trực: $e');
     }
   }
 
-  // 🟢 3. Bắt đầu bộ đếm giờ
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _onlineSince = DateTime.now();
+    _baseSeconds = _onlineSeconds;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_isDisposed) return;
       _checkDayRollover();
-      _onlineSeconds++;
-      _saveOnlineSeconds();
-      notifyListeners();
+      if (_onlineSince == null) return;
+      _onlineSeconds =
+          _baseSeconds + DateTime.now().difference(_onlineSince!).inSeconds;
+      onlineSecondsNotifier.value = _onlineSeconds;
+      if (_onlineSeconds % 15 == 0) _saveOnlineSeconds();
     });
   }
 
-  // 🟢 4. Dừng đếm giờ
   void _stopTimer() {
+    if (_onlineSince != null) {
+      _onlineSeconds =
+          _baseSeconds + DateTime.now().difference(_onlineSince!).inSeconds;
+      _onlineSince = null;
+    }
     _timer?.cancel();
+    onlineSecondsNotifier.value = _onlineSeconds;
     _saveOnlineSeconds();
   }
 
-  // 🟢 5. Kiểm tra nếu thời gian đếm xuyên qua thời khắc 00:00 đêm sang ngày mới
+  /// Qua 00:00: reset giờ trực và nghe lại các collection theo ngày mới.
   void _checkDayRollover() {
-    String nowStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    if (nowStr != _todayDateStr) {
-      _todayDateStr = nowStr;
-      _onlineSeconds = 0;
-      _saveOnlineSeconds();
+    final nowStr = _todayStr();
+    if (nowStr == _todayDateStr) return;
+
+    _todayDateStr = nowStr;
+    _onlineSeconds = 0;
+    _baseSeconds = 0;
+    if (_onlineSince != null) _onlineSince = DateTime.now();
+    onlineSecondsNotifier.value = 0;
+    _saveOnlineSeconds();
+
+    _listenToTodayCompletedRescues();
+    _listenToNotifications();
+  }
+
+  Future<void> _saveOnlineSeconds() async {
+    if (_userID.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('saved_online_date_$_userID', _todayDateStr);
+      await prefs.setInt('saved_online_seconds_$_userID', _onlineSeconds);
+    } catch (e) {
+      debugPrint('Lỗi lưu giờ trực: $e');
     }
   }
 
-  // 🟢 6. Lưu thời gian vào SharedPreferences
-  Future<void> _saveOnlineSeconds() async {
-    if (_userID.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-
-    String dateKey = 'saved_online_date_$_userID';
-    String secondsKey = 'saved_online_seconds_$_userID';
-
-    await prefs.setString(dateKey, _todayDateStr);
-    await prefs.setInt(secondsKey, _onlineSeconds);
-  }
-
-  // 🟢 7. Định dạng thời gian hiển thị hh:mm:ss
   String get formattedOnlineTime {
-    int hours = _onlineSeconds ~/ 3600;
-    int minutes = (_onlineSeconds % 3600) ~/ 60;
-    int seconds = _onlineSeconds % 60;
-
+    final hours = _onlineSeconds ~/ 3600;
+    final minutes = (_onlineSeconds % 3600) ~/ 60;
+    final seconds = _onlineSeconds % 60;
     return '${hours.toString().padLeft(2, '0')}h '
         '${minutes.toString().padLeft(2, '0')}m '
         '${seconds.toString().padLeft(2, '0')}s';
   }
 
-  // --- LOGIC GPS & BẢN ĐỒ ---
-  Future<void> initLocationService() async {
-    bool serviceEnabled;
-    LocationPermission permission;
+  // ---------------------------------------------------------------------------
+  // GPS & BẢN ĐỒ
+  // ---------------------------------------------------------------------------
+  bool _initializingLocation = false;
 
+  Future<bool> _ensureLocationPermission() async {
+    LocationPermission perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission(); // chờ người dùng bấm xong
+    }
+    return perm == LocationPermission.whileInUse ||
+        perm == LocationPermission.always;
+  }
+
+  Future<void> initLocationService() async {
+    if (_initializingLocation) return; // chống gọi chồng
+    _initializingLocation = true;
     _isLoadingLocation = true;
     notifyListeners();
 
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _isLoadingLocation = false;
-      notifyListeners();
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _isLoadingLocation = false;
-        notifyListeners();
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      _isLoadingLocation = false;
-      notifyListeners();
-      return;
-    }
-
     try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
-      _updateLocationOnMap(LatLng(position.latitude, position.longitude));
-    } catch (e) {
-      debugPrint('Lỗi lấy vị trí: $e');
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      if (!await _ensureLocationPermission()) return;
+      if (_isDisposed) return;
+      _locationReady = true;
+
+      // Quyền xong rồi mới xin thông báo (tránh 2 hộp thoại chồng nhau)
+      unawaited(Permission.notification.request());
+
+      // 1) Vị trí cache: hiện map gần như tức thì
+      try {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null) {
+          await _updateLocationOnMap(
+            LatLng(last.latitude, last.longitude),
+            accuracy: last.accuracy,
+          );
+        }
+      } catch (e) {
+        debugPrint('Lỗi last known: $e');
+      }
+
+      // 2) Bật stream sớm: không phụ thuộc getCurrentPosition có timeout hay không
+      _startPositionStream();
+
+      // 3) Lấy vị trí chính xác, cho thời gian dài hơn
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 20),
+        );
+        await _updateLocationOnMap(
+          LatLng(position.latitude, position.longitude),
+          accuracy: position.accuracy,
+        );
+      } catch (e) {
+        debugPrint('Lỗi lấy vị trí chính xác (stream vẫn đang chạy): $e');
+      }
     } finally {
       _isLoadingLocation = false;
+      _initializingLocation = false;
       notifyListeners();
     }
+  }
 
+  void _startPositionStream() {
     _positionStreamSubscription?.cancel();
     _positionStreamSubscription =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10, // 🟢 Giảm distanceFilter xuống 5m để nhạy hơn
+            distanceFilter: 3,
           ),
-        ).listen((Position position) {
-          _updateLocationOnMap(LatLng(position.latitude, position.longitude));
-        });
+        ).listen(
+          (Position p) => _updateLocationOnMap(
+            LatLng(p.latitude, p.longitude),
+            accuracy: p.accuracy,
+          ),
+          onError: (e) => debugPrint('Lỗi stream GPS: $e'),
+        );
   }
 
+  // Throttle ghi vị trí lên Firestore
+  LatLng? _lastPushedPosition;
+  DateTime? _lastPushedAt;
+
+  Future<void> _pushLocationThrottled(LatLng pos) async {
+    if (!_isOnline || _userID.isEmpty) return;
+
+    final now = DateTime.now();
+    if (_lastPushedPosition != null && _lastPushedAt != null) {
+      final moved = Geolocator.distanceBetween(
+        _lastPushedPosition!.latitude,
+        _lastPushedPosition!.longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      final elapsed = now.difference(_lastPushedAt!);
+      if (moved < 5 && elapsed < const Duration(seconds: 15)) return;
+    }
+    _lastPushedPosition = pos;
+    _lastPushedAt = now;
+
+    try {
+      await _firestore.collection('NguoiDung').doc(_userID).set({
+        'viDo': pos.latitude,
+        'kinhDo': pos.longitude,
+        'isOnline': true,
+        'capNhatLuc': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Lỗi cập nhật vị trí CHV lên Firestore: $e');
+    }
+  }
+
+  LatLng? _lastAnimatedPosition;
+
+  Future<void> _updateLocationOnMap(LatLng newPos, {double? accuracy}) async {
+    if (_isDisposed) return;
+    _currentPosition = newPos;
+    if (accuracy != null) _gpsAccuracy = accuracy;
+    _isLoadingLocation = false;
+    notifyListeners();
+
+    // Camera: chỉ dịch chuyển khi nhích > 5m, giữ nguyên zoom
+    if (mapController != null) {
+      final last = _lastAnimatedPosition;
+      if (last == null ||
+          Geolocator.distanceBetween(
+                last.latitude,
+                last.longitude,
+                newPos.latitude,
+                newPos.longitude,
+              ) >
+              5.0) {
+        _lastAnimatedPosition = newPos;
+        try {
+          mapController!.animateCamera(CameraUpdate.newLatLng(newPos));
+        } catch (e) {
+          debugPrint('Bỏ qua lỗi map đã dispose: $e');
+        }
+      }
+    }
+
+    if (_isOnline) {
+      if (_usersNearbySubscription == null) {
+        listenToNearbyUsers();
+      } else {
+        _recomputeNearby(); // 🟢 tự di chuyển cũng phải tính lại
+      }
+      await _pushLocationThrottled(newPos); // chỉ ghi khi đang trực
+    }
+  }
+
+  Future<void> centerMapOnCurrentPosition() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 5),
+      );
+      _currentPosition = LatLng(position.latitude, position.longitude);
+      _gpsAccuracy = position.accuracy;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Lỗi khi căn giữa bản đồ: $e');
+    }
+
+    if (_isDisposed || mapController == null || _currentPosition == null) {
+      return;
+    }
+    try {
+      final zoom = await mapController!.getZoomLevel();
+      await mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentPosition!, zoom),
+      );
+    } catch (e) {
+      debugPrint('Lỗi animate camera: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // DỮ LIỆU NGƯỜI DÙNG
+  // ---------------------------------------------------------------------------
   Future<void> fetchFullUserData(String userId) async {
     try {
-      _isLoadingLocation = true;
-      notifyListeners();
-
-      DocumentSnapshot userDoc = await _firestore
+      final userDoc = await _firestore
           .collection('NguoiDung')
           .doc(userId)
           .get();
 
       if (userDoc.exists && userDoc.data() != null) {
-        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
-        // Đảm bảo maNguoiDung có dữ liệu
+        final userData = Map<String, dynamic>.from(userDoc.data()!);
         userData['maNguoiDung'] ??= userId;
 
-        // 🟢 Chuyển đổi dữ liệu Firestore sang NguoiDungModel
         _currentUserModel = NguoiDungModel.fromMap(userData);
         name = userData['hoTen'] ?? 'Chưa cập nhật';
         maVaiTro = userData['maVaiTro'] ?? '';
-        _isOnline = true;
-        //_updateUserOnlineStatusInFirestore(true);
+        capDoUyTin = (userData['capDoUyTin'] as num?)?.toInt() ?? 1;
+        // 🟢 Không đặt _isOnline = true ở đây nữa (đè trạng thái nghỉ của CHV)
       }
 
       if (maVaiTro == 'vaitro_cuuhococc') {
-        DocumentSnapshot profileDoc = await _firestore
+        final profileDoc = await _firestore
             .collection('HoSoCuuHoCoCCHN')
             .doc(userId)
             .get();
 
         if (profileDoc.exists && profileDoc.data() != null) {
-          Map<String, dynamic> profileData =
-              profileDoc.data() as Map<String, dynamic>;
+          final profileData = profileDoc.data()!;
           role =
               profileData['tenChuyenNganh'] ??
               profileData['chuyenNganh'] ??
@@ -377,108 +529,58 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
         } else {
           role = 'Cứu hộ viên không có CCHN';
         }
-      } else {
-        if (maVaiTro != null && maVaiTro!.isNotEmpty) {
-          DocumentSnapshot roleDoc = await _firestore
-              .collection('VaiTro')
-              .doc(maVaiTro)
-              .get();
-
-          if (roleDoc.exists && roleDoc.data() != null) {
-            Map<String, dynamic> roleData =
-                roleDoc.data() as Map<String, dynamic>;
-            role = roleData['vaiTro'] ?? 'Đang cập nhật';
-          } else {
-            role = 'Cứu hộ viên không CCHN';
-          }
+      } else if (maVaiTro != null && maVaiTro!.isNotEmpty) {
+        final roleDoc = await _firestore
+            .collection('VaiTro')
+            .doc(maVaiTro)
+            .get();
+        if (roleDoc.exists && roleDoc.data() != null) {
+          role = roleDoc.data()!['vaiTro'] ?? 'Đang cập nhật';
         } else {
-          role = 'Đang cập nhật';
+          role = 'Cứu hộ viên không CCHN';
         }
+      } else {
+        role = 'Đang cập nhật';
       }
     } catch (e) {
       debugPrint('Lỗi đọc dữ liệu Firestore: $e');
     } finally {
-      if (!_isDisposed) {
-        _isLoadingLocation = false;
-        notifyListeners();
-      }
+      notifyListeners();
     }
   }
 
-  // 🟢 KÍCH HOẠT VÀ LƯU CUỘC GỌI KHẨN CẤP LỒNG NHAU TRÊN FIRESTORE
-  Future<void> triggerEmergencyCallToRelative({
-    required String victimUserId,
-    required List<dynamic> danhSachNguoiThan,
-    required String victimName,
-  }) async {
-    try {
-      for (var nt in danhSachNguoiThan) {
-        String callId = _firestore.collection('CuocGoiKhoanCap').doc().id;
-        String maNguoiThan = (nt['maNguoiThan'] ?? '').toString();
-        debugPrint('👉 [Controller] Đang ghi cho maNguoiThan: $maNguoiThan');
-
-        if (maNguoiThan.isNotEmpty) {
-          await _firestore
-              .collection('CuocGoiKhoanCap')
-              .doc(victimUserId)
-              .collection('DanhSachNguoiThan')
-              .doc(maNguoiThan)
-              .set({
-                'idCuocGoi': callId,
-                'maNguoiDung': victimUserId,
-                'maNguoiThan': maNguoiThan,
-                'noiDungDoc':
-                    'Xin chào, đây là cuộc gọi tự động khẩn cấp. Người thân của bạn là $victimName đang cần sự trợ giúp gấp.',
-                'trangThai': 'dangGoi',
-                'thoiGianTao': FieldValue.serverTimestamp(),
-              });
-          debugPrint(
-            '✅ [Controller] Đã ghi thành công cho người thân: $maNguoiThan',
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ [Controller] Lỗi Firestore: $e');
-    }
-  }
-
-  /// Phương thức chuyển vai trò về 'vaitro_nguoidung'
   Future<bool> chuyenVaiTroNguoiDung() async {
     try {
-      _isLoadingLocation = true;
-      notifyListeners();
-
       await _firestore.collection('NguoiDung').doc(_userID).update({
         'maVaiTro': 'vaitro_nguoidung',
       });
-
       maVaiTro = 'vaitro_nguoidung';
       await fetchFullUserData(_userID);
-
-      debugPrint('Đã chuyển maVaiTro về vaitro_nguoidung thành công.');
       return true;
     } catch (e) {
       debugPrint('Lỗi khi chuyển vai trò: $e');
       return false;
-    } finally {
-      _isLoadingLocation = false;
-      notifyListeners();
     }
+  }
+
+  /// Tải avatar 1 lần, cache dạng bytes (không query lại mỗi lần build).
+  Future<void> _loadAvatar() async {
+    if (_isDisposed) return;
+    _avatarBytes = await compute(_decodeB64, await getAvatarBase64(_userID));
+    notifyListeners();
   }
 
   Future<String?> getAvatarBase64(String maNguoiDung) async {
     try {
-      QuerySnapshot phanLoaiSnap = await _firestore
+      final phanLoaiSnap = await _firestore
           .collection('PhanLoaiAnh')
           .where('tenPhanLoaiAnh', isEqualTo: 'Ảnh đại diện')
           .limit(1)
           .get();
-
       if (phanLoaiSnap.docs.isEmpty) return null;
 
-      String maPhanLoaiAvatar = phanLoaiSnap.docs.first.id;
-
-      QuerySnapshot luuAnhSnap = await _firestore
+      final maPhanLoaiAvatar = phanLoaiSnap.docs.first.id;
+      final luuAnhSnap = await _firestore
           .collection('LuuAnh')
           .where('maNguoiDung', isEqualTo: maNguoiDung)
           .where('maPhanLoaiAnh', isEqualTo: maPhanLoaiAvatar)
@@ -486,7 +588,7 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
           .get();
 
       if (luuAnhSnap.docs.isNotEmpty) {
-        final data = luuAnhSnap.docs.first.data() as Map<String, dynamic>;
+        final data = luuAnhSnap.docs.first.data();
         return data['base64Image'] ?? data['duongDanAnh'] ?? data['duLieuAnh'];
       }
     } catch (e) {
@@ -498,23 +600,73 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
   static Uint8List? bytesFromBase64(String? base64String) {
     if (base64String == null || base64String.isEmpty) return null;
     try {
-      String cleanBase64 = base64String.contains(',')
+      final clean = base64String.contains(',')
           ? base64String.split(',').last
           : base64String;
-      return base64Decode(cleanBase64.trim());
+      return base64Decode(clean.trim());
     } catch (e) {
       debugPrint('Lỗi giải mã Base64: $e');
       return null;
     }
   }
 
-  //--------- Quét người dùng xung quanh (ĐÃ ĐƯỢC TỐI ƯU REALTIME TỐC ĐỘ CAO) -------------//
+  // ---------------------------------------------------------------------------
+  // GỌI NGƯỜI THÂN
+  // ---------------------------------------------------------------------------
+  /// Trả về true nếu có ít nhất 1 cuộc gọi mới được tạo.
+  /// Bỏ qua người thân đang trong trạng thái 'dangGoi' (chống bấm lặp).
+  Future<bool> triggerEmergencyCallToRelative({
+    required String victimUserId,
+    required List<dynamic> danhSachNguoiThan,
+    required String victimName,
+  }) async {
+    try {
+      int created = 0;
+      for (final nt in danhSachNguoiThan) {
+        final maNguoiThan = (nt['maNguoiThan'] ?? '').toString();
+        if (maNguoiThan.isEmpty) continue;
 
-  /// Lắng nghe người dùng xung quanh và đọc danh sách người thân
-  void listenToNearbyUsers({double maxRadiusInMeters = 100.0}) {
+        final ref = _firestore
+            .collection('CuocGoiKhoanCap')
+            .doc(victimUserId)
+            .collection('DanhSachNguoiThan')
+            .doc(maNguoiThan);
+
+        final existing = await ref.get();
+        if (existing.exists && existing.data()?['trangThai'] == 'dangGoi') {
+          continue;
+        }
+
+        await ref.set({
+          'idCuocGoi': _firestore.collection('CuocGoiKhoanCap').doc().id,
+          'maNguoiDung': victimUserId,
+          'maNguoiThan': maNguoiThan,
+          'maCuuHoVien': _userID, // truy vết ai kích hoạt
+          'noiDungDoc':
+              'Xin chào, đây là cuộc gọi tự động khẩn cấp. Người thân của bạn là $victimName đang cần sự trợ giúp gấp.',
+          'trangThai': 'dangGoi',
+          'thoiGianTao': FieldValue.serverTimestamp(),
+        });
+        created++;
+      }
+      return created > 0;
+    } catch (e) {
+      debugPrint('❌ [Controller] Lỗi Firestore: $e');
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // QUÉT NGƯỜI XUNG QUANH
+  // ---------------------------------------------------------------------------
+  int _nearbySeq = 0;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _onlineDocs = [];
+  final Map<String, List<Map<String, dynamic>>> _relativesCache = {};
+
+  void listenToNearbyUsers() {
     _usersNearbySubscription?.cancel();
+    _usersNearbySubscription = null;
 
-    // 🟢 Nếu Cứu hộ viên đang Offline hoặc chưa có tọa độ GPS -> Dừng quét
     if (!_isOnline) {
       _nearbyUsers = [];
       notifyListeners();
@@ -524,182 +676,96 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     _usersNearbySubscription = _firestore
         .collection('NguoiDung')
         .where('isOnline', isEqualTo: true)
+        .where('maVaiTro', isEqualTo: 'vaitro_nguoidung') // lọc ở server
         .snapshots()
-        .listen((snapshot) async {
-          if (_currentPosition == null) return;
-
-          List<Map<String, dynamic>> tempUsers = [];
-
-          for (var doc in snapshot.docs) {
-            if (doc.id == _userID) continue;
-
-            final data = doc.data() as Map<String, dynamic>;
-
-            if (data['maVaiTro'] != 'vaitro_nguoidung') continue;
-            if (data['viDo'] == null || data['kinhDo'] == null) continue;
-
-            double userLat = (data['viDo'] as num).toDouble();
-            double userLng = (data['kinhDo'] as num).toDouble();
-
-            double distanceInMeters = Geolocator.distanceBetween(
-              _currentPosition!.latitude,
-              _currentPosition!.longitude,
-              userLat,
-              userLng,
-            );
-
-            // 🟢 Lọc bán kính linh hoạt (Khuyên dùng 200m để bù trừ sai số GPS)
-            if (distanceInMeters <= maxRadiusInMeters) {
-              String userId = doc.id;
-
-              // 🟢 TRUY VẤN NGUỜI THÂN SONG SONG (DÙNG FUTURE.WAIT ĐỂ TRÁNH NGHẼN STREAM)
-              List<Map<String, dynamic>> listNguoiThan = [];
-              try {
-                QuerySnapshot nguoiThanSnap = await _firestore
-                    .collection('NguoiThan')
-                    .doc(userId)
-                    .collection('DanhSachNguoiThan')
-                    .get();
-
-                List<Future<Map<String, dynamic>?>> relativeFutures =
-                    nguoiThanSnap.docs.map((ntDoc) async {
-                      String maNguoiThan = ntDoc.id;
-                      Map<String, dynamic> ntData =
-                          ntDoc.data() as Map<String, dynamic>;
-
-                      if (maNguoiThan.isNotEmpty) {
-                        DocumentSnapshot userRelativeDoc = await _firestore
-                            .collection('NguoiDung')
-                            .doc(maNguoiThan)
-                            .get();
-
-                        if (userRelativeDoc.exists &&
-                            userRelativeDoc.data() != null) {
-                          Map<String, dynamic> relativeData =
-                              userRelativeDoc.data() as Map<String, dynamic>;
-                          return {
-                            'maNguoiThan': maNguoiThan,
-                            'hoTen': relativeData['hoTen'] ?? 'Chưa cập nhật',
-                            'soDienThoai':
-                                relativeData['soDienThoai'] ?? 'Chưa cập nhật',
-                            'moiQuanHe': ntData['moiQuanHe'] ?? '',
-                            'trangThai': ntData['trangThai'] ?? '',
-                            'ngayTao': ntData['ngayTao'],
-                          };
-                        }
-                      }
-                      return null;
-                    }).toList();
-
-                var results = await Future.wait(relativeFutures);
-                listNguoiThan = results
-                    .whereType<Map<String, dynamic>>()
-                    .toList();
-              } catch (e) {
-                debugPrint('Lỗi đọc NguoiThan/$userId/DanhSachNguoiThan: $e');
-              }
-
-              tempUsers.add({
-                'userId': userId,
-                'hoTen': data['hoTen'] ?? 'Người dùng',
-                'soDienThoai': data['soDienThoai'] ?? 'Chưa cập nhật',
-                'email': data['email'] ?? 'Chưa cập nhật',
-                'diaChi': data['diaChi'] ?? 'Chưa cập nhật',
-                'danhSachNguoiThan': listNguoiThan,
-                'location': LatLng(userLat, userLng),
-                'distance': distanceInMeters,
-                'groupColor': Colors.white,
-                'hasFamilyNearby': false,
-              });
-            }
-          }
-
-          _nearbyUsers = tempUsers;
-          notifyListeners();
-        });
+        .listen((snapshot) {
+          _onlineDocs = snapshot.docs;
+          _recomputeNearby();
+        }, onError: (e) => debugPrint('Lỗi quét người xung quanh: $e'));
   }
 
-  // Cập nhật vị trí GPS Cứu hộ viên
-  // Thêm biến lưu vị trí cũ để check khoảng cách dịch chuyển
-  LatLng? _lastAnimatedPosition;
+  Future<void> _recomputeNearby() async {
+    if (_isDisposed || !_isOnline || _currentPosition == null) return;
+    final seq = ++_nearbySeq;
+    final me = _currentPosition!;
+    final List<Map<String, dynamic>> temp = [];
 
-  Future<void> _updateLocationOnMap(LatLng newPos) async {
-    _currentPosition = newPos;
-    _isLoadingLocation = false;
+    for (final doc in _onlineDocs) {
+      if (doc.id == _userID) continue;
+      final data = doc.data();
+      if (data['viDo'] == null || data['kinhDo'] == null) continue;
 
-    try {
-      await _firestore.collection('NguoiDung').doc(_userID).set({
-        'viDo': newPos.latitude,
-        'kinhDo': newPos.longitude,
-        'isOnline': _isOnline,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('Lỗi cập nhật vị trí Cứu hộ viên lên Firestore: $e');
-    }
-
-    if (_isOnline && _usersNearbySubscription == null) {
-      listenToNearbyUsers();
-    }
-
-    notifyListeners();
-
-    // 🟢 CHỈ animateCamera khi vị trí thay đổi đủ lớn (ví dụ > 5-10 mét) hoặc lần đầu tiên,
-    // tránh bị gọi liên tục gây giật màn hình mỗi khi GPS nhích từng cm.
-    if (mapController != null && !_isDisposed) {
-      if (_lastAnimatedPosition == null ||
-          Geolocator.distanceBetween(
-                _lastAnimatedPosition!.latitude,
-                _lastAnimatedPosition!.longitude,
-                newPos.latitude,
-                newPos.longitude,
-              ) >
-              5.0) {
-        _lastAnimatedPosition = newPos;
-        try {
-          double currentZoom = await mapController!.getZoomLevel();
-          if (mapController != null && !_isDisposed) {
-            mapController!.animateCamera(
-              CameraUpdate.newLatLngZoom(
-                newPos,
-                currentZoom < 16 ? 18.2 : currentZoom,
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint('Bỏ qua lỗi map đã dispose: $e');
-        }
-      }
-    }
-  }
-
-  // 🟢 Hàm chuyên dùng cho nút MyLocation: Ép bản đồ quay về vị trí hiện tại ngay lập tức
-  // 🟢 Hàm định vị căn giữa bản đồ nhưng GIỮ NGUYÊN ĐỘ ZOOM hiện tại của người dùng
-  Future<void> centerMapOnCurrentPosition() async {
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 5),
+      final userLat = (data['viDo'] as num).toDouble();
+      final userLng = (data['kinhDo'] as num).toDouble();
+      final dist = Geolocator.distanceBetween(
+        me.latitude,
+        me.longitude,
+        userLat,
+        userLng,
       );
-      _currentPosition = LatLng(position.latitude, position.longitude);
-      notifyListeners();
+      if (dist > kNearbyRadiusMeters) continue;
 
-      if (mapController != null && _currentPosition != null) {
-        // 1. Lấy độ zoom hiện tại mà người dùng đang thu/phóng
-        double currentZoom = await mapController!.getZoomLevel();
-
-        // 2. Di chuyển camera về vị trí mới với đúng mức zoom đó
-        await mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(_currentPosition!, currentZoom),
-        );
+      // Cache người thân: tránh N+1 query mỗi lần snapshot / mỗi lần di chuyển
+      List<Map<String, dynamic>>? relatives = _relativesCache[doc.id];
+      if (relatives == null) {
+        relatives = await _fetchRelatives(doc.id);
+        _relativesCache[doc.id] = relatives;
       }
+
+      temp.add({
+        'userId': doc.id,
+        'hoTen': data['hoTen'] ?? 'Người dùng',
+        'soDienThoai': data['soDienThoai'] ?? 'Chưa cập nhật',
+        'email': data['email'] ?? 'Chưa cập nhật',
+        'diaChi': data['diaChi'] ?? 'Chưa cập nhật',
+        'danhSachNguoiThan': relatives,
+        'location': LatLng(userLat, userLng),
+        'distance': dist,
+      });
+    }
+
+    // Đã có lần tính mới hơn -> bỏ kết quả cũ (tránh ghi đè sai thứ tự)
+    if (seq != _nearbySeq || _isDisposed) return;
+    _nearbyUsers = temp;
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchRelatives(String userId) async {
+    try {
+      final nguoiThanSnap = await _firestore
+          .collection('NguoiThan')
+          .doc(userId)
+          .collection('DanhSachNguoiThan')
+          .get();
+
+      final futures = nguoiThanSnap.docs.map((ntDoc) async {
+        final maNguoiThan = ntDoc.id;
+        final ntData = ntDoc.data();
+        if (maNguoiThan.isEmpty) return null;
+
+        final userRelativeDoc = await _firestore
+            .collection('NguoiDung')
+            .doc(maNguoiThan)
+            .get();
+        if (!userRelativeDoc.exists || userRelativeDoc.data() == null) {
+          return null;
+        }
+        final relativeData = userRelativeDoc.data()!;
+        return <String, dynamic>{
+          'maNguoiThan': maNguoiThan,
+          'hoTen': relativeData['hoTen'] ?? 'Chưa cập nhật',
+          'soDienThoai': relativeData['soDienThoai'] ?? 'Chưa cập nhật',
+          'moiQuanHe': ntData['moiQuanHe'] ?? '',
+          'trangThai': ntData['trangThai'] ?? '',
+          'ngayTao': ntData['ngayTao'],
+        };
+      }).toList();
+
+      final results = await Future.wait(futures);
+      return results.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
-      debugPrint('Lỗi khi căn giữa bản đồ: $e');
-      if (mapController != null && _currentPosition != null) {
-        double currentZoom = await mapController!.getZoomLevel();
-        mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(_currentPosition!, currentZoom),
-        );
-      }
+      debugPrint('Lỗi đọc NguoiThan/$userId/DanhSachNguoiThan: $e');
+      return [];
     }
   }
 }

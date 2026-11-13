@@ -1,106 +1,94 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../controllers/emergency_alert_controller.dart';
 
+import '../controllers/emergency_alert_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/alert_style.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/rescue_theme.dart';
+
+/// Vòng đếm ngược + thông tin quyết định (khoảng cách, thời gian ước tính).
 class CriticalAlertCard extends StatelessWidget {
   const CriticalAlertCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<EmergencyAlertController>();
-
-    bool isLevel1 = controller.mucDoKhanCap == 1;
-    Color themeColor = isLevel1
-        ? const Color(0xFFDC2626)
-        : Colors.amber.shade800;
-    Color borderColor = isLevel1
-        ? const Color(0xFFFEE2E2)
-        : const Color(0xFFFDE68A);
-    Color badgeBgColor = isLevel1
-        ? const Color(0xFFFEE2E2)
-        : const Color(0xFFFEF3C7);
-    String labelText = isLevel1 ? 'NGUY KỊCH (TRIAGE RED)' : 'CẤP ĐỘ 2';
-    String titleText = isLevel1
-        ? 'CẢNH BÁO CẤP NGUY KỊCH'
-        : 'CẢNH BÁO CẤP ĐỘ 2';
-
-    int percent = (controller.progressValue * 100).toInt();
+    final c = context.watch<EmergencyAlertController>();
+    final style = AlertStyle.of(c.mucDoKhanCap);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: themeColor.withOpacity(0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: style.line, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: badgeBgColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: themeColor,
-                        shape: BoxShape.circle,
-                      ),
+              // Chỉ vòng đếm ngược rebuild mỗi giây.
+              ValueListenableBuilder<int>(
+                valueListenable: c.remainingSeconds,
+                builder: (_, left, __) {
+                  final urgent = left <= 30;
+                  final ringColor = urgent ? RC.red : style.color;
+                  return SizedBox(
+                    width: 76,
+                    height: 76,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 76,
+                          height: 76,
+                          child: CircularProgressIndicator(
+                            value: left / EmergencyAlertController.totalSeconds,
+                            strokeWidth: 6,
+                            backgroundColor: style.soft,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              ringColor,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          EmergencyAlertController.formatCountdown(left),
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            color: urgent ? RC.red : RC.ink,
+                            fontFeatures: RC.tabular,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      labelText,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        color: themeColor,
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: isLevel1
-                      ? const Color(0xFFFFF1F2)
-                      : const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.timer_outlined, size: 15, color: themeColor),
-                    const SizedBox(width: 4),
-                    Text(
-                      controller.formattedTimer,
+                    RcPill(
+                      text: style.label,
+                      fg: style.color,
+                      bg: style.soft,
+                      icon: Icons.priority_high,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Có ca cấp cứu gần bạn',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: themeColor,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: RC.ink,
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Cách bạn ${c.distanceText}'
+                      '${c.isMyLocationApproximate ? ' (ước tính)' : ''}',
+                      style: const TextStyle(fontSize: 13.5, color: RC.body),
                     ),
                   ],
                 ),
@@ -108,74 +96,100 @@ class CriticalAlertCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Text(
-            titleText,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0F172A),
-              letterSpacing: -0.3,
-            ),
+          const Text(
+            'Thời gian di chuyển ước tính',
+            style: TextStyle(fontSize: 12.5, color: RC.muted),
           ),
-          const SizedBox(height: 6),
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.45,
-                color: Color(0xFF475569),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _ModeChip(
+                mode: 'moto',
+                icon: Icons.two_wheeler_rounded,
+                label: 'Xe máy',
+                controller: c,
+                color: style.color,
               ),
+              const SizedBox(width: 8),
+              _ModeChip(
+                mode: 'car',
+                icon: Icons.directions_car_filled_outlined,
+                label: 'Ô tô',
+                controller: c,
+                color: style.color,
+              ),
+              const SizedBox(width: 8),
+              _ModeChip(
+                mode: 'walk',
+                icon: Icons.directions_walk_rounded,
+                label: 'Đi bộ',
+                controller: c,
+                color: style.color,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Nếu không phản hồi trước khi hết giờ, ca sẽ chuyển cho người khác.',
+            style: TextStyle(fontSize: 12.5, height: 1.4, color: RC.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String mode;
+  final IconData icon;
+  final String label;
+  final EmergencyAlertController controller;
+  final Color color;
+
+  const _ModeChip({
+    required this.mode,
+    required this.icon,
+    required this.label,
+    required this.controller,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = controller.selectedTravelMode == mode;
+    return Expanded(
+      child: Material(
+        color: selected ? color : RC.surface,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => controller.changeTravelMode(mode),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Column(
               children: [
-                const TextSpan(
-                  text:
-                      'Sự cố y tế khẩn cấp đã đối soát năng lực và vị trí trực chiến gần nhất với bạn (Bán kính ',
-                ),
-                TextSpan(
-                  text: controller.distanceText,
-                  style: const TextStyle(
+                Icon(icon, size: 20, color: selected ? Colors.white : RC.muted),
+                const SizedBox(height: 4),
+                Text(
+                  controller.etaText(mode),
+                  style: TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A),
+                    color: selected ? Colors.white : RC.ink,
+                    fontFeatures: RC.tabular,
                   ),
                 ),
-                const TextSpan(text: ').'),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: selected ? Colors.white70 : RC.muted,
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Thời hạn phản hồi chấp nhận ca',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF94A3B8),
-                ),
-              ),
-              Text(
-                '$percent%',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: themeColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: controller.progressValue,
-              minHeight: 6,
-              backgroundColor: isLevel1
-                  ? const Color(0xFFFEE2E2)
-                  : const Color(0xFFFEF3C7),
-              valueColor: AlwaysStoppedAnimation<Color>(themeColor),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

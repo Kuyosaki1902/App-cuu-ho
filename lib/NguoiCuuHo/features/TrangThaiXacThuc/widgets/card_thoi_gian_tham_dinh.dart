@@ -13,6 +13,7 @@ class CardThoiGianThamDinh extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -58,7 +59,6 @@ class CardThoiGianThamDinh extends StatelessWidget {
               ],
             ),
           ),
-          // 🟢 Đã bỏ AnimatedSwitcher, hiển thị tĩnh không nhấp nháy
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(

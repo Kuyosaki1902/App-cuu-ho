@@ -1,947 +1,194 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../controllers/rescue_process_controller.dart';
+import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
+import '../controllers/rescue_process_controller.dart';
+import 'rescue_theme.dart';
+
+/// Thẻ tóm tắt nạn nhân trong bottom sheet chính.
 class VictimDetailCard extends StatelessWidget {
   const VictimDetailCard({super.key});
 
-  // 🚀 BOTTOM SHEET DANH SÁCH LIÊN HỆ KHẨN CẤP
-  void _showContactsBottomSheet(
-    BuildContext context,
-    String victimName,
-    String victimPhone,
-  ) {
-    final controller = context.read<RescueProcessController>();
-    final List<Map<String, String>> emergencyContacts = [
-      {
-        'name': victimName.isNotEmpty ? victimName : 'Nạn nhân',
-        'relation': 'Số điện thoại trực tiếp của nạn nhân',
-        'phone': victimPhone.isNotEmpty ? victimPhone : 'Chưa có SĐT',
-        'tag': 'Trực tiếp',
-      },
-      {
-        'name': 'Tổng đài 115 (Điều phối viên)',
-        'relation': 'Trực tổng đài hỗ trợ ca trực',
-        'phone': '115',
-        'tag': 'Tổng đài',
-      },
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(
-                        Icons.quick_contacts_dialer,
-                        color: Color(0xFFE52525),
-                        size: 22,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Danh bạ liên hệ khẩn cấp',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(modalContext),
-                    icon: const Icon(Icons.close, color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Nạn nhân: $victimName',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: Color(0xFFE2E8F0)),
-              const SizedBox(height: 16),
-              ...emergencyContacts.map((contact) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10.0),
-                  child: _buildContactItem(
-                    name: contact['name']!,
-                    relation: contact['relation']!,
-                    phone: contact['phone']!,
-                    tag: contact['tag']!,
-                    onCall: () {
-                      Navigator.pop(modalContext);
-                      if (contact['phone'] != 'Chưa có SĐT') {
-                        controller.makePhoneCall(contact['phone']!);
-                      }
-                    },
-                  ),
-                );
-              }),
-              const SizedBox(height: 10),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // 🚀 MODAL HIỂN THỊ CHI TIẾT MÔ TẢ HIỆN TRƯỜNG (HIỂN THỊ HÌNH ẢNH THAY CHO VIDEO)
-  void _showVictimInfoBottomSheet(
-    BuildContext context,
-    String victimName,
-    String victimAddress,
-  ) {
-    final rescueController = context.read<RescueProcessController>();
-    final TextEditingController chatController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) {
-        return ChangeNotifierProvider.value(
-          value: rescueController,
-          child: Consumer<RescueProcessController>(
-            builder: (context, controller, child) {
-              return Container(
-                height: MediaQuery.of(context).size.height * 0.92,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                child: Column(
-                  children: [
-                    // --- HEADER MODAL ---
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: 16,
-                        right: 16,
-                        top: 12,
-                        bottom: 8,
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 4,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFFF1F2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.image_rounded,
-                                  color: Color(0xFFE52525),
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Hình ảnh & Tình trạng nạn nhân',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.fiber_manual_record,
-                                          color: Colors.green,
-                                          size: 10,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Trực tiếp từ hiện trường',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.green,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () => Navigator.pop(modalContext),
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                    // --- NỘI DUNG CHI TIẾT CUỘN ---
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 1. HÌNH ẢNH HIỆN TRƯỜNG (LẤY TỪ FIRESTORE QUA CONTROLLER)
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                height: 200,
-                                width: double.infinity,
-                                color: const Color(0xFFF1F5F9),
-                                child: controller.hinhAnhUrl.isNotEmpty
-                                    ? Image.network(
-                                        controller.hinhAnhUrl,
-                                        fit: BoxFit.cover,
-                                        loadingBuilder:
-                                            (context, child, loadingProgress) {
-                                              if (loadingProgress == null)
-                                                return child;
-                                              return const Center(
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      color: Color(0xFFE52525),
-                                                    ),
-                                              );
-                                            },
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return const Center(
-                                            child: Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.broken_image_outlined,
-                                                  color: Colors.grey,
-                                                  size: 36,
-                                                ),
-                                                SizedBox(height: 6),
-                                                Text(
-                                                  'Không thể tải hình ảnh hiện trường',
-                                                  style: TextStyle(
-                                                    color: Colors.grey,
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      )
-                                    : const Center(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons
-                                                  .image_not_supported_outlined,
-                                              color: Colors.grey,
-                                              size: 36,
-                                            ),
-                                            SizedBox(height: 6),
-                                            Text(
-                                              'Không có hình ảnh hiện trường',
-                                              style: TextStyle(
-                                                color: Colors.grey,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Row(
-                              children: [
-                                Icon(
-                                  Icons.verified,
-                                  color: Color(0xFF10B981),
-                                  size: 14,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Hình ảnh chụp trực tiếp từ người báo tin tại hiện trường',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 2. MÔ TẢ CHI TIẾT HIỆN TRƯỜNG
-                            const Text(
-                              'MÔ TẢ CHI TIẾT HIỆN TRƯỜNG',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF475569),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF5F5),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFFFCDD2),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(
-                                        Icons.warning_amber_rounded,
-                                        color: Color(0xFFE52525),
-                                        size: 18,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'Nạn nhân cần hỗ trợ khẩn cấp',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFFE52525),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    controller.moTaChiTiet,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF334155),
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                  if (controller.trieuChung.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 6,
-                                      runSpacing: 6,
-                                      children: controller.trieuChung.map((tc) {
-                                        return Chip(
-                                          label: Text(
-                                            tc,
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                            ),
-                                          ),
-                                          backgroundColor: Colors.white,
-                                          labelStyle: const TextStyle(
-                                            color: Color(0xFFE52525),
-                                          ),
-                                          side: const BorderSide(
-                                            color: Color(0xFFFFCDD2),
-                                          ),
-                                          visualDensity: VisualDensity.compact,
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.orange.shade200,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.location_on,
-                                          color: Colors.orange,
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Expanded(
-                                          child: Text(
-                                            'Địa chỉ: $victimAddress',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Color(0xFF334155),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 3. GHI ÂM CUỘC GỌI BÁO TIN
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.mic,
-                                      color: Color(0xFF10B981),
-                                      size: 16,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'GHI ÂM CUỘC GỌI BÁO TIN',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF475569),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE6F4EA),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Text(
-                                    '00:24s',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xFF10B981),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF10B981),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceEvenly,
-                                      children: List.generate(16, (index) {
-                                        return Container(
-                                          width: 3,
-                                          height: (index % 3 == 0)
-                                              ? 22
-                                              : ((index % 2 == 0) ? 14 : 8),
-                                          decoration: BoxDecoration(
-                                            color: index < 8
-                                                ? const Color(0xFF10B981)
-                                                : Colors.grey.shade300,
-                                            borderRadius: BorderRadius.circular(
-                                              2,
-                                            ),
-                                          ),
-                                        );
-                                      }),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Text(
-                                      '1.0x',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // 4. BOX CHAT TRAO ĐỔI NHANH
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.chat_bubble_outline,
-                                      color: Color(0xFF00897B),
-                                      size: 16,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'TIN NHẮN TRAO ĐỔI NHANH',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF475569),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFF1F2),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Text(
-                                    'Trao đổi trực tiếp',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xFFE52525),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-
-                            // CONTAINER DANH SÁCH TIN NHẮN
-                            Container(
-                              height: 250,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              child: controller.danhSachTinNhan.isEmpty
-                                  ? const Center(
-                                      child: Text(
-                                        'Chưa có tin nhắn trao đổi',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    )
-                                  : ListView.builder(
-                                      reverse: true,
-                                      itemCount:
-                                          controller.danhSachTinNhan.length,
-                                      itemBuilder: (context, index) {
-                                        final tinNhan =
-                                            controller.danhSachTinNhan[index];
-                                        final isMyMessage =
-                                            tinNhan.maNguoiGui ==
-                                            controller.currentDoctorId;
-
-                                        return Align(
-                                          alignment: isMyMessage
-                                              ? Alignment.centerRight
-                                              : Alignment.centerLeft,
-                                          child: Container(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 8,
-                                            ),
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              color: isMyMessage
-                                                  ? const Color(0xFF00897B)
-                                                  : Colors.white,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                              border: isMyMessage
-                                                  ? null
-                                                  : Border.all(
-                                                      color: const Color(
-                                                        0xFFE2E8F0,
-                                                      ),
-                                                    ),
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  isMyMessage
-                                                      ? '🟢 Bạn • Vừa xong'
-                                                      : '🔴 Người nhà • Vừa xong',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: isMyMessage
-                                                        ? Colors.white70
-                                                        : Colors.grey,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  tinNhan.noiDung,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: isMyMessage
-                                                        ? Colors.white
-                                                        : const Color(
-                                                            0xFF0F172A,
-                                                          ),
-                                                  ),
-                                                ),
-                                                if (tinNhan.fileDinhKemUrl !=
-                                                        null &&
-                                                    tinNhan
-                                                        .fileDinhKemUrl!
-                                                        .isNotEmpty)
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 8.0,
-                                                        ),
-                                                    child: ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      child: Image.network(
-                                                        tinNhan.fileDinhKemUrl!,
-                                                        height: 100,
-                                                        width: 150,
-                                                        fit: BoxFit.cover,
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                            ),
-
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: chatController,
-                                    decoration: InputDecoration(
-                                      hintText: 'Nhập tin nhắn...',
-                                      hintStyle: const TextStyle(fontSize: 12),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 8,
-                                          ),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                        borderSide: BorderSide(
-                                          color: Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                        borderSide: BorderSide(
-                                          color: Colors.grey.shade300,
-                                        ),
-                                      ),
-                                    ),
-                                    onSubmitted: (text) {
-                                      if (text.trim().isNotEmpty) {
-                                        controller.guiTinNhan(text.trim());
-                                        chatController.clear();
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  onTap: () {
-                                    final text = chatController.text;
-                                    if (text.trim().isNotEmpty) {
-                                      controller.guiTinNhan(text.trim());
-                                      chatController.clear();
-                                    }
-                                  },
-                                  borderRadius: BorderRadius.circular(24),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF00897B),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.send_rounded,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<RescueProcessController>();
-
-    final String vName = controller.victimName;
-    final String vPhone = controller.victimPhone;
-    final String vAddress = controller.victimAddress;
+    final c = context.watch<RescueProcessController>();
+    final hasPhone = c.victimPhone.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(14),
+      decoration: rcCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              const CircleAvatar(
+                radius: 22,
+                backgroundColor: RC.redSoft,
+                child: Icon(Icons.person, color: RC.red, size: 24),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Color(0xFFFFF1F2),
-                      child: Icon(
-                        Icons.person,
-                        color: Color(0xFFE52525),
-                        size: 24,
+                    Text(
+                      c.victimName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: RC.ink,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            vName,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            vPhone.isNotEmpty
-                                ? 'SĐT: $vPhone'
-                                : 'Đang cập nhật SĐT...',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+                    const SizedBox(height: 2),
+                    Text(
+                      hasPhone ? c.victimPhone : 'Chưa có số điện thoại',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: RC.muted,
+                        fontFeatures: RC.tabular,
                       ),
                     ),
                   ],
                 ),
               ),
-              Row(
-                children: [
-                  InkWell(
-                    onTap: () =>
-                        _showContactsBottomSheet(context, vName, vPhone),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE52525),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.phone_in_talk,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: () =>
-                        _showVictimInfoBottomSheet(context, vName, vAddress),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFE52525),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.message_outlined,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
+              RcRoundButton(
+                icon: Icons.phone,
+                color: RC.green,
+                tooltip: 'Danh bạ liên hệ',
+                onTap: () => _showContactsSheet(context),
+              ),
+              const SizedBox(width: 8),
+              RcRoundButton(
+                icon: Icons.chat_bubble_outline,
+                color: RC.ink,
+                tooltip: 'Tin nhắn',
+                onTap: () => _showFieldSheet(context, initialTab: 1),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF5F5),
+              color: RC.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFFCDD2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.red,
-                      size: 16,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'ĐỊA CHỈ SỰ CỐ:',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                    const Icon(Icons.place, color: RC.red, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        c.victimAddress,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          height: 1.35,
+                          color: RC.ink,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  controller.victimAddress,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF334155),
-                    height: 1.3,
+                if (c.isVictimLocationApproximate) ...[
+                  const SizedBox(height: 8),
+                  const RcPill(
+                    text: 'Vị trí lấy từ hồ sơ, có thể không chính xác',
+                    fg: RC.amber,
+                    bg: RC.amberSoft,
+                    icon: Icons.info_outline,
                   ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: c.hasVictimLocation
+                            ? c.openExternalNavigation
+                            : null,
+                        icon: const Icon(Icons.navigation_outlined, size: 18),
+                        label: const Text('Chỉ đường'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: RC.blue,
+                          minimumSize: const Size(0, 44),
+                          side: const BorderSide(color: RC.line),
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: c.victimAddress),
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã sao chép địa chỉ'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Sao chép'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: RC.body,
+                          minimumSize: const Size(0, 44),
+                          side: const BorderSide(color: RC.line),
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            ),
+          ),
+          if (c.trieuChung.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Triệu chứng người báo tin mô tả',
+              style: TextStyle(fontSize: 12.5, color: RC.muted),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final t in c.trieuChung.take(4))
+                  RcPill(text: t, fg: RC.redDark, bg: RC.redSoft),
+                if (c.trieuChung.length > 4)
+                  RcPill(
+                    text: '+${c.trieuChung.length - 4}',
+                    fg: RC.body,
+                    bg: RC.surface,
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => _showFieldSheet(context, initialTab: 0),
+              icon: const Icon(Icons.photo_library_outlined, size: 18),
+              label: const Text('Xem ảnh, mô tả và ghi âm hiện trường'),
+              style: TextButton.styleFrom(
+                foregroundColor: RC.blue,
+                minimumSize: const Size(0, 44),
+              ),
             ),
           ),
         ],
@@ -949,99 +196,553 @@ class VictimDetailCard extends StatelessWidget {
     );
   }
 
-  Widget _buildContactItem({
-    required String name,
-    required String relation,
-    required String phone,
-    required String tag,
-    required VoidCallback onCall,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+  // ── Danh bạ liên hệ ────────────────────────────────────────────────
+  void _showContactsSheet(BuildContext context) {
+    final c = context.read<RescueProcessController>();
+    final contacts = <_Contact>[
+      _Contact(
+        name: c.victimName,
+        note: 'Số điện thoại của nạn nhân',
+        phone: c.victimPhone,
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(
-              color: Color(0xFFFFEBEE),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.person_pin,
-              color: Color(0xFFE52525),
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+      const _Contact(
+        name: 'Tổng đài cấp cứu 115',
+        note: 'Điều phối viên hỗ trợ ca trực',
+        phone: '115',
+      ),
+      for (final m in c.teamMembers)
+        _Contact(
+          name: m['name'].toString(),
+          note: 'Đồng đội · ${m['role']}',
+          phone: m['phone'].toString(),
+        ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const RcGrabHandle(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 8, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Liên hệ khẩn cấp',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: RC.ink,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2F1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(Icons.close, color: RC.muted),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: RC.line),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                itemCount: contacts.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: RC.line),
+                itemBuilder: (_, i) {
+                  final ct = contacts[i];
+                  final callable = ct.phone.isNotEmpty;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                ct.name,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: RC.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                ct.note,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: RC.muted,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                callable ? ct.phone : 'Chưa có số điện thoại',
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: callable ? RC.body : RC.muted,
+                                  fontFeatures: RC.tabular,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        RcRoundButton(
+                          icon: Icons.phone,
+                          color: RC.green,
+                          tooltip: 'Gọi ${ct.name}',
+                          onTap: callable
+                              ? () {
+                                  Navigator.pop(sheetContext);
+                                  c.makePhoneCall(ct.phone);
+                                }
+                              : null,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Hiện trường + tin nhắn ─────────────────────────────────────────
+  void _showFieldSheet(BuildContext context, {required int initialTab}) {
+    final rescue = context.read<RescueProcessController>();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: rescue,
+        child: _FieldSheet(initialTab: initialTab),
+      ),
+    );
+  }
+}
+
+class _Contact {
+  final String name;
+  final String note;
+  final String phone;
+  const _Contact({required this.name, required this.note, required this.phone});
+}
+
+class _FieldSheet extends StatefulWidget {
+  final int initialTab;
+  const _FieldSheet({required this.initialTab});
+
+  @override
+  State<_FieldSheet> createState() => _FieldSheetState();
+}
+
+class _FieldSheetState extends State<_FieldSheet> {
+  final TextEditingController _input = TextEditingController();
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  void _send(RescueProcessController c) {
+    final text = _input.text.trim();
+    if (text.isEmpty) return;
+    c.guiTinNhan(text);
+    _input.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<RescueProcessController>();
+    final mq = MediaQuery.of(context);
+    // Thu chiều cao theo bàn phím để ô nhập tin nhắn không bị che.
+    final available = mq.size.height - mq.viewInsets.bottom - mq.padding.top - 8;
+    final height = math.min(mq.size.height * 0.92, available);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: Container(
+        height: height,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: DefaultTabController(
+          length: 2,
+          initialIndex: widget.initialTab,
+          child: Column(
+            children: [
+              const RcGrabHandle(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
+                child: Row(
+                  children: [
+                    Expanded(
                       child: Text(
-                        tag,
+                        c.victimName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF00897B),
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: RC.ink,
                         ),
                       ),
                     ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: RC.muted),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  relation,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const TabBar(
+                labelColor: RC.red,
+                unselectedLabelColor: RC.muted,
+                indicatorColor: RC.red,
+                labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                tabs: [Tab(text: 'Hiện trường'), Tab(text: 'Tin nhắn')],
+              ),
+              const Divider(height: 1, color: RC.line),
+              Expanded(
+                child: TabBarView(
+                  children: [_fieldTab(context, c), _chatTab(context, c)],
                 ),
-                const SizedBox(height: 2),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Tab hiện trường ────────────────────────────────────────────────
+  Widget _fieldTab(BuildContext context, RescueProcessController c) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: c.hinhAnhUrl.isEmpty
+                ? null
+                : () => _openPhoto(context, c.hinhAnhUrl),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                height: 210,
+                width: double.infinity,
+                color: RC.surface,
+                child: c.hinhAnhUrl.isEmpty
+                    ? const _ImagePlaceholder(
+                        icon: Icons.image_not_supported_outlined,
+                        text: 'Người báo tin không gửi ảnh',
+                      )
+                    : Image.network(
+                        c.hinhAnhUrl,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (_, child, progress) => progress == null
+                            ? child
+                            : const Center(
+                                child: CircularProgressIndicator(color: RC.red),
+                              ),
+                        errorBuilder: (_, __, ___) => const _ImagePlaceholder(
+                          icon: Icons.broken_image_outlined,
+                          text: 'Không tải được ảnh hiện trường',
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          if (c.hinhAnhUrl.isNotEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Chạm vào ảnh để phóng to',
+                style: TextStyle(fontSize: 12, color: RC.muted),
+              ),
+            ),
+          const SizedBox(height: 18),
+          const Text(
+            'Mô tả từ người báo tin',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: RC.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: RC.redSoft,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: RC.redLine),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  phone,
+                  c.moTaChiTiet,
                   style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
+                    fontSize: 14,
+                    height: 1.45,
+                    color: RC.ink,
                   ),
+                ),
+                if (c.trieuChung.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final t in c.trieuChung)
+                        RcPill(text: t, fg: RC.redDark, bg: Colors.white),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Ghi âm cuộc gọi báo tin',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: RC.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (c.ghiAmUrl.isEmpty)
+            const Text(
+              'Không có bản ghi âm cho ca này.',
+              style: TextStyle(fontSize: 13, color: RC.muted),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: () => c.openUrl(c.ghiAmUrl),
+              icon: const Icon(Icons.play_circle_outline),
+              label: const Text('Nghe bản ghi âm'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: RC.green,
+                minimumSize: const Size(0, 48),
+                side: const BorderSide(color: RC.greenLine),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _openPhoto(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Center(child: Image.network(url, fit: BoxFit.contain)),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Tab tin nhắn ───────────────────────────────────────────────────
+  Widget _chatTab(BuildContext context, RescueProcessController c) {
+    final maxBubble = MediaQuery.of(context).size.width * 0.78;
+    return Column(
+      children: [
+        if (c.chatError)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            color: RC.amberSoft,
+            child: const Text(
+              'Không tải được tin nhắn. Hãy kiểm tra kết nối mạng.',
+              style: TextStyle(fontSize: 12.5, color: RC.amber),
+            ),
+          ),
+        Expanded(
+          child: c.danhSachTinNhan.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'Chưa có tin nhắn. Gửi tin để phối hợp với người báo tin.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13.5, color: RC.muted),
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: c.danhSachTinNhan.length,
+                  itemBuilder: (_, i) {
+                    final m = c.danhSachTinNhan[i];
+                    final mine = m.maNguoiGui == c.currentDoctorId;
+                    final dynamic t = m.thoiGianGui;
+                    final time = t is DateTime ? clock(t) : '';
+                    final file = m.fileDinhKemUrl;
+
+                    return Align(
+                      alignment:
+                          mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: maxBubble),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: mine ? RC.ink : RC.surface,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(14),
+                              topRight: const Radius.circular(14),
+                              bottomLeft: Radius.circular(mine ? 14 : 4),
+                              bottomRight: Radius.circular(mine ? 4 : 14),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: mine
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                time.isEmpty
+                                    ? c.senderLabel(m.maNguoiGui)
+                                    : '${c.senderLabel(m.maNguoiGui)} · $time',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: mine ? Colors.white70 : RC.muted,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                m.noiDung,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  height: 1.3,
+                                  color: mine ? Colors.white : RC.ink,
+                                ),
+                              ),
+                              if (file != null && file.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      file,
+                                      height: 110,
+                                      width: 160,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        const Divider(height: 1, color: RC.line),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(c),
+                    decoration: InputDecoration(
+                      hintText: 'Nhập tin nhắn…',
+                      filled: true,
+                      fillColor: RC.surface,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                RcRoundButton(
+                  icon: Icons.send_rounded,
+                  color: RC.red,
+                  tooltip: 'Gửi',
+                  onTap: () => _send(c),
                 ),
               ],
             ),
           ),
-          InkWell(
-            onTap: onCall,
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: Color(0xFF10B981),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.phone, color: Colors.white, size: 18),
-            ),
-          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ImagePlaceholder extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _ImagePlaceholder({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: RC.muted, size: 36),
+          const SizedBox(height: 6),
+          Text(text, style: const TextStyle(color: RC.muted, fontSize: 13)),
         ],
       ),
     );

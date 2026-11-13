@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // THÊM THƯ VIỆ
 import 'DangNhap.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/firebase/presence_service.dart';
 import 'package:cuhokhancap/BackgroundService/background_service.dart';
 
 class ThongTinTaiKhoan extends StatefulWidget {
@@ -519,9 +520,10 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
         onPressed: () async {
           try {
             // 1. Cập nhật trạng thái Offline (Giới hạn tối đa 3s tránh nghẽn mạng)
-            await _firebaseService
-                .capNhatTrangThaiOnline(maNguoiDung, false)
-                .timeout(const Duration(seconds: 3));
+            // await _firebaseService
+            //     .capNhatTrangThaiOnline(maNguoiDung, false)
+            //     .timeout(const Duration(seconds: 3));
+            await PresenceService().stop().timeout(const Duration(seconds: 3));
           } catch (_) {
             // Bỏ qua lỗi nếu hết 3s để tiếp tục luồng đăng xuất
           }

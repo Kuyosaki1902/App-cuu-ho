@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'dart:typed_data';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ManHinhChoTiepNhanCa/ManHinhCho.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +9,10 @@ class LifeguardProfileHeader extends StatelessWidget {
   final String? name;
   final String? role;
   final String? maVaiTro;
-  final String? base64Image;
+
+  /// Avatar đã giải mã sẵn (cache ở controller) - không decode lại mỗi lần build.
+  final Uint8List? avatarBytes;
+  final int capDoUyTin;
   final ValueChanged<bool> onOnlineChanged;
   final VoidCallback? onExitToUserMode;
 
@@ -20,26 +23,15 @@ class LifeguardProfileHeader extends StatelessWidget {
     required this.name,
     required this.role,
     required this.maVaiTro,
-    required this.base64Image,
+    required this.avatarBytes,
+    this.capDoUyTin = 1,
     this.onExitToUserMode,
   });
-
-  Uint8List? _getDecodedImage(String? base64Str) {
-    if (base64Str == null || base64Str.isEmpty) return null;
-    try {
-      String cleanBase64 = base64Str.contains(',')
-          ? base64Str.split(',').last
-          : base64Str;
-      return base64Decode(cleanBase64.trim());
-    } catch (_) {
-      return null;
-    }
-  }
 
   void _showOfflineConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -60,7 +52,7 @@ class LifeguardProfileHeader extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
@@ -71,7 +63,7 @@ class LifeguardProfileHeader extends StatelessWidget {
                 ),
               ),
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 onOnlineChanged(false);
               },
               child: const Text(
@@ -88,9 +80,56 @@ class LifeguardProfileHeader extends StatelessWidget {
     );
   }
 
+  Widget _buildRoleBadge() {
+    if (maVaiTro == 'vaitro_cuuhococc') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDCFCE7),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.verified_rounded, size: 12, color: Color(0xFF166534)),
+            SizedBox(width: 4),
+            Text(
+              'ĐÃ DUYỆT',
+              style: TextStyle(
+                color: Color(0xFF166534),
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (maVaiTro == 'vaitro_cuuhochuacocc') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '• Độ Uy Tín: $capDoUyTin',
+          style: const TextStyle(
+            color: Color(0xFF4338CA),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Uint8List? imageBytes = _getDecodedImage(base64Image);
+    final radiusText = TrangChuController.kNearbyRadiusMeters.toStringAsFixed(
+      0,
+    );
 
     return Container(
       color: const Color(0xFFF8FAFC),
@@ -100,7 +139,6 @@ class LifeguardProfileHeader extends StatelessWidget {
           // Row 1: Profile & Action Icons
           Row(
             children: [
-              // Avatar với indicator online
               Stack(
                 children: [
                   Container(
@@ -117,10 +155,10 @@ class LifeguardProfileHeader extends StatelessWidget {
                     child: CircleAvatar(
                       radius: 22,
                       backgroundColor: const Color(0xFF0284C7),
-                      backgroundImage: imageBytes != null
-                          ? MemoryImage(imageBytes)
+                      backgroundImage: avatarBytes != null
+                          ? MemoryImage(avatarBytes!)
                           : null,
-                      child: imageBytes == null
+                      child: avatarBytes == null
                           ? const Icon(
                               Icons.person,
                               color: Colors.white,
@@ -148,7 +186,7 @@ class LifeguardProfileHeader extends StatelessWidget {
               ),
               const SizedBox(width: 10),
 
-              // Name + Badge Cấp
+              // Name + Badge
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,75 +208,7 @@ class LifeguardProfileHeader extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Builder(
-                          builder: (context) {
-                            // 1. Nếu là Cứu hộ viên có CCHN (Đã duyệt)
-                            if (maVaiTro == 'vaitro_cuuhococc') {
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFFDCFCE7,
-                                  ), // Nền xanh lá nhạt
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.verified_rounded,
-                                      size: 12,
-                                      color: Color(
-                                        0xFF166534,
-                                      ), // Icon tích xanh
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'ĐÃ DUYỆT',
-                                      style: TextStyle(
-                                        color: Color(0xFF166534),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            // 2. Nếu là Cứu hộ viên chưa CCHN -> Hiển thị Cấp độ uy tín (Cấp 1 đến Cấp 3)
-                            else if (maVaiTro == 'vaitro_cuuhochuacocc') {
-                              // Giả định capDoUyTin lấy từ controller hoặc truyền vào (mặc định 1)
-                              int capDoUyTin = 1;
-
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFFEEF2FF,
-                                  ), // Nền tím nhạt
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '• Độ Uy Tín: $capDoUyTin',
-                                  style: const TextStyle(
-                                    color: Color(0xFF4338CA),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            }
-
-                            // 3. Mặc định cho các vai trò khác (nếu có)
-                            return const SizedBox.shrink();
-                          },
-                        ),
+                        _buildRoleBadge(),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -250,12 +220,15 @@ class LifeguardProfileHeader extends StatelessWidget {
                           color: Color(0xFFEF4444),
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          role ?? 'Đang cập nhật',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                        Flexible(
+                          child: Text(
+                            role ?? 'Đang cập nhật',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -264,65 +237,38 @@ class LifeguardProfileHeader extends StatelessWidget {
                 ),
               ),
 
-              // Notification Badge Icon
-              Stack(
-                children: [
-                  Consumer<TrangChuController>(
-                    builder: (context, controller, child) {
-                      return Badge(
-                        isLabelVisible:
-                            controller.soThongBaoChuaDoc >
-                            0, // Chỉ hiển thị khi có thông báo mới
-                        label: Text(
-                          '${controller.soThongBaoChuaDoc}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        backgroundColor: Colors.red,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.notifications_none_rounded,
-                            size: 28,
-                            color: Color(0xFF0F172A),
-                          ),
-                          onPressed: () {
-                            // Bấm vào icon để mở ModalBottomSheet xem danh sách thông báo
-                            _showNotificationBottomSheet(context, controller);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  Positioned(
-                    top: 2,
-                    right: 2,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        '',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
+              // 🟢 Chuông thông báo: chỉ còn Badge thật (đã bỏ chấm đỏ luôn bật)
+              Consumer<TrangChuController>(
+                builder: (context, controller, child) {
+                  return Badge(
+                    isLabelVisible: controller.soThongBaoChuaDoc > 0,
+                    label: Text(
+                      '${controller.soThongBaoChuaDoc}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                ],
+                    backgroundColor: Colors.red,
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.notifications_none_rounded,
+                        size: 28,
+                        color: Color(0xFF0F172A),
+                      ),
+                      onPressed: () =>
+                          _showNotificationBottomSheet(context, controller),
+                    ),
+                  );
+                },
               ),
             ],
           ),
 
           const SizedBox(height: 12),
 
-          // Row 2: Capsule Banner Công tác / Trực chiến
+          // Row 2: Banner Trực chiến
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
@@ -377,7 +323,7 @@ class LifeguardProfileHeader extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             isOnline
-                                ? 'GPS trực tiếp • Bán kính 5m'
+                                ? 'GPS trực tiếp • Bán kính ${radiusText}m'
                                 : 'Đã tắt chia sẻ GPS',
                             style: TextStyle(
                               color: Colors.grey.shade600,
@@ -416,112 +362,158 @@ class LifeguardProfileHeader extends StatelessWidget {
 }
 
 void _showNotificationBottomSheet(
-  BuildContext context,
+  BuildContext parentContext,
   TrangChuController controller,
 ) {
   showModalBottomSheet(
-    context: context,
+    context: parentContext,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (context) {
-      return Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    builder: (sheetContext) {
+      // 🟢 AnimatedBuilder: danh sách cập nhật realtime khi sheet đang mở
+      // (sheet nằm ngoài cây Provider nên lắng nghe trực tiếp controller)
+      return AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          final list = controller.danhSachThongBao;
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Thông báo cứu hộ',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Thông báo cứu hộ',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+                const Divider(),
+                Expanded(
+                  child: list.isEmpty
+                      ? const Center(
+                          child: Text('Không có thông báo nào trong ngày'),
+                        )
+                      : ListView.builder(
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final item = list[index];
+                            final bool isChuaTiepNhan =
+                                item['maTrangThaiTiepNhan'] ==
+                                'cuuho_trangthai_phancong_chotiepnhan';
+                            final String maYeuCau =
+                                (item['maYeuCau'] ?? '').toString().isNotEmpty
+                                ? item['maYeuCau'].toString()
+                                : item['id'].toString();
+                            String trangThai = '';
+                            switch (item['maTrangThaiTiepNhan']) {
+                              case 'cuuho_trangthai_phancong_chotiepnhan':
+                                trangThai = 'Chờ tiếp nhận';
+                                break;
+                              case 'cuuho_trangthai_phancong_tiepnhan':
+                                trangThai = 'Tiếp nhận';
+                                break;
+                              case 'cuuho_trangthai_phancong_tuchoi':
+                                trangThai = 'Từ chối';
+                                break;
+                              case 'cuuho_trangthai_phancong_hoanthanh':
+                                trangThai = 'Hoàn thành';
+                                break;
+                              default:
+                                trangThai = 'Đã hủy';
+                                break;
+                            }
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isChuaTiepNhan
+                                    ? const Color(0xFFFEF2F2)
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isChuaTiepNhan
+                                      ? Colors.red.shade200
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: isChuaTiepNhan
+                                      ? Colors.red
+                                      : Colors.grey,
+                                ),
+                                title: Text(
+                                  isChuaTiepNhan
+                                      ? '🚨 Ca cứu hộ mới cần tiếp nhận'
+                                      : 'Thông báo ca cứu hộ',
+                                  style: TextStyle(
+                                    fontWeight: isChuaTiepNhan
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                subtitle: Text('Mã yêu cầu: $maYeuCau'),
+                                trailing: isChuaTiepNhan
+                                    ? ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          Navigator.pop(sheetContext);
+                                          // 🟢 Điều hướng tới màn hình chờ tiếp nhận ca
+                                          Navigator.push(
+                                            parentContext,
+                                            MaterialPageRoute(
+                                              builder: (_) => Manhinhcho(
+                                                currentUserId:
+                                                    controller.userID,
+                                                maYeuCauCuuHo: maYeuCau,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: Text(
+                                          'Xem ca',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      )
+                                    : Text(
+                                        trangThai.isNotEmpty
+                                            ? trangThai
+                                            : 'Đang cập nhật',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
-            const Divider(),
-            Expanded(
-              child: controller.danhSachThongBao.isEmpty
-                  ? const Center(
-                      child: Text('Không có thông báo nào trong ngày'),
-                    )
-                  : ListView.builder(
-                      itemCount: controller.danhSachThongBao.length,
-                      itemBuilder: (context, index) {
-                        var item = controller.danhSachThongBao[index];
-                        bool isChuaTiepNhan =
-                            item['maTrangThaiTiepNhan'] ==
-                            'cuuho_trangthai_phancong_chotiepnhan';
-
-                        return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isChuaTiepNhan
-                                ? const Color(0xFFFEF2F2)
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isChuaTiepNhan
-                                  ? Colors.red.shade200
-                                  : Colors.transparent,
-                            ),
-                          ),
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.warning_amber_rounded,
-                              color: isChuaTiepNhan ? Colors.red : Colors.grey,
-                            ),
-                            title: Text(
-                              isChuaTiepNhan
-                                  ? '🚨 Ca cứu hộ mới cần tiếp nhận'
-                                  : 'Thông báo ca cứu hộ',
-                              style: TextStyle(
-                                fontWeight: isChuaTiepNhan
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            subtitle: Text('Mã yêu cầu: ${item['id']}'),
-                            trailing: isChuaTiepNhan
-                                ? ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      // Điều hướng tới màn hình nhận ca cấp cứu / Alert Dialog
-                                    },
-                                    child: const Text(
-                                      'Xem ca',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  )
-                                : const Text(
-                                    'Đã xử lý',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
+          );
+        },
       );
     },
   );

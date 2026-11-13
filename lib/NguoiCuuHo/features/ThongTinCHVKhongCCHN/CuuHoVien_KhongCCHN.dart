@@ -1,22 +1,93 @@
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThongTinCHVKhongCCHN/controllers/chv_khong_cchn_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/DieuHuongCuuHo.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangThaiXacThuc/trang_thai_xac_thuc_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'controllers/chv_khong_cchn_controller.dart';
 import 'widgets/section_ekyc_no_cchn.dart';
+import 'widgets/section_evidence.dart';
 import 'widgets/section_experience.dart';
-import 'widgets/section_photos.dart';
+import 'widgets/section_quiz.dart';
 import 'widgets/terms_box_no_cchn.dart';
 
 class CuuhovienKhongcchn extends StatelessWidget {
-  const CuuhovienKhongcchn({super.key});
-  final String currentUserId = 'nguoidung6';
+  /// Mã người dùng đang đăng nhập (truyền từ màn chọn loại / màn trạng thái).
+  final String currentUserId;
+
+  /// Họ tên thật lấy từ tài khoản. Không có thì để trống, người dùng sẽ thấy
+  /// ô họ tên trống và bị chặn nộp (controller yêu cầu có họ tên).
+  final String userFullName;
+
+  const CuuhovienKhongcchn({
+    super.key,
+    required this.currentUserId,
+    this.userFullName = '',
+  });
+
+  void _showMessage(BuildContext context, String text, Color color) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
+  }
+
+  Future<void> _onSubmit(
+    BuildContext context,
+    CuuHoVienKhongCCHNController controller,
+  ) async {
+    // 1. Kiểm tra các điều kiện còn thiếu (báo mục đầu tiên chưa đạt)
+    final missing = controller.firstMissingMessage;
+    if (missing != null) {
+      _showMessage(context, missing, Colors.orange);
+      // Hiện luôn lỗi dưới từng ô nhập nếu có.
+      controller.formKey.currentState?.validate();
+      return;
+    }
+    if (!(controller.formKey.currentState?.validate() ?? false)) {
+      _showMessage(
+        context,
+        'Vui lòng kiểm tra lại các ô còn báo lỗi',
+        Colors.orange,
+      );
+      return;
+    }
+
+    // 2. Gửi hồ sơ
+    final success = await controller.submitHoSoToFirebase(currentUserId);
+    if (!context.mounted) return;
+
+    if (success) {
+      _showMessage(
+        context,
+        'Gửi hồ sơ thành công! Hồ sơ đang chờ thẩm định.',
+        Colors.green,
+      );
+      // Xóa hết các màn đăng ký phía dưới (màn chọn loại, form) để nút Back
+      // không đưa người dùng quay lại đăng ký lần nữa.
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TrangThaiXacThucScreen(
+            userId: currentUserId,
+            isCoCCHN: false,
+            onDangXuat: () => DieuHuongCuuHo.dangXuat(context),
+          ),
+        ),
+        (route) => false,
+      );
+    } else {
+      _showMessage(
+        context,
+        'Lưu hồ sơ thất bại. Vui lòng thử lại!',
+        Colors.red,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    String userFullName = 'BS.Nguyễn Hoàng Thiên';
+    // Tên thật lấy từ tài khoản (controller tự bỏ danh xưng "BS." nếu có).
     return ChangeNotifierProvider(
-      create: (_) => CuuHoVienKhongCCHNController(
-        existingFullName: userFullName, // 🟢 Truyền tên vào đây
-      ),
+      create: (_) =>
+          CuuHoVienKhongCCHNController(existingFullName: userFullName),
       child: Consumer<CuuHoVienKhongCCHNController>(
         builder: (context, controller, child) {
           return Scaffold(
@@ -26,19 +97,19 @@ class CuuhovienKhongcchn extends StatelessWidget {
               elevation: 0,
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.black),
-                onPressed: () {},
+                onPressed: () => Navigator.maybePop(context),
               ),
               title: const Text(
-                'X.Thực Cứu hộ viên (Không CCHN)',
+                'Xác thực Cứu hộ viên (Không CCHN)',
                 style: TextStyle(
                   color: Colors.black,
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: 17,
                 ),
               ),
               centerTitle: true,
-              actions: [
-                const Padding(
+              actions: const [
+                Padding(
                   padding: EdgeInsets.only(right: 10.0),
                   child: CircleAvatar(
                     radius: 16,
@@ -55,28 +126,21 @@ class CuuhovienKhongcchn extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Section 1: eKYC
-                    const SectionEkycNoCchn(),
+                    const SectionEkycNoCchn(), // 1. Danh tính + ảnh giấy tờ
                     const SizedBox(height: 16),
-
-                    // Section 2: Kinh nghiệm & Kỹ năng
-                    const SectionExperience(),
+                    const SectionExperience(), // 2. Kinh nghiệm, tổ chức, kỹ năng tự khai
                     const SizedBox(height: 16),
-
-                    // Section 3: Ảnh thực tế
-                    const SectionPhotos(),
+                    const SectionEvidence(), // 3. Minh chứng + người bảo chứng
                     const SizedBox(height: 16),
-
-                    // Terms Box
+                    const SectionQuiz(), // 4. Bài kiểm tra năng lực
+                    const SizedBox(height: 16),
                     const TermsBoxNoCchn(),
                     const SizedBox(height: 20),
-
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          // 🟢 Chỉ hiện màu đỏ khi đã nhập ĐỦ THÔNG TIN và tích cam kết
                           backgroundColor: controller.isFormValid
                               ? const Color(0xFFB71C1C)
                               : Colors.grey.shade400,
@@ -87,105 +151,7 @@ class CuuhovienKhongcchn extends StatelessWidget {
                         ),
                         onPressed: controller.isSubmitting
                             ? null
-                            : () async {
-                                // 1. Kiểm tra các điều kiện thông tin còn thiếu
-                                if (!controller.isAgreed) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Vui lòng tích chọn cam kết năng lực!',
-                                      ),
-                                      backgroundColor: Colors.orange,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (controller.cccdCardNoController.text
-                                    .trim()
-                                    .isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Vui lòng nhập số thẻ CCCD/Căn cước!',
-                                      ),
-                                      backgroundColor: Colors.orange,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (controller.organizationController.text
-                                    .trim()
-                                    .isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Vui lòng nhập Đội nhóm / Tổ chức tham gia!',
-                                      ),
-                                      backgroundColor: Colors.orange,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                if (controller.selectedPhotos.isEmpty) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Vui lòng tải lên ít nhất 1 ảnh thực tế!',
-                                      ),
-                                      backgroundColor: Colors.orange,
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                // 2. Thực hiện gửi khi tất cả đã hợp lệ
-                                if (controller.isFormValid &&
-                                    controller.formKey.currentState!
-                                        .validate()) {
-                                  bool success = await controller
-                                      .submitHoSoToFirebase(currentUserId);
-
-                                  if (context.mounted) {
-                                    if (success) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Gửi hồ sơ thành công!',
-                                          ),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-
-                                      Navigator.pushReplacement(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              TrangThaiXacThucScreen(
-                                                userId: currentUserId,
-                                                isCoCCHN: false,
-                                              ),
-                                        ),
-                                      );
-                                    } else {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Lưu hồ sơ thất bại. Vui lòng thử lại!',
-                                          ),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  }
-                                }
-                              },
+                            : () => _onSubmit(context, controller),
                         child: controller.isSubmitting
                             ? const SizedBox(
                                 width: 24,

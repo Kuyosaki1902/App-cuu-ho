@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/LichSuCaCuuHo/controller/man_hinh_lich_su_ca_controller.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 class ManHinhLichSuCa extends StatelessWidget {
@@ -267,6 +266,7 @@ class _RescueHistoryList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.read<ManHinhLichSuCaController>();
+    context.select<ManHinhLichSuCaController, DateTime>((c) => c.selectedDate);
     final searchQuery = context.select<ManHinhLichSuCaController, String>(
       (c) => c.searchQuery,
     );
@@ -458,7 +458,7 @@ class _RescueCardItem extends StatelessWidget {
     Map<String, dynamic> statusStyle = controller.getStatusStyle(maTrangThai);
 
     String code = '#${docId.toUpperCase()}';
-    String timeBadgeText = controller.formatTimeText(data['thoiGianTao']);
+    String timeBadgeText = controller.formatTimeText(data['thoiGianTiepNhan']);
 
     String t1 =
         'Tiếp nhận: ${controller.formatTimeText(data['thoiGianTiepNhan'])}';
@@ -516,7 +516,7 @@ class _RescueCardItem extends StatelessWidget {
                                 color: Color(0xFF0F172A),
                               ),
                             ),
-                            const SizedBox(width: 20),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,

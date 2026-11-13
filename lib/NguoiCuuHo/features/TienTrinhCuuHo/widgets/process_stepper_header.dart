@@ -1,202 +1,236 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../controllers/rescue_process_controller.dart';
 
+import '../controllers/rescue_process_controller.dart';
+import 'rescue_theme.dart';
+
+/// Thẻ nổi: cứu hộ viên + mã ca + tiến trình 4 bước.
 class ProcessStepperHeader extends StatelessWidget {
   const ProcessStepperHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<RescueProcessController>();
-    final int step = controller.currentStep;
+    final c = context.watch<RescueProcessController>();
+    final code = c.maYeuCau.length > 8
+        ? c.maYeuCau.substring(c.maYeuCau.length - 8)
+        : c.maYeuCau;
 
     return Container(
-      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: RC.line),
+        boxShadow: RC.shadow,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 🔴 1. HEADER BÁC SĨ & TRẠNG THÁI (Đã đổi Avatar sang bên trái tên)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                // 🟢 ĐẶT AVATAR BÊN TRÁI TÊN
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFFE52525),
-                      width: 1.5,
+          Row(
+            children: [
+              _Avatar(url: c.doctorAvatarUrl, initials: c.doctorInitials),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      c.doctorName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: RC.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: RC.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Đang trực · ${c.doctorRoleLabel}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: RC.muted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Mã ca',
+                    style: TextStyle(fontSize: 11, color: RC.muted),
+                  ),
+                  Text(
+                    '#$code',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: RC.ink,
+                      fontFeatures: RC.tabular,
                     ),
                   ),
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.white,
-                    backgroundImage:
-                        (controller.doctorAvatarUrl != null &&
-                            controller.doctorAvatarUrl!.isNotEmpty)
-                        ? NetworkImage(controller.doctorAvatarUrl!)
-                        : null,
-                    child:
-                        (controller.doctorAvatarUrl == null ||
-                            controller.doctorAvatarUrl!.isEmpty)
-                        ? const Text(
-                            'BS',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE52525),
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Thông tin Bác sĩ & Tag 115
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              controller.doctorName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFEBEE),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: const Color(0xFFFFCDD2),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: const Text(
-                              '115',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFE52525),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: const [
-                          Icon(Icons.circle, size: 8, color: Color(0xFF10B981)),
-                          SizedBox(width: 4),
-                          Text(
-                            'Đang trực cứu hộ',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF10B981),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Icon Phát sóng / Sẵn sàng bên phải (nếu cần)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFFFF1F2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.sensors,
-                    size: 20,
-                    color: Color(0xFFE52525),
-                  ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-          // 🟢 2. THANH STEPPER 4 BƯỚC
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                _buildStepItem(0, step, '1. Di chuyển', Icons.directions_run),
-                _buildLine(step >= 1),
-                _buildStepItem(1, step, '2. Đến nơi', Icons.location_on),
-                _buildLine(step >= 2),
-                _buildStepItem(2, step, '3. Cứu nạn', Icons.medical_services),
-                _buildLine(step >= 3),
-                _buildStepItem(3, step, '4. Hoàn tất', Icons.local_shipping),
-              ],
-            ),
-          ),
+          const SizedBox(height: 14),
+          _StepRow(step: c.currentStep),
         ],
       ),
     );
   }
+}
 
-  Widget _buildStepItem(
-    int index,
-    int currentIndex,
-    String title,
-    IconData icon,
-  ) {
-    final isDone = index < currentIndex;
-    final isCurrent = index == currentIndex;
+class _Avatar extends StatelessWidget {
+  final String? url;
+  final String initials;
+  const _Avatar({required this.url, required this.initials});
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = url != null && url!.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: RC.red, width: 1.5),
+      ),
+      child: CircleAvatar(
+        radius: 19,
+        backgroundColor: RC.redSoft,
+        backgroundImage: hasUrl ? NetworkImage(url!) : null,
+        onBackgroundImageError: hasUrl ? (_, __) {} : null,
+        child: hasUrl
+            ? null
+            : Text(
+                initials,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: RC.red,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  final int step;
+  const _StepRow({required this.step});
+
+  static const _labels = ['Di chuyển', 'Đến nơi', 'Cứu nạn', 'Hoàn tất'];
+  static const _icons = [
+    Icons.directions_run,
+    Icons.place_outlined,
+    Icons.medical_services_outlined,
+    Icons.task_alt,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: isDone
-              ? const Color(0xFF00C853)
-              : (isCurrent ? const Color(0xFFE52525) : Colors.grey.shade200),
-          child: Icon(
-            isDone ? Icons.check : icon,
-            size: 16,
-            color: Colors.white,
+        for (var i = 0; i < 4; i++) ...[
+          _StepNode(
+            label: _labels[i],
+            icon: _icons[i],
+            done: i < step,
+            current: i == step,
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
+          if (i < 3)
+            Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.only(top: 13),
+                height: 2,
+                color: step > i ? RC.green : RC.line,
+              ),
+            ),
+        ],
       ],
     );
   }
+}
 
-  Widget _buildLine(bool isActive) {
-    return Expanded(
-      child: Container(
-        height: 2,
-        color: isActive ? const Color(0xFF00C853) : Colors.grey.shade300,
-        margin: const EdgeInsets.only(bottom: 20),
+class _StepNode extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool done;
+  final bool current;
+
+  const _StepNode({
+    required this.label,
+    required this.icon,
+    required this.done,
+    required this.current,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 62,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: done ? RC.green : (current ? RC.red : RC.surface),
+              boxShadow: current
+                  ? [
+                      BoxShadow(
+                        color: RC.red.withOpacity(0.2),
+                        spreadRadius: 4,
+                        blurRadius: 0,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Icon(
+              done ? Icons.check : icon,
+              size: 16,
+              color: (done || current) ? Colors.white : RC.muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: current ? FontWeight.w700 : FontWeight.w500,
+              color: current ? RC.ink : RC.muted,
+            ),
+          ),
+        ],
       ),
     );
   }

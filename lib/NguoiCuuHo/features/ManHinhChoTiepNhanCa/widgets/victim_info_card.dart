@@ -1,66 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../controllers/emergency_alert_controller.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/alert_style.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/rescue_theme.dart';
 
+/// Thông tin để cứu hộ viên quyết định nhận ca: nạn nhân, địa chỉ, mô tả hiện trường.
+/// Chỉ hiển thị phần có dữ liệu thật, không còn dòng "có video" cố định.
 class VictimInfoCard extends StatelessWidget {
   const VictimInfoCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<EmergencyAlertController>();
-
-    bool isLevel1 = controller.mucDoKhanCap == 1;
-    Color themeColor = isLevel1
-        ? const Color(0xFFDC2626)
-        : Colors.amber.shade800;
-    Color badgeBgColor = isLevel1
-        ? const Color(0xFFFEE2E2)
-        : const Color(0xFFFEF3C7);
-    String labelText = isLevel1 ? '● Nguy kịch' : '● Cấp độ 2';
+    final c = context.watch<EmergencyAlertController>();
+    final style = AlertStyle.of(c.mucDoKhanCap);
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.all(14),
+      decoration: rcCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'THÔNG TIN NẠN NHÂN',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF64748B),
-                  letterSpacing: 0.5,
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: style.soft,
+                child: Icon(Icons.person, color: style.color, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      c.victimName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: RC.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      c.hasVictimPhone
+                          ? c.victimPhone
+                          : 'Chưa có số điện thoại',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: RC.muted,
+                        fontFeatures: RC.tabular,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeBgColor,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  labelText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: themeColor,
-                  ),
-                ),
+              RcRoundButton(
+                icon: Icons.phone,
+                color: RC.green,
+                tooltip: 'Gọi nạn nhân',
+                onTap: c.hasVictimPhone ? c.makePhoneCall : null,
               ),
             ],
           ),
@@ -68,136 +69,201 @@ class VictimInfoCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF1F5F9)),
+              color: RC.surface,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Color(0xFFE2E8F0),
-                  child: Icon(Icons.person, color: Color(0xFF64748B)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        controller.victimName,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.place, color: style.color, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        c.address,
                         style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0F172A),
+                          fontSize: 13.5,
+                          height: 1.35,
+                          color: RC.ink,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        controller.victimPhone,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF64748B),
+                    ),
+                  ],
+                ),
+                if (c.isVictimLocationApproximate) ...[
+                  const SizedBox(height: 8),
+                  const RcPill(
+                    text: 'Vị trí lấy từ hồ sơ, có thể không chính xác',
+                    fg: RC.amber,
+                    bg: RC.amberSoft,
+                    icon: Icons.info_outline,
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: c.hasVictimLocation
+                            ? c.openExternalNavigation
+                            : null,
+                        icon: const Icon(Icons.navigation_outlined, size: 18),
+                        label: const Text('Xem đường đi'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: RC.blue,
+                          minimumSize: const Size(0, 44),
+                          side: const BorderSide(color: RC.line),
+                          backgroundColor: Colors.white,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => controller.makePhoneCall(),
-                  icon: const Icon(Icons.phone, size: 16),
-                  label: const Text('Gọi ngay'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: themeColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: c.hasVictimLocation
+                            ? () async {
+                                await Clipboard.setData(
+                                  ClipboardData(
+                                    text:
+                                        '${c.victimLocation.latitude}, ${c.victimLocation.longitude}',
+                                  ),
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Đã sao chép toạ độ'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              }
+                            : null,
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Sao chép toạ độ'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: RC.body,
+                          minimumSize: const Size(0, 44),
+                          side: const BorderSide(color: RC.line),
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
                     ),
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    elevation: 0,
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => controller.playVictimVideo(),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isLevel1
-                    ? const Color(0xFFFFF1F2)
-                    : const Color(0xFFFFFBEB),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isLevel1
-                      ? const Color(0xFFFECDD3)
-                      : const Color(0xFFFDE68A),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: themeColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.videocam_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Có video hiện trường do nạn nhân gửi',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: isLevel1
-                                ? const Color(0xFF9F1239)
-                                : Colors.amber.shade900,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Bấm để xem video & đánh giá đường thở',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isLevel1
-                                ? const Color(0xFFBE123C)
-                                : Colors.amber.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.play_circle_fill_rounded,
-                    color: isLevel1
-                        ? const Color(0xFFE11D48)
-                        : Colors.amber.shade800,
-                    size: 28,
-                  ),
-                ],
+          if (c.hasFieldInfo) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Người báo tin mô tả',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: RC.ink,
               ),
             ),
-          ),
+            if (c.trieuChung.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in c.trieuChung)
+                    RcPill(text: t, fg: style.color, bg: style.soft),
+                ],
+              ),
+            ],
+            if (c.moTaChiTiet.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                c.moTaChiTiet,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.4,
+                  color: RC.body,
+                ),
+              ),
+            ],
+            if (c.hinhAnhUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => _openPhoto(context, c.hinhAnhUrl),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    height: 150,
+                    width: double.infinity,
+                    child: Image.network(
+                      c.hinhAnhUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (_, child, p) => p == null
+                          ? child
+                          : const Center(
+                              child: CircularProgressIndicator(color: RC.red),
+                            ),
+                      errorBuilder: (_, __, ___) => Container(
+                        color: RC.surface,
+                        alignment: Alignment.center,
+                        child: const Text(
+                          'Không tải được ảnh hiện trường',
+                          style: TextStyle(color: RC.muted, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Chạm vào ảnh để phóng to',
+                  style: TextStyle(fontSize: 12, color: RC.muted),
+                ),
+              ),
+            ],
+            if (c.ghiAmUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => c.openUrl(c.ghiAmUrl),
+                icon: const Icon(Icons.play_circle_outline),
+                label: const Text('Nghe ghi âm báo tin'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: RC.green,
+                  minimumSize: const Size(0, 46),
+                  side: const BorderSide(color: RC.greenLine),
+                ),
+              ),
+            ],
+          ],
         ],
+      ),
+    );
+  }
+
+  void _openPhoto(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Center(child: Image.network(url, fit: BoxFit.contain)),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

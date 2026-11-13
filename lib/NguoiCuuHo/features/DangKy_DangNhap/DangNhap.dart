@@ -1,6 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/QuenMatKhau%20copy.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/TrangChu_NCH.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/DieuHuongCuuHo.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/QuenMatKhau.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,118 +52,107 @@ class _DangNhapState extends State<DangNhap> {
 
     if (user != null && user.maNguoiDung != null) {
       String userId = user.maNguoiDung!;
-      final firestore = FirebaseFirestore.instance;
-
-      // 🟢 1. KIỂM TRA HỒ SƠ CỨU HỘ TRONG 2 BẢNG (HoSoCuuHoCoCCHN & HoSoCuuHoKhongCCHN)
-      DocumentSnapshot coCCHNDoc = await firestore
-          .collection('HoSoCuuHoCoCCHN')
-          .doc(userId)
-          .get();
-      DocumentSnapshot khongCCHNDoc = await firestore
-          .collection('HoSoCuuHoKhongCCHN')
-          .doc(userId)
-          .get();
-
-      String maVaiTroMoi = '';
-
-      if (coCCHNDoc.exists) {
-        maVaiTroMoi = 'vaitro_cuuhococc';
-      } else if (khongCCHNDoc.exists) {
-        maVaiTroMoi =
-            'vaitro_cuhochuacocc'; // Hoặc 'vaitro_cuhokhongcocc' tùy mã bạn quy định
-      } else {
-        // Nếu không tồn tại ở cả 2 bảng hồ sơ cứu hộ -> Chặn đăng nhập
+      // 1. Kiểm tra hồ sơ cứu hộ ở 2 bảng. Lỗi mạng thì DỪNG và báo lỗi, tuyệt đối
+      //    không coi là "chưa đăng ký" (người đã có hồ sơ sẽ bị cho đăng ký đè lên).
+      final KetQuaHoSoCuuHo ketQua;
+      try {
+        ketQua = await DieuHuongCuuHo.kiemTraHoSo(userId);
+      } catch (e) {
         if (mounted) setState(() => _isLoading = false);
         _showSnackBar(
-          'Tài khoản của bạn chưa đăng ký hồ sơ Cứu hộ viên!',
+          'Không kiểm tra được hồ sơ cứu hộ. Vui lòng kiểm tra mạng và thử lại!',
           Colors.red,
         );
         return;
       }
 
-      // 🟢 2. CẬP NHẬT LẠI MAVAITRO PHÙ HỢP TRÊN BẢNG NGUOIDUNG
-      if (user.maVaiTro != maVaiTroMoi) {
-        await firestore.collection('NguoiDung').doc(userId).set({
-          'maVaiTro': maVaiTroMoi,
-        }, SetOptions(merge: true));
-        user.maVaiTro =
-            maVaiTroMoi; // Cập nhật lại trong đối tượng user để sử dụng sau này
-      }
-
-      // 🟢 3. KIỂM TRA ĐANG HOẠT ĐỘNG Ở MÁY KHÁC KHÔNG
-      bool dangOnline = await _firebaseService.kiemTraDangOnlineRealtime(
-        userId,
-      );
       String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
 
-      if (dangOnline && mounted) {
-        setState(() => _isLoading = false); // Tạm tắt loading để hiện bảng hỏi
-
-        bool? xacNhan = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text(
-              'Cảnh báo đăng nhập',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-            content: const Text(
-              'Hiện tài khoản đang được sử dụng ở nơi khác, bạn có muốn đăng nhập?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false), // Hủy
-                child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                onPressed: () =>
-                    Navigator.pop(context, true), // Đồng ý đá máy kia
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFB71C1C),
-                ),
-                child: const Text(
-                  'Đăng nhập',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
+      // 2. Chỉ khi vào thẳng trang chủ (hồ sơ đã duyệt) mới cần kiểm tra
+      //    tài khoản có đang hoạt động ở máy khác không.
+      if (ketQua.daDuyet) {
+        bool dangOnline = await _firebaseService.kiemTraDangOnlineRealtime(
+          userId,
         );
 
-        if (xacNhan != true) return; // Nếu chọn Hủy thì thoát
+        if (dangOnline && mounted) {
+          setState(
+            () => _isLoading = false,
+          ); // Tạm tắt loading để hiện bảng hỏi
 
-        setState(() => _isLoading = true); // Bật lại vòng xoay loading
+          bool? xacNhan = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text(
+                'Cảnh báo đăng nhập',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+              content: const Text(
+                'Hiện tài khoản đang được sử dụng ở nơi khác, bạn có muốn đăng nhập?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false), // Hủy
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () =>
+                      Navigator.pop(context, true), // Đồng ý đá máy kia
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFB71C1C),
+                  ),
+                  child: const Text(
+                    'Đăng nhập',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          );
 
-        // GHI ĐÈ MÃ THIẾT BỊ MỚI LÊN SERVER ĐỂ ĐÁ MÁY 1
-        final rtdb = FirebaseDatabase.instanceFor(
-          app: Firebase.app(),
-          databaseURL:
-              'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
-        );
-        await rtdb.ref('NguoiDung/$userId/maThietBi').set(maThietBiMoi);
+          if (xacNhan != true) return; // Nếu chọn Hủy thì thoát
 
-        // TẠO ĐỘ TRỄ (Cho máy 1 kịp văng và báo isOnline = false)
-        await Future.delayed(const Duration(seconds: 4));
+          if (mounted) setState(() => _isLoading = true); // Bật lại loading
+
+          // GHI ĐÈ MÃ THIẾT BỊ MỚI LÊN SERVER ĐỂ ĐÁ MÁY 1
+          final rtdb = FirebaseDatabase.instanceFor(
+            app: Firebase.app(),
+            databaseURL:
+                'https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app',
+          );
+          await rtdb.ref('NguoiDung/$userId/maThietBi').set(maThietBiMoi);
+
+          // TẠO ĐỘ TRỄ (Cho máy 1 kịp văng và báo isOnline = false)
+          await Future.delayed(const Duration(seconds: 4));
+        }
       }
 
       if (mounted) setState(() => _isLoading = false);
-      _showSnackBar('Đăng nhập thành công!', Colors.green);
 
       if (_rememberMe) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('maNguoiDung_daLuu', userId);
       }
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => Trangchunguoicuuho(
-              currentUserId: userId,
-              maThietBiMoi: maThietBiMoi,
-            ),
-          ),
-        );
-      }
+      if (!mounted) return;
+      _showSnackBar('Đăng nhập thành công!', Colors.green);
+
+      // 3. Điều hướng:
+      //    chưa có hồ sơ        -> màn chọn loại cứu hộ viên -> form -> màn trạng thái
+      //    có hồ sơ, chưa duyệt -> màn trạng thái xác thực
+      //    đã duyệt             -> trang chủ
+      await DieuHuongCuuHo.diTiep(
+        context,
+        userId: userId,
+        ketQua: ketQua,
+        maThietBi: maThietBiMoi,
+      );
     } else {
       if (mounted) setState(() => _isLoading = false);
       _showSnackBar(
