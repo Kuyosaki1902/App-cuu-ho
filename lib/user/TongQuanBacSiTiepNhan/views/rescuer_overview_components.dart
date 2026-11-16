@@ -449,7 +449,7 @@ class RescuerListBottomSheet extends StatelessWidget {
                           builder: (context) => ChatVoiBacSiScreen(
                             maPhongChat: maYeuCau,
                             maNguoiCuuHo: defaultRescuerId,
-                            currentUserId: currentUserId,
+                            
                             targetName: 'Đội ngũ Cứu hộ',
                             targetAvatar:
                                 'https://ui-avatars.com/api/?name=Cuu+Ho&background=046450&color=fff',

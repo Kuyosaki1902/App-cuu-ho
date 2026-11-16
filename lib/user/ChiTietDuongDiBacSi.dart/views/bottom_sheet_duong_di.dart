@@ -343,7 +343,7 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
                               builder: (context) => ChatVoiBacSiScreen(
                                 maPhongChat: controller.maNguoiCuuHo,
                                 maNguoiCuuHo: controller.maNguoiCuuHo,
-                                currentUserId: controller.maNguoiCuuHo,
+                                
                                 targetName: tenBacSi,
                                 targetAvatar:
                                     'https://ui-avatars.com/api/?name=$tenBacSi&background=046450&color=fff',

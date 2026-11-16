@@ -1,4 +1,6 @@
+import 'package:cuhokhancap/user/Design/anh_dai_dien_widget.dart';
 import 'package:flutter/material.dart';
+
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Kiểm tra đúng đường dẫn model của bạn
 
 class ChiTietNguoiCuuHoCard extends StatelessWidget {
@@ -15,16 +17,8 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
     required this.onClose,
   });
 
-  String _getInitials(String name) {
-    if (name.trim().isEmpty) return "CH";
-    List<String> parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
-    String initials = _getInitials(rescuer.hoTen);
     String nameDisplay = rescuer.hoTen.isNotEmpty
         ? rescuer.hoTen
         : "Người cứu hộ";
@@ -56,17 +50,12 @@ class ChiTietNguoiCuuHoCard extends StatelessWidget {
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  CircleAvatar(
+                  AnhDaiDienWidget(
+                    key: ValueKey(rescuer.maNguoiDung),
+                    maNguoiDung: rescuer.maNguoiDung ?? '',
+                    hoTen: rescuer.hoTen,
                     radius: 26,
-                    backgroundColor: const Color(0xFF00695C),
-                    child: Text(
-                      initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
+                    fontSize: 18,
                   ),
                   Container(
                     padding: const EdgeInsets.all(2),

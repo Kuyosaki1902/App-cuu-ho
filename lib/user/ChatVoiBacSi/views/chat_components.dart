@@ -1,13 +1,29 @@
-//lib/user/ChatVoiBacSi/views/chat_components.dart
+// lib/user/ChatVoiBacSi/views/chat_components.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
 const Color primaryColor = Color(0xFF046450);
 
-// 1. APP BAR
+ImageProvider? decodeAvatarImage(String? rawAvatar) {
+  if (rawAvatar == null || rawAvatar.trim().isEmpty) return null;
+  final cleaned = rawAvatar.trim();
+  if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+    return NetworkImage(cleaned);
+  }
+  try {
+    final base64Part = cleaned.contains(',')
+        ? cleaned.split(',').last.trim()
+        : cleaned;
+    return MemoryImage(base64Decode(base64Part));
+  } catch (_) {
+    return null;
+  }
+}
+
 class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String targetName;
   final String targetAvatar;
-  final String distanceText; // 🌟 Thêm khoảng cách động
+  final String distanceText;
 
   const ChatAppBar({
     super.key,
@@ -18,6 +34,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final avatarProvider = decodeAvatarImage(targetAvatar);
+
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -42,7 +60,11 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundImage: NetworkImage(targetAvatar),
+                backgroundColor: primaryColor,
+                backgroundImage: avatarProvider,
+                child: avatarProvider == null
+                    ? const Icon(Icons.person, color: Colors.white)
+                    : null,
               ),
               Positioned(
                 right: 0,
@@ -86,7 +108,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      'Đang di chuyển (cách $distanceText)', // 🌟 Hiển thị khoảng cách real-time
+                      'Đang di chuyển (cách $distanceText)',
                       style: const TextStyle(
                         fontSize: 11,
                         color: primaryColor,
@@ -100,30 +122,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ],
       ),
-      actions: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: const Color(0xFFEAF5F0),
-          child: IconButton(
-            icon: const Icon(Icons.phone, color: primaryColor, size: 18),
-            onPressed: () {},
-          ),
-        ),
-        const SizedBox(width: 8),
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: const Color(0xFFEAF5F0),
-          child: IconButton(
-            icon: const Icon(
-              Icons.videocam_rounded,
-              color: primaryColor,
-              size: 18,
-            ),
-            onPressed: () {},
-          ),
-        ),
-        const SizedBox(width: 12),
-      ],
     );
   }
 
@@ -131,15 +129,16 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
-// 2. BANNER TRẠNG THÁI (Đã xóa nút Bản đồ)
 class ChatStatusBanner extends StatelessWidget {
-  final String estimatedTimeText; // 🌟 Nhận thời gian dự kiến động
-  final String arrivalClockText; //  Nhận giờ dự kiến động
+  final String estimatedTimeText;
+  final String arrivalClockText;
+  final String addressText;
 
   const ChatStatusBanner({
     super.key,
     this.estimatedTimeText = '-- phút nữa tới',
     this.arrivalClockText = '--:--',
+    this.addressText = '',
   });
 
   @override
@@ -163,7 +162,7 @@ class ChatStatusBanner extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            estimatedTimeText, // 🌟 Hiển thị thời gian thực
+            estimatedTimeText,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
@@ -171,20 +170,18 @@ class ChatStatusBanner extends StatelessWidget {
             ),
           ),
           Text(
-            ' • Dự kiến: $arrivalClockText', // 🌟 Hiển thị mốc giờ thực
+            ' • Dự kiến: $arrivalClockText',
             style: const TextStyle(fontSize: 13, color: Colors.grey),
           ),
-          const Spacer(),
-          // 🌟 Nút "Bản đồ" đã được loại bỏ hoàn toàn theo yêu cầu
         ],
       ),
     );
   }
 }
 
-// 3. TIN NHẮN HỆ THỐNG GHIM ĐẦU TRANG
 class ChatSystemMessage extends StatelessWidget {
-  const ChatSystemMessage({super.key});
+  final String addressText;
+  const ChatSystemMessage({super.key, this.addressText = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +210,7 @@ class ChatSystemMessage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Đã điều phối Bác sĩ Cấp cứu Lưu động',
+                  'Đã điều phối Đội ngũ Cấp cứu Lưu động',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -222,7 +219,7 @@ class ChatSystemMessage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Điểm hẹn: 124 Pasteur, Q.1 (Nhà bạn). Đội ngũ y tế được trang bị vali hồi sức tích cực và máy đo sinh hiệu.',
+                  'Điểm hẹn: $addressText. Đội ngũ y tế được trang bị vali hồi sức tích cực và máy đo sinh hiệu.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,
@@ -238,23 +235,26 @@ class ChatSystemMessage extends StatelessWidget {
   }
 }
 
-// 4. BONG BÓNG TIN NHẮN
 class ChatMessageBubble extends StatelessWidget {
   final String messageText;
   final String timeText;
   final bool isMe;
-  final String targetAvatar;
+  final String senderName;
+  final String senderAvatar;
 
   const ChatMessageBubble({
     super.key,
     required this.messageText,
     required this.timeText,
     required this.isMe,
-    required this.targetAvatar,
+    required this.senderName,
+    required this.senderAvatar,
   });
 
   @override
   Widget build(BuildContext context) {
+    final avatarProvider = decodeAvatarImage(senderAvatar);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -265,8 +265,12 @@ class ChatMessageBubble extends StatelessWidget {
         children: [
           if (!isMe) ...[
             CircleAvatar(
-              radius: 14,
-              backgroundImage: NetworkImage(targetAvatar),
+              radius: 16,
+              backgroundColor: primaryColor,
+              backgroundImage: avatarProvider,
+              child: avatarProvider == null
+                  ? const Icon(Icons.person, size: 16, color: Colors.white)
+                  : null,
             ),
             const SizedBox(width: 8),
           ],
@@ -276,6 +280,19 @@ class ChatMessageBubble extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
+                if (!isMe) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text(
+                      senderName,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -326,14 +343,13 @@ class ChatMessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (!isMe) const SizedBox(width: 40),
+          if (isMe) const SizedBox(width: 40),
         ],
       ),
     );
   }
 }
 
-// 5. KHUNG NHẬP TEXT
 class ChatBottomInput extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
@@ -369,8 +385,7 @@ class ChatBottomInput extends StatelessWidget {
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => onSend(),
                   decoration: InputDecoration(
-                    hintText:
-                        'Nhập tin nhắn cho ${targetName.split(' ').last}...',
+                    hintText: 'Nhập tin nhắn cứu hộ...',
                     hintStyle: TextStyle(
                       color: Colors.grey.shade500,
                       fontSize: 14,
@@ -400,7 +415,7 @@ class ChatBottomInput extends StatelessWidget {
                 ),
               ),
             ),
-          ], // syntax fix
+          ],
         ),
       ),
     );

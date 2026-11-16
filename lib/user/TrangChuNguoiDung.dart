@@ -601,8 +601,8 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                     String? maYeuCauMoi = await _firebaseService
                         .taoYeuCauTimBacSiTuDong(
                           maNguoiYeuCau: maNguoiDungHienTai,
-                          viDo: _currentPosition?.latitude ?? 0.0,
-                          kinhDo: _currentPosition?.longitude ?? 0.0,
+                          viDo: _currentPosition.latitude,
+                          kinhDo: _currentPosition.longitude,
                           trieuChung: MoTaTamThoi.trieuChung,
                           moTaChiTiet: MoTaTamThoi.moTaChiTiet,
                           fileAnh: MoTaTamThoi.fileAnh,

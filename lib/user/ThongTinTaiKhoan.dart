@@ -1,3 +1,4 @@
+import 'package:cuhokhancap/user/Design/anh_dai_dien_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // THÊM THƯ VIỆN NÀY
 import 'package:cuhokhancap/user/chinh_sua_thong_tin.dart';
@@ -197,7 +198,10 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                   builder: (context) =>
                       ChinhSuaThongTin(manguoiDung: userRealTime),
                 ),
-              );
+              ).then((_) {
+                // Quay lại từ màn chỉnh sửa: tải lại ảnh đại diện nếu đã đổi
+                AnhDaiDienWidget.xoaCache(userRealTime.maNguoiDung);
+              });
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -229,7 +233,6 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
     String tenHienThi = userRealTime.hoTen.isNotEmpty
         ? userRealTime.hoTen
         : "Người dùng";
-    String avatarInitials = _getInitials(tenHienThi);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -244,17 +247,11 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
               Stack(
                 alignment: Alignment.bottomRight,
                 children: [
-                  CircleAvatar(
+                  AnhDaiDienWidget(
+                    maNguoiDung: userRealTime.maNguoiDung ?? '',
+                    hoTen: tenHienThi,
                     radius: 30,
-                    backgroundColor: const Color(0xFF00695C),
-                    child: Text(
-                      avatarInitials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
-                      ),
-                    ),
+                    fontSize: 22,
                   ),
                   Container(
                     padding: const EdgeInsets.all(4),

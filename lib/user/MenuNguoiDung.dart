@@ -4,6 +4,8 @@ import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'ThongTinTaiKhoan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'DangNhap.dart';
+import 'package:cuhokhancap/user/Design/anh_dai_dien_widget.dart';
+import 'package:cuhokhancap/firebase/anh_dai_dien_service.dart';
 
 class MenuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -18,6 +20,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
   bool _isExpanded = false;
   final FirebaseService _firebaseService = FirebaseService();
   late Stream<NguoiDungModel?> _userStream;
+  final AnhDaiDienService _anhDaiDienService = AnhDaiDienService();
 
   @override
   void initState() {
@@ -62,7 +65,6 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
             String sdtHienThi = user?.soDienThoai.isNotEmpty == true
                 ? _maskPhoneNumber(user!.soDienThoai)
                 : "Chưa cập nhật SĐT";
-            String avatarInitials = _getInitials(tenHienThi);
 
             return Column(
               children: [
@@ -152,19 +154,13 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                     Stack(
                                       alignment: Alignment.bottomRight,
                                       children: [
-                                        CircleAvatar(
+                                        AnhDaiDienWidget(
+                                          maNguoiDung:
+                                              user?.maNguoiDung ??
+                                              widget.maNguoiDung,
+                                          hoTen: tenHienThi,
                                           radius: 24,
-                                          backgroundColor: const Color(
-                                            0xFF00695C,
-                                          ),
-                                          child: Text(
-                                            avatarInitials,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18,
-                                            ),
-                                          ),
+                                          fontSize: 18,
                                         ),
                                         Container(
                                           decoration: const BoxDecoration(
@@ -353,8 +349,18 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                           icon: Icons.leaderboard,
                           title: "Bảng xếp hạng cứu hộ viên",
                           trailingText: "Mới",
-                          trailingColor: const Color.fromARGB(255, 219, 249, 86),
-                          trailingTextColor: const Color.fromARGB(255, 107, 107, 104),
+                          trailingColor: const Color.fromARGB(
+                            255,
+                            219,
+                            249,
+                            86,
+                          ),
+                          trailingTextColor: const Color.fromARGB(
+                            255,
+                            107,
+                            107,
+                            104,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Divider(height: 1),
@@ -381,7 +387,10 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                             try {
                               // 1. Cập nhật trạng thái Offline (Giới hạn tối đa 3s tránh nghẽn mạng)
                               await _firebaseService
-                                  .capNhatTrangThaiOnline(widget.maNguoiDung, false)
+                                  .capNhatTrangThaiOnline(
+                                    widget.maNguoiDung,
+                                    false,
+                                  )
                                   .timeout(const Duration(seconds: 3));
                             } catch (_) {
                               // Bỏ qua lỗi nếu hết 3s để tiếp tục luồng đăng xuất

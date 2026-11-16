@@ -1,24 +1,22 @@
-//lib/user/ChatVoiBacSi/ChatVoiBacSi.dart
+// lib/user/ChatVoiBacSi/ChatVoiBacSi.dart
 import 'package:cuhokhancap/user/ChatVoiBacSi/controllers/chat_controller.dart';
 import 'package:cuhokhancap/user/ChatVoiBacSi/views/chat_components.dart';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart';
 
 class ChatVoiBacSiScreen extends StatefulWidget {
-  final String maPhongChat;
+  final String maPhongChat; // maYeuCau
   final String maNguoiCuuHo;
-  final String currentUserId;
   final String targetName;
   final String targetAvatar;
-  final double victimLat; // 🌟 Thêm tham số nhận tọa độ nạn nhân
-  final double victimLng; // 🌟 Thêm tham số nhận tọa độ nạn nhân
+  final double victimLat;
+  final double victimLng;
 
   const ChatVoiBacSiScreen({
     super.key,
     required this.maPhongChat,
     required this.maNguoiCuuHo,
-    required this.currentUserId,
-    this.targetName = 'BS. CKI. Nguyễn Văn Tuấn',
+    this.targetName = 'Đội ngũ Cứu hộ',
     this.targetAvatar = 'https://i.pravatar.cc/150?img=11',
     required this.victimLat,
     required this.victimLng,
@@ -37,9 +35,8 @@ class _ChatVoiBacSiScreenState extends State<ChatVoiBacSiScreen> {
     _controller = ChatController(
       maPhongChat: widget.maPhongChat,
       maNguoiCuuHo: widget.maNguoiCuuHo,
-      currentUserId: widget.currentUserId,
-      victimLat: widget.victimLat, // Truyền xuống controller
-      victimLng: widget.victimLng, // Truyền xuống controller
+      victimLat: widget.victimLat,
+      victimLng: widget.victimLng,
     );
   }
 
@@ -74,9 +71,15 @@ class _ChatVoiBacSiScreenState extends State<ChatVoiBacSiScreen> {
               return ValueListenableBuilder<String>(
                 valueListenable: _controller.arrivalTimeNotifier,
                 builder: (context, arrTime, child) {
-                  return ChatStatusBanner(
-                    estimatedTimeText: estTime,
-                    arrivalClockText: arrTime,
+                  return ValueListenableBuilder<String>(
+                    valueListenable: _controller.addressNotifier,
+                    builder: (context, addressText, child) {
+                      return ChatStatusBanner(
+                        estimatedTimeText: estTime,
+                        arrivalClockText: arrTime,
+                        addressText: addressText,
+                      );
+                    },
                   );
                 },
               );
@@ -102,16 +105,33 @@ class _ChatVoiBacSiScreenState extends State<ChatVoiBacSiScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length + 1,
                   itemBuilder: (context, index) {
-                    if (index == 0) return const ChatSystemMessage();
+                    if (index == 0) {
+                      return ValueListenableBuilder<String>(
+                        valueListenable: _controller.addressNotifier,
+                        builder: (context, address, _) {
+                          return ChatSystemMessage(addressText: address);
+                        },
+                      );
+                    }
 
                     final msg = messages[index - 1];
-                    final isMe = msg.maNguoiGui == widget.currentUserId;
+                    final isMe = msg.maNguoiGui == _controller.currentUserId;
 
-                    return ChatMessageBubble(
-                      messageText: msg.noiDung,
-                      timeText: _controller.formatTime(msg.thoiGianGui),
-                      isMe: isMe,
-                      targetAvatar: widget.targetAvatar,
+                    return FutureBuilder<Map<String, String>>(
+                      future: _controller.getSenderInfo(msg.maNguoiGui),
+                      builder: (context, userSnapshot) {
+                        final senderInfo = userSnapshot.data ?? {};
+                        final senderName = senderInfo['name'] ?? 'Thành viên';
+                        final senderAvatar = senderInfo['avatar'] ?? '';
+
+                        return ChatMessageBubble(
+                          messageText: msg.noiDung,
+                          timeText: _controller.formatTime(msg.thoiGianGui),
+                          isMe: isMe,
+                          senderName: senderName,
+                          senderAvatar: senderAvatar,
+                        );
+                      },
                     );
                   },
                 );

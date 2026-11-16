@@ -1,4 +1,5 @@
 // lib/user/TheoDoiTinhTrang/TheoDoiTinhTrangYeuCau.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/TheoDoiTinhTrang/controllers/theo_doi_tinh_trang_controller.dart';
 import 'package:cuhokhancap/user/ThongTInHoanThanhCuuHo/HoanThanhCuuHo.dart';
@@ -39,6 +40,23 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
     return "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} - ${time.day.toString().padLeft(2, '0')}/${time.month.toString().padLeft(2, '0')}/${time.year}";
   }
 
+  // 🌟 Hàm helper giải mã Avatar (Hỗ trợ cả URL HTTP lẫn chuỗi Base64 từ LuuAnh)
+  ImageProvider? _decodeAvatarProvider(String? rawAvatar) {
+    if (rawAvatar == null || rawAvatar.trim().isEmpty) return null;
+    final cleaned = rawAvatar.trim();
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return NetworkImage(cleaned);
+    }
+    try {
+      final base64Part = cleaned.contains(',')
+          ? cleaned.split(',').last.trim()
+          : cleaned;
+      return MemoryImage(base64Decode(base64Part));
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -55,7 +73,13 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
           ),
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
-          automaticallyImplyLeading: false,
+          automaticallyImplyLeading: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              Navigator.pop(context); // Lệnh quay lại màn hình trước
+            },
+          ),
           elevation: 0,
         ),
         body: ValueListenableBuilder<Map<String, dynamic>?>(
@@ -232,7 +256,6 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
 
           _buildInfoRow('Họ và tên', nanNhan?.hoTen ?? 'Đang tải...'),
           _buildInfoRow('Số điện thoại', nanNhan?.soDienThoai ?? 'Đang tải...'),
-
           const Divider(height: 24),
 
           const Text(
@@ -304,7 +327,9 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
 
           ...listCuuHo.map((item) {
             NguoiDungModel user = item['user'];
-            String? avatar = item['avatar'];
+            String? avatarRaw = item['avatar'];
+            final avatarProvider = _decodeAvatarProvider(avatarRaw);
+
             String status = 'Đang di chuyển';
             Color statusColor = Colors.orange;
 
@@ -327,10 +352,9 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
                 backgroundColor: primaryColor.withOpacity(0.1),
-                backgroundImage: (avatar != null && avatar.startsWith('http'))
-                    ? NetworkImage(avatar)
-                    : null,
-                child: (avatar == null)
+                // 🌟 Sử dụng provider đã giải mã (hỗ trợ cả URL lẫn Base64)
+                backgroundImage: avatarProvider,
+                child: (avatarProvider == null)
                     ? Icon(Icons.person, color: primaryColor)
                     : null,
               ),
@@ -344,7 +368,7 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.phone, color: Colors.green),
-                onPressed: () {}, // Gắn API gọi điện sau
+                onPressed: () {},
               ),
             );
           }),
@@ -376,7 +400,6 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 1. Trạng thái: user_tinhtrang_chotiepnhan -> Nút quay lại tìm kiếm
             if (choTiepNhan)
               _buildActionButton(
                 icon: Icons.search_rounded,
@@ -405,7 +428,6 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                   );
                 },
               )
-            // 2. Trạng thái: user_tinhtrang_daphancong -> 2 nút: Xem chi tiết & Hoàn thành cứu hộ
             else if (daPhanCong)
               Row(
                 children: [
@@ -450,7 +472,6 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                   ),
                 ],
               )
-            // 3. Trạng thái: user_tinhtrang_hoanthanh -> Nút đánh giá chuyến
             else if (daHoanThanh)
               _buildActionButton(
                 icon: Icons.star_rate,

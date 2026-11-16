@@ -1,19 +1,20 @@
-//lib/user/ChatVoiBacSi/controllers/chat_controller.dart
+// lib/user/ChatVoiBacSi/controllers/chat_controller.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart';
 
 class ChatController {
-  final String maPhongChat;
+  final String maPhongChat; // maYeuCau
   final String maNguoiCuuHo;
-  final String currentUserId;
-  final double victimLat; // 🌟 Thêm vĩ độ nạn nhân
-  final double victimLng; // 🌟 Thêm kinh độ nạn nhân
+  String currentUserId = '';
+  final double victimLat;
+  final double victimLng;
 
   final TextEditingController msgController = TextEditingController();
   final ScrollController scrollController = ScrollController();
@@ -26,15 +27,31 @@ class ChatController {
     '-- phút nữa tới',
   );
   final ValueNotifier<String> arrivalTimeNotifier = ValueNotifier('--:--');
+  final ValueNotifier<String> addressNotifier = ValueNotifier(
+    'Đang tải địa điểm hẹn...',
+  );
+
+  final Map<String, Map<String, String>> userCache = {};
 
   ChatController({
     required this.maPhongChat,
     required this.maNguoiCuuHo,
-    required this.currentUserId,
     required this.victimLat,
     required this.victimLng,
   }) {
+    _initCurrentUserId();
     _initRescuerLocationTracking();
+    _loadAddress();
+  }
+
+  Future<void> _initCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    currentUserId = prefs.getString('maNguoiDung_daLuu') ?? '';
+  }
+
+  Future<void> _loadAddress() async {
+    String addr = await _fbService.getAddressFromLatLng(victimLat, victimLng);
+    addressNotifier.value = addr;
   }
 
   void _initRescuerLocationTracking() {
@@ -55,7 +72,6 @@ class ChatController {
   }
 
   Future<void> _fetchOSRMData(double curLat, double curLng) async {
-    // 🌟 Sử dụng đúng tọa độ nạn nhân thực tế được truyền vào
     final url = Uri.parse(
       'http://router.project-osrm.org/route/v1/driving/$curLng,$curLat;$victimLng,$victimLat?overview=false',
     );
@@ -88,25 +104,26 @@ class ChatController {
     }
   }
 
-  void dispose() {
-    _locationSub?.cancel();
-    msgController.dispose();
-    scrollController.dispose();
-    distanceNotifier.dispose();
-    estimatedTimeNotifier.dispose();
-    arrivalTimeNotifier.dispose();
+  Future<Map<String, String>> getSenderInfo(String userId) async {
+    if (userCache.containsKey(userId)) {
+      return userCache[userId]!;
+    }
+    final info = await _fbService.getUserInfoForChat(userId);
+    userCache[userId] = info;
+    return info;
   }
 
   Stream<List<ChiTietTinNhanModel>> getMessagesStream() {
-    return _fbService.streamTinNhan(
-      maPhongChat: maPhongChat,
-      maNguoiCuuHo: maNguoiCuuHo,
-    );
+    return _fbService.streamDanhSachTinNhan(maPhongChat);
   }
 
   Future<void> sendMessage() async {
     final text = msgController.text.trim();
     if (text.isEmpty) return;
+
+    if (currentUserId.isEmpty) {
+      await _initCurrentUserId();
+    }
 
     msgController.clear();
 
@@ -119,12 +136,7 @@ class ChatController {
       thoiGianGui: DateTime.now(),
     );
 
-    await _fbService.guiTinNhan(
-      maPhongChat: maPhongChat,
-      maNguoiCuuHo: maNguoiCuuHo,
-      tinNhan: tinNhan,
-    );
-
+    await _fbService.guiTinNhanMoi(maPhongChat, tinNhan);
     scrollToBottom();
   }
 
@@ -141,5 +153,15 @@ class ChatController {
   String formatTime(DateTime time) {
     String formatted = DateFormat('hh:mm a').format(time);
     return formatted.replaceAll('AM', 'SA').replaceAll('PM', 'CH');
+  }
+
+  void dispose() {
+    _locationSub?.cancel();
+    msgController.dispose();
+    scrollController.dispose();
+    distanceNotifier.dispose();
+    estimatedTimeNotifier.dispose();
+    arrivalTimeNotifier.dispose();
+    addressNotifier.dispose();
   }
 }
