@@ -16,16 +16,15 @@ class RescuerOverviewController {
   final double victimLng;
   final FirebaseService _fbService = FirebaseService();
 
-  // Biến chứa danh sách cứu hộ viên realtime để View lắng nghe
   final ValueNotifier<List<TrackingRescuerModel>> trackingListNotifier =
       ValueNotifier([]);
 
   StreamSubscription? _phanCongSub;
   final Map<String, StreamSubscription> _userLocationSubs = {};
   final Map<String, NguoiDungModel> _usersData = {};
-  // Thêm 2 biến này vào đầu class RescuerOverviewController
   final Map<String, LatLng> _prevLocations = {};
   final Map<String, double> _lastBearings = {};
+
   RescuerOverviewController({
     required this.maYeuCau,
     required this.victimLat,
@@ -36,15 +35,15 @@ class RescuerOverviewController {
     _phanCongSub = _fbService.streamPhanCongByYeuCau(maYeuCau).listen((
       danhSachPhanCong,
     ) {
+      const validStatuses = {
+        'cuuho_trangthai_phancong_tiepnhan',
+        'cuuho_trangthai_phancong_daden',
+        'cuuho_trangthai_phancong_dangcuuho',
+        'cuuho_trangthai_phancong_hoanthanh',
+      };
       final acceptedList = danhSachPhanCong
-          .where(
-            (pc) =>
-                pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_tiepnhan' ||
-                pc.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_daden',
-          )
+          .where((pc) => validStatuses.contains(pc.maTrangThaiTiepNhan))
           .toList();
-
-      int index = 1;
 
       for (var phanCong in acceptedList) {
         final rescuerId = phanCong.maNguoiCuuHo;
@@ -58,7 +57,6 @@ class RescuerOverviewController {
                 if (docSnap.exists && docSnap.data() != null) {
                   final newData = NguoiDungModel.fromMap(docSnap.data()!);
 
-                  // 🌟 LƯU LẠI VỊ TRÍ CŨ TRƯỚC KHI GHI ĐÈ VỊ TRÍ MỚI
                   if (_usersData.containsKey(rescuerId)) {
                     _prevLocations[rescuerId] = LatLng(
                       _usersData[rescuerId]!.viDo ?? 0,
@@ -90,7 +88,6 @@ class RescuerOverviewController {
     });
   }
 
-  // Cập nhật lại hàm này
   Future<void> _updateTrackingList(List<dynamic> acceptedList) async {
     List<TrackingRescuerModel> newList = [];
     int index = 1;
@@ -108,22 +105,18 @@ class RescuerOverviewController {
         int timeMin = (distance / 40.0 * 60).round();
         if (timeMin < 1) timeMin = 1;
 
-        // 🌟 TÍNH HƯỚNG ĐI TỪ VỊ TRÍ CŨ ĐẾN VỊ TRÍ MỚI
         double bearing = 0.0;
         if (_prevLocations.containsKey(rescuerId)) {
           double pLat = _prevLocations[rescuerId]!.latitude;
           double pLng = _prevLocations[rescuerId]!.longitude;
 
-          // Nếu có di chuyển thì mới tính góc mới
           if (pLat != user.viDo! || pLng != user.kinhDo!) {
             bearing = _calculateBearing(pLat, pLng, user.viDo!, user.kinhDo!);
             _lastBearings[rescuerId] = bearing;
           } else {
-            // Đứng yên thì giữ nguyên hướng cũ
             bearing = _lastBearings[rescuerId] ?? 0.0;
           }
         } else {
-          // Lần đầu xuất hiện chưa có vị trí cũ -> chỉ tạm về phía nạn nhân
           bearing = _calculateBearing(
             user.viDo!,
             user.kinhDo!,
@@ -150,7 +143,6 @@ class RescuerOverviewController {
     trackingListNotifier.value = newList;
   }
 
-  // 🌟 THUẬT TOÁN TÍNH GÓC CHỈ HƯỚNG TỪ BÁC SĨ TỚI NẠN NHÂN
   double _calculateBearing(
     double startLat,
     double startLng,
@@ -171,28 +163,66 @@ class RescuerOverviewController {
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
-  // 🌟 HÀM VẼ GIAO DIỆN MARKER (AVATAR + MŨI TÊN CHỈ HƯỚNG)
+  // 🌟 VẼ MARKER (AVATAR + MŨI TÊN CHỈ HƯỚNG) KHÔNG BỊ TRẮNG
   Future<BitmapDescriptor> _createRescuerIcon(
     NguoiDungModel user,
     double bearing,
   ) async {
     String? avatarData = await _fbService.getUserAvatarUrl(user.maNguoiDung!);
-    ImageProvider? avatarProvider;
     String initials = (user.hoTen.isNotEmpty)
         ? user.hoTen.substring(0, 1).toUpperCase()
         : '?';
 
-    if (avatarData != null && avatarData.isNotEmpty) {
-      if (avatarData.startsWith('http')) {
-        avatarProvider = NetworkImage(avatarData);
+    Widget avatarContent;
+    bool hasImage = false;
+
+    if (avatarData != null && avatarData.trim().isNotEmpty) {
+      final cleaned = avatarData.trim();
+      if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+        hasImage = true;
+        avatarContent = Image.network(
+          cleaned,
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        );
       } else {
-        String base64Str = avatarData.contains(',')
-            ? avatarData.split(',').last
-            : avatarData;
+        final base64Str = cleaned.contains(',')
+            ? cleaned.split(',').last.trim()
+            : cleaned;
         try {
-          avatarProvider = MemoryImage(base64Decode(base64Str));
-        } catch (_) {}
+          final bytes = base64Decode(base64Str);
+          hasImage = true;
+          avatarContent = Image.memory(
+            bytes,
+            width: 40,
+            height: 40,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+          );
+        } catch (_) {
+          avatarContent = Center(
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }
       }
+    } else {
+      avatarContent = Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
     }
 
     Widget markerWidget = Directionality(
@@ -203,11 +233,10 @@ class RescuerOverviewController {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // 1. Mũi tên điều hướng (Xoay theo góc bearing)
             Transform.rotate(
               angle: bearing * math.pi / 180,
               child: Transform.translate(
-                offset: const Offset(0, -22), // Đẩy mũi tên nhô ra rìa trên
+                offset: const Offset(0, -22),
                 child: const Icon(
                   Icons.navigation,
                   color: Color(0xFF006A55),
@@ -215,42 +244,30 @@ class RescuerOverviewController {
                 ),
               ),
             ),
-            // 2. Avatar tròn luôn nằm thẳng đứng ở giữa
             Container(
+              width: 45,
+              height: 45,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                color: hasImage ? Colors.white : const Color(0xFF006A55),
                 border: Border.all(color: Colors.white, width: 2.5),
                 boxShadow: const [
                   BoxShadow(color: Colors.black26, blurRadius: 4),
                 ],
               ),
-              child: CircleAvatar(
-                radius: 20,
-                backgroundColor: avatarProvider != null
-                    ? Colors.white
-                    : const Color(0xFF006A55),
-                backgroundImage: avatarProvider,
-                child: avatarProvider == null
-                    ? Text(
-                        initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
+              child: ClipOval(child: avatarContent),
             ),
           ],
         ),
       ),
     );
-    return await markerWidget.toBitmapDescriptor();
+    return await markerWidget.toBitmapDescriptor(
+      waitToRender: const Duration(milliseconds: 150),
+    );
   }
 
-  // Thuật toán Haversine tính khoảng cách (Đường chim bay thực tế)
   double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const p = 0.017453292519943295; // Math.PI / 180
+    const p = 0.017453292519943295;
     final a =
         0.5 -
         math.cos((lat2 - lat1) * p) / 2 +
@@ -258,7 +275,7 @@ class RescuerOverviewController {
             math.cos(lat2 * p) *
             (1 - math.cos((lon2 - lon1) * p)) /
             2;
-    return 12742 * math.asin(math.sqrt(a)); // 2 * R; R = 6371 km
+    return 12742 * math.asin(math.sqrt(a));
   }
 
   void dispose() {

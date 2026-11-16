@@ -164,6 +164,19 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
     return list;
   }
 
+  // Helper lấy chuỗi mô tả từ RAM
+  String _getMoTaDisplayString() {
+    final List<String> parts = [];
+    if (MoTaTamThoi.trieuChung != null && MoTaTamThoi.trieuChung!.isNotEmpty) {
+      parts.add(MoTaTamThoi.trieuChung!.join(', '));
+    }
+    if (MoTaTamThoi.moTaChiTiet != null &&
+        MoTaTamThoi.moTaChiTiet!.trim().isNotEmpty) {
+      parts.add(MoTaTamThoi.moTaChiTiet!.trim());
+    }
+    return parts.join(' - ');
+  }
+
   void _showFilterBottomSheet() {
     bool coMoTaTuTruoc =
         (MoTaTamThoi.trieuChung != null &&
@@ -174,45 +187,62 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         String? tempHuong = filterHuong;
-        TextEditingController keywordCtrl = TextEditingController(
-          text: filterKeyword ?? '',
-        );
 
         if (tempHuong == 'MoTa' && !coMoTaTuTruoc) {
           tempHuong = null;
         }
 
-        // 🌟 TỰ ĐỘNG CHỌN TIÊU CHÍ NẾU CHỈ CÓ 1 LỰA CHỌN DUY NHẤT VÀ CHƯA TỪNG CHỌN
         if (tempHuong == null && !coMoTaTuTruoc) {
           if (selectedCategoryIndex == 1) tempHuong = 'ChuyenNganh';
           if (selectedCategoryIndex == 2) tempHuong = 'KyNang';
         }
 
-        // 🌟 TẠO HINT TEXT ĐỘNG DỰA THEO TAB VÀ TÌNH TRẠNG RAM
-        List<String> hintParts = [];
-        if (coMoTaTuTruoc) hintParts.add('Mô tả');
-        if (selectedCategoryIndex != 2) hintParts.add('Chuyên ngành');
-        if (selectedCategoryIndex != 1) hintParts.add('Kỹ năng');
-        String dynamicHint = 'Chọn tiêu chí (${hintParts.join(' / ')})';
+        String initialText = (filterKeyword ?? '').trim();
+        if (initialText.isEmpty && coMoTaTuTruoc) {
+          initialText = _getMoTaDisplayString();
+        }
+        TextEditingController keywordCtrl = TextEditingController(
+          text: initialText,
+        );
+
+        final List<Map<String, String>> options = [
+          if (coMoTaTuTruoc) {'value': 'MoTa', 'label': 'Mô tả tình huống'},
+          if (selectedCategoryIndex != 2)
+            {'value': 'ChuyenNganh', 'label': 'Chuyên ngành'},
+          if (selectedCategoryIndex != 1)
+            {'value': 'KyNang', 'label': 'Kỹ năng'},
+        ];
 
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                 left: 16,
                 right: 16,
-                top: 16,
+                top: 12,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
                   const Text(
                     'Bộ lọc nâng cao',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -222,67 +252,55 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
                     'Chọn tiêu chí lọc:',
                     style: TextStyle(fontSize: 13, color: Colors.grey),
                   ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: tempHuong,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                    ),
-                    hint: Text(
-                      dynamicHint, // 🌟 Sử dụng Hint động
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, color: Colors.grey),
-                    ),
-                    items: [
-                      if (coMoTaTuTruoc)
-                        const DropdownMenuItem(
-                          value: 'MoTa',
-                          child: Text(
-                            'Mô Tả (Từ tình huống)',
-                            style: TextStyle(fontSize: 13),
+                  const SizedBox(height: 8),
+
+                  // CÁC THẺ TIÊU CHÍ NẰM NGANG GỌN GÀNG - CHẠM 1 PHÁT LÀ CHỌN
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: options.map((opt) {
+                      final bool isSelected = tempHuong == opt['value'];
+                      return ChoiceChip(
+                        label: Text(
+                          opt['label']!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                            color: isSelected ? Colors.white : Colors.black87,
                           ),
                         ),
-                      if (selectedCategoryIndex != 2)
-                        const DropdownMenuItem(
-                          value: 'ChuyenNganh',
-                          child: Text(
-                            'Chuyên Ngành',
-                            style: TextStyle(fontSize: 13),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF0C5C4D),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        checkmarkColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected
+                                ? const Color(0xFF0C5C4D)
+                                : Colors.grey.shade300,
                           ),
                         ),
-                      if (selectedCategoryIndex != 1)
-                        const DropdownMenuItem(
-                          value: 'KyNang',
-                          child: Text(
-                            'Kỹ Năng',
-                            style: TextStyle(fontSize: 13),
-                          ),
-                        ),
-                    ],
-                    onChanged: (val) {
-                      setModalState(() {
-                        tempHuong = val;
-                        if (val == 'MoTa') {
-                          keywordCtrl.text =
-                              MoTaTamThoi.trieuChung?.join(', ') ??
-                              'Dữ liệu từ mô tả';
-                        } else if (val != filterHuong) {
-                          keywordCtrl.text = '';
-                        }
-                      });
-                    },
+                        onSelected: (selected) {
+                          setModalState(() {
+                            tempHuong = opt['value'];
+                            if (tempHuong == 'MoTa' &&
+                                keywordCtrl.text.trim().isEmpty) {
+                              keywordCtrl.text = _getMoTaDisplayString();
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 12),
+
+                  const SizedBox(height: 14),
                   TextField(
                     controller: keywordCtrl,
                     enabled: tempHuong != 'MoTa',
+                    maxLines: tempHuong == 'MoTa' ? 2 : 1,
                     style: const TextStyle(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: tempHuong == 'MoTa'
@@ -328,8 +346,7 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
                             setState(() {
                               filterHuong = tempHuong;
                               if (tempHuong == 'MoTa') {
-                                filterKeyword =
-                                    MoTaTamThoi.trieuChung?.join(' ') ?? '';
+                                filterKeyword = _getMoTaDisplayString();
                                 selectedCategoryIndex = 0;
                               } else {
                                 filterKeyword = keywordCtrl.text;

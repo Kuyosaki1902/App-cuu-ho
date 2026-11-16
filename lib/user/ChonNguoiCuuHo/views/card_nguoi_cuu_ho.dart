@@ -1,5 +1,6 @@
 // views/card_nguoi_cuu_ho.dart
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 
@@ -15,10 +16,32 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
     required this.onTap,
   });
 
+  ImageProvider? _resolveAvatarProvider(String? rawAvatar) {
+    if (rawAvatar == null || rawAvatar.trim().isEmpty) return null;
+    final cleaned = rawAvatar.trim();
+
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return NetworkImage(cleaned);
+    }
+
+    try {
+      final base64Part = cleaned.contains(',')
+          ? cleaned.split(',').last.trim()
+          : cleaned;
+      return MemoryImage(base64Decode(base64Part));
+    } catch (e) {
+      debugPrint('Lỗi decode base64 avatar: $e');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool coCCHN = item['coCCHN'] ?? false;
     final NguoiDungModel nguoiDung = item['nguoiDung'];
+    final ImageProvider? avatarImage = _resolveAvatarProvider(
+      item['avatarUrl'] as String?,
+    );
 
     final avatarBg = coCCHN ? const Color(0xFFD2F5EC) : const Color(0xFFFEF3C7);
     final avatarText = coCCHN
@@ -60,21 +83,30 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
                 Stack(
                   children: [
                     Container(
-                      width: 48,
-                      height: 48,
+                      padding: const EdgeInsets.all(1.5),
                       decoration: BoxDecoration(
-                        color: avatarBg,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          item['initials'] ?? 'CH',
-                          style: TextStyle(
-                            color: avatarText,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: coCCHN
+                              ? const Color(0xFF0C5C4D).withOpacity(0.35)
+                              : const Color(0xFFB45309).withOpacity(0.35),
+                          width: 1.5,
                         ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 23,
+                        backgroundColor: avatarBg,
+                        backgroundImage: avatarImage,
+                        child: avatarImage == null
+                            ? Text(
+                                item['initials'] ?? 'CH',
+                                style: TextStyle(
+                                  color: avatarText,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              )
+                            : null,
                       ),
                     ),
                     if (coCCHN)
@@ -187,89 +219,87 @@ class CardNguoiCuuHoWidget extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
-            // 🌟 THỤT LỀ TRÁI 60PX (Đúng bằng chiều rộng avatar 48 + khoảng cách 12) ĐỂ THẲNG HÀNG VỚI CÁC THÔNG TIN PHÍA TRÊN
+            // GIỮ LỀ TRÁI 61PX ĐỂ KHÔNG TRÀN DƯỚI AVATAR, ĐỒNG THỜI TẬN DỤNG FULL VÙNG BÊN DƯỚI NHÃN
+            // DÙNG WRAP CHUNG CHO CẢ NHÃN + CHIP: CHẠY TỪ BÊN PHẢI NHÃN, HẾT CHỖ MỚI XUỐNG DÒNG THẲNG MÉP TRÁI 61PX
             Padding(
-              padding: const EdgeInsets.only(left: 60),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width:
-                        85, // Chiều rộng cố định cho chữ "Chuyên ngành:" / "Kỹ năng:"
-                    child: Text(
-                      coCCHN ? 'Chuyên ngành:' : 'Kỹ năng:',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: coCCHN
-                        ? Wrap(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: badgeBg,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  item['tenChuyenNganh'],
-                                  style: TextStyle(
-                                    color: badgeTextColor,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+              padding: const EdgeInsets.only(left: 67),
+              child: coCCHN
+                  ? Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Chuyên ngành:',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item['tenChuyenNganh'],
+                            style: TextStyle(
+                              color: badgeTextColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Text(
+                          'Kỹ năng:',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        if (skills.isNotEmpty)
+                          ...skills.map(
+                            (skill) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                skill,
+                                style: TextStyle(
+                                  color: badgeTextColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ],
+                            ),
                           )
-                        : (skills.isNotEmpty
-                              ? Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: skills
-                                      .map(
-                                        (skill) => Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 3,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: badgeBg,
-                                            borderRadius: BorderRadius.circular(
-                                              6,
-                                            ),
-                                          ),
-                                          child: Text(
-                                            skill,
-                                            style: TextStyle(
-                                              color: badgeTextColor,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                )
-                              : const Text(
-                                  'Không có',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey,
-                                  ),
-                                )),
-                  ),
-                ],
-              ),
+                        else
+                          const Text(
+                            'Không có',
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                      ],
+                    ),
             ),
 
             const Padding(

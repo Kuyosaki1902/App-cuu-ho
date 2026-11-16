@@ -1,4 +1,5 @@
 // lib/user/ChiTietDuongDi/views/top_navigation_bar.dart
+import 'package:cuhokhancap/user/ChatVoiAI.dart';
 import 'package:flutter/material.dart';
 
 class ChiTietDuongDiTopNav extends StatelessWidget {
@@ -21,24 +22,40 @@ class ChiTietDuongDiTopNav extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              elevation: 2,
+              shadowColor: Colors.black12,
+              child: InkWell(
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 4),
-                ],
-              ),
-              child: Row(
-                children: const [
-                  CircleAvatar(radius: 4, backgroundColor: Colors.green),
-                  SizedBox(width: 6),
-                  Text(
-                    'Chat Với AI',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatVoiAIScreen(),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
                   ),
-                ],
+                  child: Row(
+                    children: const [
+                      CircleAvatar(radius: 4, backgroundColor: Colors.green),
+                      SizedBox(width: 6),
+                      Text(
+                        'Chat Với AI',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],

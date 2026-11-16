@@ -11,6 +11,20 @@ import 'package:widget_to_marker/widget_to_marker.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 
+class _ArrowClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(size.width / 2, size.height);
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
 class ChiTietDuongDiController {
   final String maNguoiCuuHo;
   final double startLat;
@@ -34,7 +48,7 @@ class ChiTietDuongDiController {
   bool isAutoTracking = true;
   Function()? _uiUpdateCallback;
 
-  double _lastBearing = 0.0; // Lưu góc hướng di chuyển trước đó
+  double _lastBearing = 0.0;
 
   String trangthaiText = "ĐANG TÍNH TOÁN LỘ TRÌNH...";
   String estimatedTime = "-- phút";
@@ -58,7 +72,8 @@ class ChiTietDuongDiController {
 
   Future<void> initTracking(Function() onUpdate) async {
     _uiUpdateCallback = onUpdate;
-    _initVictimMarker();
+    await _initVictimMarker();
+    _uiUpdateCallback?.call();
 
     khoangCachBanDau_OSRM = await _fetchOSRMRoute(startLat, startLng);
 
@@ -95,7 +110,6 @@ class ChiTietDuongDiController {
             double curLat = docSnap.data()?['viDo'] ?? startLat;
             double curLng = docSnap.data()?['kinhDo'] ?? startLng;
 
-            // Tính góc hướng di chuyển từ vị trí cũ sang vị trí mới
             double bearing = _calculateBearing(
               currentCurLat,
               currentCurLng,
@@ -123,13 +137,95 @@ class ChiTietDuongDiController {
         });
   }
 
-  void _initVictimMarker() {
+  // Marker nạn nhân đồng bộ giao diện (Avatar đỏ + mũi tên + nhãn Vị trí của bạn)
+  Future<void> _initVictimMarker() async {
+    Widget victimMarkerWidget = Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC81E1E),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_pin_circle_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -1),
+              child: ClipPath(
+                clipper: _ArrowClipper(),
+                child: Container(
+                  width: 14,
+                  height: 8,
+                  color: const Color(0xFFC81E1E),
+                ),
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFC81E1E),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 3,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Vị trí của bạn',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Color(0xFFC81E1E),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    BitmapDescriptor victimIcon = await victimMarkerWidget.toBitmapDescriptor(
+      waitToRender: const Duration(milliseconds: 100),
+    );
+
+    markers.removeWhere((m) => m.markerId.value == 'victim_location');
     markers.add(
       Marker(
         markerId: const MarkerId('victim_location'),
         position: LatLng(victimLat, victimLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: const InfoWindow(title: 'Vị trí nạn nhân'),
+        icon: victimIcon,
+        anchor: const Offset(0.5, 0.75),
       ),
     );
   }
@@ -187,7 +283,6 @@ class ChiTietDuongDiController {
                 : "ĐANG DI CHUYỂN TỚI ĐỊA ĐIỂM";
           }
 
-          // 🌟 Tạo custom marker dạng Avatar tròn + Mũi tên chỉ hướng giống màn hình tổng quan
           BitmapDescriptor rescuerIcon = await _createRescuerIcon(
             userModel,
             bearing,
@@ -226,7 +321,6 @@ class ChiTietDuongDiController {
     }
   }
 
-  // Thuật toán tính góc hướng di chuyển
   double _calculateBearing(
     double startLat,
     double startLng,
@@ -247,28 +341,65 @@ class ChiTietDuongDiController {
     return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 
-  // Hàm render Widget ra BitmapDescriptor cho Marker
   Future<BitmapDescriptor> _createRescuerIcon(
     NguoiDungModel user,
     double bearing,
   ) async {
     String? avatarData = await _fbService.getUserAvatarUrl(user.maNguoiDung!);
-    ImageProvider? avatarProvider;
     String initials = (user.hoTen.isNotEmpty)
         ? user.hoTen.substring(0, 1).toUpperCase()
         : '?';
 
-    if (avatarData != null && avatarData.isNotEmpty) {
-      if (avatarData.startsWith('http')) {
-        avatarProvider = NetworkImage(avatarData);
+    Widget avatarContent;
+    bool hasImage = false;
+
+    if (avatarData != null && avatarData.trim().isNotEmpty) {
+      final cleaned = avatarData.trim();
+      if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+        hasImage = true;
+        avatarContent = Image.network(
+          cleaned,
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+        );
       } else {
-        String base64Str = avatarData.contains(',')
-            ? avatarData.split(',').last
-            : avatarData;
+        final base64Str = cleaned.contains(',')
+            ? cleaned.split(',').last.trim()
+            : cleaned;
         try {
-          avatarProvider = MemoryImage(base64Decode(base64Str));
-        } catch (_) {}
+          final bytes = base64Decode(base64Str);
+          hasImage = true;
+          avatarContent = Image.memory(
+            bytes,
+            width: 40,
+            height: 40,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+          );
+        } catch (_) {
+          avatarContent = Center(
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }
       }
+    } else {
+      avatarContent = Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
     }
 
     Widget markerWidget = Directionality(
@@ -291,35 +422,25 @@ class ChiTietDuongDiController {
               ),
             ),
             Container(
+              width: 45,
+              height: 45,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                color: hasImage ? Colors.white : const Color(0xFF006A55),
                 border: Border.all(color: Colors.white, width: 2.5),
                 boxShadow: const [
                   BoxShadow(color: Colors.black26, blurRadius: 4),
                 ],
               ),
-              child: CircleAvatar(
-                radius: 20,
-                backgroundColor: avatarProvider != null
-                    ? Colors.white
-                    : const Color(0xFF006A55),
-                backgroundImage: avatarProvider,
-                child: avatarProvider == null
-                    ? Text(
-                        initials,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      )
-                    : null,
-              ),
+              child: ClipOval(child: avatarContent),
             ),
           ],
         ),
       ),
     );
-    return await markerWidget.toBitmapDescriptor();
+    return await markerWidget.toBitmapDescriptor(
+      waitToRender: const Duration(milliseconds: 150),
+    );
   }
 
   Future<double> _fetchOSRMRoute(double lat, double lng) async {
@@ -334,7 +455,7 @@ class ChiTietDuongDiController {
           return data['routes'][0]['distance'].toDouble();
         }
       }
-    } catch (e) {}
+    } catch (_) {}
     return Geolocator.distanceBetween(lat, lng, victimLng, victimLat);
   }
 
@@ -378,7 +499,6 @@ class ChiTietDuongDiController {
     _uiUpdateCallback?.call();
   }
 
-  // 🌟 Đẩy padding bounds rộng hơn (120 thay vì 80) để bản đồ tự động lùi lên trên, không bị che bởi bottom sheet
   void fitRouteBounds() {
     if (mapController == null) return;
     mapController?.animateCamera(
@@ -393,7 +513,7 @@ class ChiTietDuongDiController {
             currentCurLng > victimLng ? currentCurLng : victimLng,
           ),
         ),
-        120, // Tăng khoảng đệm để không bị bottom sheet che lấp
+        120,
       ),
     );
   }

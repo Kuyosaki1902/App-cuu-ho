@@ -4,6 +4,7 @@ import 'package:cuhokhancap/user/chinh_sua_thong_tin.dart';
 import 'DangNhap.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/user/NguoiThanCuaBan/NguoiThanCuaBan.dart';
 
 class ThongTinTaiKhoan extends StatefulWidget {
   final NguoiDungModel nguoiDung;
@@ -16,14 +17,15 @@ class ThongTinTaiKhoan extends StatefulWidget {
 
 class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
   final FirebaseService _firebaseService = FirebaseService();
-  late Stream<NguoiDungModel?> _userStream;
+  late final Stream<NguoiDungModel?> _userStream = _firebaseService
+      .layThongTinNguoiDungRealTime(widget.nguoiDung.maNguoiDung!);
+
+  late final Stream<List<NguoiThanKhanCap>> _nguoiThanStream = _firebaseService
+      .streamNguoiThanKhanCap(widget.nguoiDung.maNguoiDung!);
 
   @override
   void initState() {
     super.initState();
-    _userStream = _firebaseService.layThongTinNguoiDungRealTime(
-      widget.nguoiDung.maNguoiDung!,
-    );
   }
 
   String _getInitials(String name) {
@@ -79,9 +81,19 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                     iconColor: const Color(0xFFD32F2F),
                     title: "Người thân khẩn cấp (SOS)",
                     actionText: "+ Thêm",
+                    onActionTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NguoiThanCuaBan(
+                            userId: widget.nguoiDung.maNguoiDung!,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
-                  _buildEmergencyContactCard(),
+                  _buildEmergencyContactList(),
                   const SizedBox(height: 24),
                   _buildSectionTitle(
                     icon: Icons.security,
@@ -332,6 +344,7 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
     required Color iconColor,
     required String title,
     String? actionText,
+    VoidCallback? onActionTap,
   }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -351,14 +364,40 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
           ],
         ),
         if (actionText != null)
-          Text(
-            actionText,
-            style: const TextStyle(
-              color: Color(0xFF00695C),
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          onActionTap != null
+              ? TextButton(
+                  onPressed: onActionTap,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: const Color(
+                      0xFFE0F2F1,
+                    ), // Nền xanh nhạt giúp rõ dáng nút
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    actionText,
+                    style: const TextStyle(
+                      color: Color(0xFF00695C),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                )
+              : Text(
+                  actionText,
+                  style: const TextStyle(
+                    color: Color(0xFF00695C),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
       ],
     );
   }
@@ -398,81 +437,6 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E293B),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmergencyContactCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F3FF),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: const BoxDecoration(
-              color: Color(0xFF00897B),
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Text(
-                "VH",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      "Nguyễn Văn Hùng",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF69F0AE),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        "Chồng",
-                        style: TextStyle(
-                          color: Color(0xFF004D40),
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  "0903 123 456",
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],
             ),
@@ -531,6 +495,134 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
           Text(value, style: const TextStyle(fontSize: 13, color: Colors.grey)),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right, color: Colors.grey, size: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmergencyContactList() {
+    return StreamBuilder<List<NguoiThanKhanCap>>(
+      stream: _nguoiThanStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF00695C)),
+            ),
+          );
+        }
+
+        final danhSach = snapshot.data ?? [];
+
+        if (danhSach.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F3FF),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text(
+              "Chưa có người thân khẩn cấp",
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            for (int i = 0; i < danhSach.length; i++) ...[
+              _buildEmergencyContactCard(danhSach[i]),
+              if (i != danhSach.length - 1) const SizedBox(height: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEmergencyContactCard(NguoiThanKhanCap nguoiThan) {
+    final ten = nguoiThan.hoTen.isNotEmpty ? nguoiThan.hoTen : "Người thân";
+    final sdt = nguoiThan.soDienThoai.isNotEmpty
+        ? nguoiThan.soDienThoai
+        : "Chưa có số điện thoại";
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F3FF),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: const BoxDecoration(
+              color: Color(0xFF00897B),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                _getInitials(ten),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        ten,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ),
+                    if (nguoiThan.moiQuanHe != null &&
+                        nguoiThan.moiQuanHe!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF69F0AE),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          nguoiThan.moiQuanHe!,
+                          style: const TextStyle(
+                            color: Color(0xFF004D40),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  sdt,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

@@ -349,6 +349,13 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                           trailingColor: const Color(0xFFE8F5E9),
                           trailingTextColor: const Color(0xFF2E7D32),
                         ),
+                        _buildMenuItem(
+                          icon: Icons.leaderboard,
+                          title: "Bảng xếp hạng cứu hộ viên",
+                          trailingText: "Mới",
+                          trailingColor: const Color.fromARGB(255, 219, 249, 86),
+                          trailingTextColor: const Color.fromARGB(255, 107, 107, 104),
+                        ),
                         const SizedBox(height: 16),
                         const Divider(height: 1),
                         const SizedBox(height: 8),

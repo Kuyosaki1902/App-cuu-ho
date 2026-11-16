@@ -1,5 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cuhokhancap/firebase/anh_dai_dien_service.dart';
+import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
+import 'package:flutter/services.dart' show PlatformException;
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:cuhokhancap/user/Models/nguoidungmodel.dart'; // Đổi đường dẫn đúng dự án của bạn
 import 'package:cuhokhancap/firebase/firebase_service.dart'; // Đổi đường dẫn đúng dự án của bạn
 
 class ChinhSuaThongTin extends StatefulWidget {
@@ -13,6 +19,14 @@ class ChinhSuaThongTin extends StatefulWidget {
 class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
   final FirebaseService _firebaseService = FirebaseService();
   bool _isLoading = false;
+
+  // --- Ảnh đại diện ---
+  final AnhDaiDienService _anhService = AnhDaiDienService();
+  final ImagePicker _picker = ImagePicker();
+  Uint8List? _anhHienTai; // ảnh đang lưu trên server
+  Uint8List? _anhMoi; // ảnh vừa chọn, chưa lưu
+  bool _xoaAnh = false; // người dùng chọn xóa ảnh đại diện
+  bool _dangTaiAnh = true;
 
   // Color palette
   final Color primaryColor = const Color(0xFF005342);
@@ -35,6 +49,7 @@ class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
     );
     _emailController = TextEditingController(text: widget.manguoiDung.email);
     _diaChiController = TextEditingController(text: widget.manguoiDung.diaChi);
+    _taiAnhHienTai();
   }
 
   @override
@@ -47,11 +62,240 @@ class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
   }
 
   // --- HÀM KIỂM TRA XEM CÓ THAY ĐỔI DỮ LIỆU KHÔNG ---
-  bool _kiemTraCoThayDoi() {
-    return _hoTenController.text.trim() != widget.manguoiDung.hoTen ||
-        _sdtController.text.trim() != widget.manguoiDung.soDienThoai ||
-        _emailController.text.trim() != widget.manguoiDung.email ||
-        _diaChiController.text.trim() != widget.manguoiDung.diaChi;
+  bool get _coThayDoiThongTin =>
+      _hoTenController.text.trim() != widget.manguoiDung.hoTen ||
+      _sdtController.text.trim() != widget.manguoiDung.soDienThoai ||
+      _emailController.text.trim() != widget.manguoiDung.email ||
+      _diaChiController.text.trim() != widget.manguoiDung.diaChi;
+
+  bool get _coThayDoiAnh => _xoaAnh || _anhMoi != null;
+
+  bool _kiemTraCoThayDoi() => _coThayDoiThongTin || _coThayDoiAnh;
+
+  // ================= ẢNH ĐẠI DIỆN =================
+
+  void _thongBao(String noiDung, {Color? mau}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(noiDung), backgroundColor: mau));
+  }
+
+  /// Giải mã chuỗi base64 (có hoặc không có tiền tố data:image/...;base64,).
+  Uint8List? _giaiMaAnh(String? s) {
+    if (s == null || s.isEmpty) return null;
+    try {
+      final sach = s.contains(',') ? s.split(',').last : s;
+      return base64Decode(sach.trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _taiAnhHienTai() async {
+    final id = widget.manguoiDung.maNguoiDung;
+    if (id == null || id.isEmpty) {
+      _dangTaiAnh = false; // đang ở initState, không cần setState
+      return;
+    }
+    try {
+      final s = await _anhService.layAnhDaiDien(id);
+      if (!mounted) return;
+      setState(() {
+        _anhHienTai = _giaiMaAnh(s);
+        _dangTaiAnh = false;
+      });
+    } catch (e) {
+      debugPrint('Lỗi tải ảnh đại diện: $e');
+      if (mounted) setState(() => _dangTaiAnh = false);
+    }
+  }
+
+  Future<void> _chonNguonAnh() async {
+    final coAnh = !_xoaAnh && (_anhMoi != null || _anhHienTai != null);
+    final chon = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.black12,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_camera_outlined, color: primaryColor),
+              title: const Text('Chụp ảnh mới'),
+              onTap: () => Navigator.pop(ctx, 'camera'),
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library_outlined, color: primaryColor),
+              title: const Text('Chọn từ thư viện'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            if (coAnh)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text(
+                  'Xóa ảnh đại diện',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () => Navigator.pop(ctx, 'xoa'),
+              ),
+            if (_coThayDoiAnh)
+              ListTile(
+                leading: const Icon(Icons.undo, color: Colors.black54),
+                title: const Text('Bỏ thay đổi ảnh'),
+                onTap: () => Navigator.pop(ctx, 'hoantac'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    switch (chon) {
+      case 'camera':
+        await _chonAnh(ImageSource.camera);
+        break;
+      case 'gallery':
+        await _chonAnh(ImageSource.gallery);
+        break;
+      case 'xoa':
+        setState(() {
+          _anhMoi = null;
+          _xoaAnh =
+              _anhHienTai !=
+              null; // chỉ cần đánh dấu xóa nếu đã có ảnh trên server
+        });
+        break;
+      case 'hoantac':
+        setState(() {
+          _anhMoi = null;
+          _xoaAnh = false;
+        });
+        break;
+    }
+  }
+
+  Future<void> _chonAnh(ImageSource nguon) async {
+    try {
+      // Thu nhỏ ngay khi chọn để ảnh chỉ vài chục KB, an toàn với giới hạn 1 MiB của Firestore.
+      final file = await _picker.pickImage(
+        source: nguon,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
+      if (file == null) return; // người dùng đóng, không chọn
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 600 * 1024) {
+        _thongBao('Ảnh quá lớn, vui lòng chọn ảnh khác.', mau: Colors.red);
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _anhMoi = bytes;
+        _xoaAnh = false;
+      });
+    } on PlatformException {
+      _thongBao(
+        nguon == ImageSource.camera
+            ? 'Không mở được camera. Hãy cấp quyền camera trong Cài đặt.'
+            : 'Không mở được thư viện ảnh. Hãy cấp quyền truy cập ảnh trong Cài đặt.',
+        mau: Colors.red,
+      );
+    } catch (e) {
+      debugPrint('Lỗi chọn ảnh: $e');
+      _thongBao('Không thể chọn ảnh, vui lòng thử lại.', mau: Colors.red);
+    }
+  }
+
+  Widget _buildAvatar() {
+    final Uint8List? anh = _xoaAnh ? null : (_anhMoi ?? _anhHienTai);
+    final ten = widget.manguoiDung.hoTen.trim();
+    final chuCai = ten.isNotEmpty ? ten[0].toUpperCase() : 'ND';
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _isLoading ? null : _chonNguonAnh,
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              CircleAvatar(
+                radius: 45,
+                backgroundColor: primaryColor,
+                backgroundImage: anh != null ? MemoryImage(anh) : null,
+                onBackgroundImageError: anh != null ? (_, __) {} : null,
+                child: anh != null
+                    ? null
+                    : (_dangTaiAnh
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              chuCai,
+                              style: const TextStyle(
+                                fontSize: 28,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )),
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF006A55),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.camera_alt_outlined,
+                  color: Colors.white,
+                  size: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: _isLoading ? null : _chonNguonAnh,
+          child: Text(
+            anh == null ? 'Thêm ảnh đại diện' : 'Đổi ảnh đại diện',
+            style: TextStyle(
+              color: primaryColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ),
+        if (_coThayDoiAnh)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              _xoaAnh
+                  ? 'Ảnh đại diện sẽ bị xóa khi bạn bấm Lưu thay đổi'
+                  : 'Ảnh mới sẽ được lưu khi bạn bấm Lưu thay đổi',
+              style: const TextStyle(fontSize: 11.5, color: Colors.black54),
+            ),
+          ),
+      ],
+    );
   }
 
   // --- HÀM 1: CẢNH BÁO KHI RỜI ĐI NẾU CÓ THAY ĐỔI ---
@@ -160,6 +404,15 @@ class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
         ),
       );
     }
+    if (_coThayDoiAnh) {
+      danhSachThayDoi.add(
+        _buildChangeItem(
+          'Ảnh đại diện:',
+          _anhHienTai == null ? '(Chưa có)' : 'Ảnh hiện tại',
+          _xoaAnh ? '(Xóa ảnh)' : 'Ảnh mới đã chọn',
+        ),
+      );
+    }
 
     // 4. Hiện Dialog xác nhận
     showDialog(
@@ -252,37 +505,52 @@ class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
   Future<void> _pushToFirebase() async {
     setState(() => _isLoading = true);
 
-    Map<String, dynamic> dataUpdate = {
-      'hoTen': _hoTenController.text.trim(),
-      'soDienThoai': _sdtController.text.trim(),
-      'email': _emailController.text.trim(), // Email rỗng vẫn được lưu
-      'diaChi': _diaChiController.text.trim(),
-    };
+    final id = widget.manguoiDung.maNguoiDung!;
+    var okThongTin = true;
+    var okAnh = true;
 
-    bool isSuccess = await _firebaseService.capNhatThongTinCaNhan(
-      widget.manguoiDung.maNguoiDung!,
-      dataUpdate,
-    );
+    // 1) Thông tin cá nhân (chỉ gửi khi có chữ thay đổi)
+    if (_coThayDoiThongTin) {
+      final Map<String, dynamic> dataUpdate = {
+        'hoTen': _hoTenController.text.trim(),
+        'soDienThoai': _sdtController.text.trim(),
+        'email': _emailController.text.trim(), // Email rỗng vẫn được lưu
+        'diaChi': _diaChiController.text.trim(),
+      };
+      okThongTin = await _firebaseService.capNhatThongTinCaNhan(id, dataUpdate);
+    }
 
+    // 2) Ảnh đại diện
+    if (_coThayDoiAnh) {
+      try {
+        if (_xoaAnh) {
+          await _anhService.xoaAnhDaiDien(id);
+          _anhHienTai = null;
+        } else if (_anhMoi != null) {
+          await _anhService.luuAnhDaiDien(id, _anhMoi!);
+          _anhHienTai = _anhMoi;
+        }
+        _anhMoi = null;
+        _xoaAnh = false;
+      } catch (e) {
+        debugPrint('Lỗi lưu ảnh đại diện: $e');
+        okAnh = false;
+      }
+    }
+
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (isSuccess) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cập nhật thông tin thành công!'),
-          backgroundColor: Colors.green,
-        ),
+    if (okThongTin && okAnh) {
+      _thongBao('Cập nhật thông tin thành công!', mau: Colors.green);
+      Navigator.pop(context); // Quay về màn hình trước đó
+    } else if (okThongTin && !okAnh) {
+      _thongBao(
+        'Đã lưu thông tin nhưng chưa lưu được ảnh đại diện. Vui lòng thử lại.',
+        mau: Colors.orange,
       );
-      if (mounted) {
-        Navigator.pop(context); // Quay về màn hình trước đó
-      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Có lỗi xảy ra, vui lòng thử lại!'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _thongBao('Có lỗi xảy ra, vui lòng thử lại!', mau: Colors.red);
     }
   }
 
@@ -345,42 +613,7 @@ class _ChinhSuaThongTinState extends State<ChinhSuaThongTin> {
                       ),
                       child: Column(
                         children: [
-                          Stack(
-                            alignment: Alignment.bottomRight,
-                            children: [
-                              CircleAvatar(
-                                radius: 45,
-                                backgroundColor: primaryColor,
-                                child: Text(
-                                  widget.manguoiDung.hoTen.isNotEmpty
-                                      ? widget.manguoiDung.hoTen[0]
-                                            .toUpperCase()
-                                      : 'ND',
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF006A55),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt_outlined,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                              ),
-                            ],
-                          ),
+                          _buildAvatar(),
                           const SizedBox(height: 12),
                           Text(
                             widget.manguoiDung.hoTen,

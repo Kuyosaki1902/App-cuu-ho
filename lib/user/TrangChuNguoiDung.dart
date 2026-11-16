@@ -9,11 +9,13 @@ import 'package:geohash_plus/geohash_plus.dart' hide LatLng;
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/DangNhap.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'MenuNguoiDung.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cuhokhancap/user/MoTaTinhTrang.dart';
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
+import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
 import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
 import 'package:cuhokhancap/user/Design/chi_tiet_nguoi_cuu_ho_card.dart'; // Import file card vừa tạo
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
@@ -23,7 +25,7 @@ import 'package:cuhokhancap/user/Design/man_hinh_canh_bao.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/firebase/background_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:cuhokhancap/user/TheoDoiTinhTrangYeuCau.dart';
+import 'package:cuhokhancap/user/TheoDoiTinhTrang/TheoDoiTinhTrangYeuCau.dart';
 
 class TrangChuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -78,10 +80,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     _yeuCauQuyenThongBaoVaKhoiChayService();
     WidgetsBinding.instance.addObserver(this);
 
-    _firebaseService.capNhatVaiTro(
-      widget.maNguoiDung,
-      'vaitro_nguoidung',
-    );
+    _firebaseService.capNhatVaiTro(widget.maNguoiDung, 'vaitro_nguoidung');
 
     _gianhQuyenDangNhap().then((_) {
       _langNgheBiDaVang();
@@ -537,7 +536,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
           ),
 
           // THẺ CHI TIẾT NGƯỜI CỨU HỘ XỔ RA KHI NHẤN VÀO BIỂU TƯỢNG
-           if (_selectedRescuer != null)
+          if (_selectedRescuer != null)
             Positioned(
               top: 115,
               left: 0,
@@ -551,6 +550,11 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   });
                 },
                 onSendRequest: () async {
+                  if (_selectedRescuer == null ||
+                      _selectedRescuer!.maNguoiDung == null) {
+                    return;
+                  }
+
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -558,52 +562,100 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                         const Center(child: CircularProgressIndicator()),
                   );
 
-                  String? maYeuCauMoi = await _firebaseService
-                      .taoYeuCauTimBacSiTuDong(
-                        maNguoiYeuCau: _selectedRescuer!.maNguoiDung!,
-                        viDo: _currentPosition?.latitude ?? 0.0,
-                        kinhDo: _currentPosition?.longitude ?? 0.0,
-                        trieuChung: MoTaTamThoi.trieuChung,
-                        moTaChiTiet: MoTaTamThoi.moTaChiTiet,
-                        fileAnh: MoTaTamThoi.fileAnh,
-                        fileGhiAm: MoTaTamThoi.fileGhiAm,
-                        maLoaiYeuCau: 'loaiyeucau_choncuuhovien',
-                      );
-
-                  if (context.mounted) Navigator.pop(context);
-
-                  if (maYeuCauMoi != null) {
-                    MoTaTamThoi.clear();
-                    if (context.mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => GiaoDienDangTimKiem(
-                            maYeuCau: maYeuCauMoi,
-                            danhSachChiDinh: [_selectedRescuer!.maNguoiDung!],
-                          ),
-                        ),
-                      );
+                  try {
+                    SharedPreferences prefs =
+                        await SharedPreferences.getInstance();
+                    String maNguoiDungHienTai =
+                        prefs.getString('maNguoiDung_daLuu') ?? '';
+                    if (maNguoiDungHienTai.isEmpty) {
+                      if (context.mounted) Navigator.pop(context);
+                      return;
                     }
-                  } else {
+
+                    // 1. Kiểm tra real-time xem cứu hộ viên đã nhận ca khác hoặc offline chưa
+                    final rescuerDoc = await FirebaseFirestore.instance
+                        .collection('NguoiDung')
+                        .doc(_selectedRescuer!.maNguoiDung!)
+                        .get();
+
+                    final rescuerData = rescuerDoc.data();
+                    final bool dangNhanCa = rescuerData?['nhanCaCuuHo'] == true;
+                    final bool isOnline = rescuerData?['isOnline'] == true;
+
+                    if (!rescuerDoc.exists || dangNhanCa || !isOnline) {
+                      if (context.mounted) {
+                        Navigator.pop(context); // Tắt dialog loading
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${_selectedRescuer!.hoTen} vừa nhận một ca cứu hộ khác hoặc đã ngoại tuyến. Vui lòng chọn người khác!',
+                            ),
+                            backgroundColor: Colors.orange.shade800,
+                          ),
+                        );
+                      }
+                      return;
+                    }
+
+                    // 2. Nếu vẫn rảnh (nhanCaCuuHo == false && isOnline == true) mới tạo đơn
+                    String? maYeuCauMoi = await _firebaseService
+                        .taoYeuCauTimBacSiTuDong(
+                          maNguoiYeuCau: maNguoiDungHienTai,
+                          viDo: _currentPosition?.latitude ?? 0.0,
+                          kinhDo: _currentPosition?.longitude ?? 0.0,
+                          trieuChung: MoTaTamThoi.trieuChung,
+                          moTaChiTiet: MoTaTamThoi.moTaChiTiet,
+                          fileAnh: MoTaTamThoi.fileAnh,
+                          fileGhiAm: MoTaTamThoi.fileGhiAm,
+                          maLoaiYeuCau: 'loaiyeucau_choncuuhovien',
+                        );
+
+                    if (context.mounted) Navigator.pop(context);
+
+                    if (maYeuCauMoi != null) {
+                      MoTaTamThoi.clear();
+                      if (context.mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => GiaoDienDangTimKiem(
+                              maYeuCau: maYeuCauMoi,
+                              danhSachChiDinh: [_selectedRescuer!.maNguoiDung!],
+                            ),
+                          ),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Đã gửi yêu cầu ứng cứu tới ${_selectedRescuer!.hoTen}',
+                            ),
+                            backgroundColor: const Color(0xFF00695C),
+                          ),
+                        );
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại!',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  } catch (e) {
                     if (context.mounted) {
+                      Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Text(
-                            'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại!',
+                            'Lỗi kiểm tra trạng thái cứu hộ viên: $e',
                           ),
                         ),
                       );
                     }
                   }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Đã gửi yêu cầu ứng cứu tới ${_selectedRescuer!.hoTen}',
-                      ),
-                      backgroundColor: const Color(0xFF00695C),
-                    ),
-                  );
                 },
               ),
             ),
@@ -1091,14 +1143,33 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   _fabY = _fabY.clamp(80.0, screenHeight - 140.0);
                 });
               },
-              onTap: () {
-                // Nhấn nút mở màn hình TheoDoiTinhTrangYeuCau
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TheoDoiTinhTrangYeuCau(),
-                  ),
-                );
+              onTap: () async {
+                // 🌟 Lấy mã yêu cầu đang lưu cục bộ trong máy
+                String? activeMaYeuCau =
+                    await YeuCauStorageService.getActiveMaYeuCau();
+
+                if (activeMaYeuCau != null && activeMaYeuCau.isNotEmpty) {
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        // 🌟 Sửa đúng tên class và truyền maYeuCau vào
+                        builder: (context) =>
+                            TheoDoiTinhTrangScreen(maYeuCau: activeMaYeuCau),
+                      ),
+                    );
+                  }
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Bạn hiện không có đơn cứu hộ nào đang hoạt động!',
+                        ),
+                      ),
+                    );
+                  }
+                }
               },
               child: Container(
                 width: 56,
@@ -1113,10 +1184,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                       offset: const Offset(0, 4),
                     ),
                   ],
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 2.5,
-                  ),
+                  border: Border.all(color: Colors.white, width: 2.5),
                 ),
                 child: const Center(
                   child: Icon(
@@ -1130,8 +1198,6 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
           ),
         ],
       ),
-
-      
     );
   }
 

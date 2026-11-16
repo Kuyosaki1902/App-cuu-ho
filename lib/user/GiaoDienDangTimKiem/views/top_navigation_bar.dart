@@ -3,9 +3,14 @@
 import 'package:flutter/material.dart';
 
 class TopNavigationBarWidget extends StatelessWidget {
-  final VoidCallback? onBackPressed; // 🌟 Thêm callback nhận vào
+  final VoidCallback? onBackPressed;
+  final VoidCallback? onChatAIPressed; // 🌟 Thêm callback nhận sự kiện chat AI
 
-  const TopNavigationBarWidget({super.key, this.onBackPressed});
+  const TopNavigationBarWidget({
+    super.key,
+    this.onBackPressed,
+    this.onChatAIPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,34 +27,38 @@ class TopNavigationBarWidget extends StatelessWidget {
                   radius: 22,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.black87),
-                    // 🌟 Nếu có truyền hàm thì gọi hàm, không thì mặc định pop màn hình
                     onPressed: onBackPressed ?? () => Navigator.pop(context),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black12, blurRadius: 4),
-                    ],
-                  ),
-                  child: Row(
-                    children: const [
-                      CircleAvatar(radius: 4, backgroundColor: Colors.green),
-                      SizedBox(width: 6),
-                      Text(
-                        'Chat Với AI',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+
+                // 🌟 Bọc GestureDetector để bắt sự kiện chuyển trang
+                GestureDetector(
+                  onTap: onChatAIPressed,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black12, blurRadius: 4),
+                      ],
+                    ),
+                    child: Row(
+                      children: const [
+                        CircleAvatar(radius: 4, backgroundColor: Colors.green),
+                        SizedBox(width: 6),
+                        Text(
+                          'Chat Với AI',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],

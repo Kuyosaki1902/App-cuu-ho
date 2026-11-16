@@ -7,13 +7,31 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart';// Import RTDB
+import 'package:cuhokhancap/user/Models/chitiettinnhanmodel.dart'; // Import RTDB
 import 'package:cuhokhancap/user/Models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/Models/chitietphancongcuuhomodel%20.dart';
 import 'package:cuhokhancap/user/Models/hosocuuhococchnmodel.dart';
 import 'package:cuhokhancap/user/Models/hosocuuhokhongcchnmodel.dart';
 import 'package:cuhokhancap/user/Models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/Models/yeucaucuuhomodel.dart';
+import 'package:cuhokhancap/user/Models/danhgiamodel.dart';
+
+/// Dữ liệu hiển thị cho mục "Người thân khẩn cấp (SOS)"
+class NguoiThanKhanCap {
+  final String maNguoiThan;
+  final String hoTen;
+  final String soDienThoai;
+  final String? moiQuanHe;
+  final DateTime? ngayTao;
+
+  NguoiThanKhanCap({
+    required this.maNguoiThan,
+    required this.hoTen,
+    required this.soDienThoai,
+    this.moiQuanHe,
+    this.ngayTao,
+  });
+}
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -495,7 +513,9 @@ class FirebaseService {
 
   /// Kết quả kiểm tra hồ sơ cứu hộ
   /// Trả về Map: {'daDuyet': bool, 'coCCHN': bool}
-  Future<Map<String, bool>> kiemTraTrangThaiHoSoCuuHo(String maNguoiDung) async {
+  Future<Map<String, bool>> kiemTraTrangThaiHoSoCuuHo(
+    String maNguoiDung,
+  ) async {
     try {
       // 1. Kiểm tra trong bảng HoSoCuuHoCoCCHN
       QuerySnapshot snapCoCCHN = await _firestore
@@ -532,7 +552,9 @@ class FirebaseService {
   /// Xử lý chuyển đổi vai trò khi nhấn nút "Chuyển sang màn hình người cứu hộ"
   Future<bool> chuyenSangManHinhCuuHo(String maNguoiDung) async {
     try {
-      Map<String, bool> hoSoState = await kiemTraTrangThaiHoSoCuuHo(maNguoiDung);
+      Map<String, bool> hoSoState = await kiemTraTrangThaiHoSoCuuHo(
+        maNguoiDung,
+      );
 
       if (hoSoState['daDuyet'] == true) {
         String vaTroMoi = hoSoState['coCCHN'] == true
@@ -701,15 +723,61 @@ class FirebaseService {
     }
   }
 
+  // Trạng thái người thân đã đồng ý kết nối
+  static const String trangThaiNguoiThanDongY =
+      'user_trangthai_nguoithan_dongy';
 
+  /// Stream danh sách người thân (đã đồng ý) kèm họ tên + SĐT lấy từ collection NguoiDung
+  Stream<List<NguoiThanKhanCap>> streamNguoiThanKhanCap(String maNguoiDung) {
+    if (maNguoiDung.isEmpty) return Stream.value([]);
+
+    return _firestore
+        .collection('NguoiThan')
+        .doc(maNguoiDung)
+        .collection('DanhSachNguoiThan')
+        .where('trangThai', isEqualTo: trangThaiNguoiThanDongY)
+        .snapshots()
+        .asyncMap((snap) async {
+          // Với mỗi người thân, lấy thông tin từ NguoiDung (doc id = mã người thân)
+          final ketQua = await Future.wait(
+            snap.docs.map((doc) async {
+              try {
+                final userDoc = await _firestore
+                    .collection('NguoiDung')
+                    .doc(doc.id)
+                    .get();
+                if (!userDoc.exists || userDoc.data() == null) return null;
+
+                final u = userDoc.data()!;
+                final ngayTao = doc.data()['ngayTao'];
+
+                return NguoiThanKhanCap(
+                  maNguoiThan: doc.id,
+                  hoTen: (u['hoTen'] ?? '') as String,
+                  soDienThoai: (u['soDienThoai'] ?? '') as String,
+                  moiQuanHe: doc.data()['moiQuanHe'] as String?,
+                  ngayTao: ngayTao is Timestamp ? ngayTao.toDate() : null,
+                );
+              } catch (e) {
+                print('Lỗi streamNguoiThanKhanCap (${doc.id}): $e');
+                return null;
+              }
+            }),
+          );
+
+          final list = ketQua.whereType<NguoiThanKhanCap>().toList();
+          // Sắp xếp ở client để không phải tạo composite index trên Firestore
+          list.sort(
+            (a, b) =>
+                (a.ngayTao ?? DateTime(0)).compareTo(b.ngayTao ?? DateTime(0)),
+          );
+          return list;
+        });
+  }
 
   // ===========================================================================
   // --------------------------NGÔ THIÊN BẢO------------------------------
   // ===========================================================================
-
-
-
-
 
   // ===========================================================================
   // 1. NGUOI DUNG MODEL (NguoiDung)
@@ -940,9 +1008,20 @@ class FirebaseService {
     String maTinhTrang,
   ) async {
     try {
-      await _firestore.collection('YeuCauCuuHo').doc(maYeuCau).update({
+      final Map<String, dynamic> updateData = {
         'maTinhTrangYeuCau': maTinhTrang,
-      });
+      };
+
+      if (maTinhTrang == 'user_tinhtrang_daphancong') {
+        updateData['thoiGianPhanCong'] = FieldValue.serverTimestamp();
+      } else if (maTinhTrang == 'user_tinhtrang_hoanthanh') {
+        updateData['thoiGianHoanThanh'] = FieldValue.serverTimestamp();
+      }
+
+      await _firestore
+          .collection('YeuCauCuuHo')
+          .doc(maYeuCau)
+          .update(updateData);
     } catch (e) {
       print('Lỗi FirebaseService.updateTinhTrangYeuCau: $e');
     }
@@ -1305,20 +1384,21 @@ class FirebaseService {
   // 7. LẤY AVATAR NGƯỜI DÙNG (TỪ LuuAnhModel)
   // ===========================================================================
 
-  Future<String?> getUserAvatarUrl(String userId) async {
+  Future<String?> getUserAvatarUrl(String maNguoiDung) async {
     try {
       final snap = await _firestore
           .collection('LuuAnh')
-          .where('maNguoiDung', isEqualTo: userId)
-          .where('maPhanLoaiAnh', isEqualTo: 'phanloaianh_avatar')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
           .limit(1)
           .get();
 
       if (snap.docs.isNotEmpty) {
-        return snap.docs.first.data()['anhURL'] as String?;
+        final data = snap.docs.first.data();
+        return (data['base64Image'] ?? data['anhURL'])?.toString();
       }
     } catch (e) {
-      print('Lỗi getUserAvatarUrl: $e');
+      print('Lỗi FirebaseService.getUserAvatarUrl: $e');
     }
     return null;
   }
@@ -1356,6 +1436,86 @@ class FirebaseService {
               .map((doc) => ChiTietTinNhanModel.fromMap(doc.data(), doc.id))
               .toList(),
         );
+  }
+
+  // 🌟 1. Stream danh sách tin nhắn theo cấu trúc mới: /PhongChatCuuHo/{maYeuCau}/DanhSachTinNhan
+  Stream<List<ChiTietTinNhanModel>> streamDanhSachTinNhan(String maYeuCau) {
+    return FirebaseFirestore.instance
+        .collection('PhongChatCuuHo')
+        .doc(maYeuCau)
+        .collection('DanhSachTinNhan')
+        .orderBy('thoiGianGui', descending: false)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => ChiTietTinNhanModel.fromMap(doc.data(), doc.id))
+              .toList();
+        });
+  }
+
+  // 🌟 2. Gửi tin nhắn mới vào collection mới
+  Future<void> guiTinNhanMoi(
+    String maYeuCau,
+    ChiTietTinNhanModel tinNhan,
+  ) async {
+    await FirebaseFirestore.instance
+        .collection('PhongChatCuuHo')
+        .doc(maYeuCau)
+        .collection('DanhSachTinNhan')
+        .add(tinNhan.toMap());
+  }
+
+  // 🌟 3. Lấy thông tin user (Tên + Avatar từ LuuAnh) để hiển thị trong khung chat
+  Future<Map<String, String>> getUserInfoForChat(String userId) async {
+    String name = 'Cứu hộ viên';
+    String? avatar;
+
+    try {
+      var userDoc = await FirebaseFirestore.instance
+          .collection('NguoiDung')
+          .doc(userId)
+          .get();
+      if (userDoc.exists && userDoc.data() != null) {
+        name = userDoc.data()?['hoTen'] ?? 'Cứu hộ viên';
+      }
+
+      var imageQuery = await FirebaseFirestore.instance
+          .collection('LuuAnh')
+          .where('maNguoiDung', isEqualTo: userId)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
+          .limit(1)
+          .get();
+
+      if (imageQuery.docs.isNotEmpty) {
+        avatar = imageQuery.docs.first.data()['base64Image'] as String?;
+      }
+    } catch (e) {
+      print('Lỗi lấy thông tin chat user: $e');
+    }
+
+    return {'name': name, 'avatar': avatar ?? ''};
+  }
+
+  // 🌟 4. Dịch tọa độ (viDo, kinhDo) thành tên địa chỉ thực tế
+  Future<String> getAddressFromLatLng(double lat, double lng) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'cuhokhancap_app'},
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['display_name'] != null) {
+          return data['display_name'];
+        }
+      }
+    } catch (e) {
+      print('Lỗi geocoding: $e');
+    }
+    return 'Tọa độ: $lat, $lng';
   }
 
   /// Gửi tin nhắn mới
@@ -1408,6 +1568,165 @@ class FirebaseService {
       await _realtimeDb.ref('YeuCauKhanCap/$maYeuCau').remove();
     } catch (e) {
       print('❌ Lỗi FirebaseService.removeRequestFromRealtimeDB: $e');
+    }
+  }
+  // ===========================================================================
+  // 10. HOÀN THÀNH ĐƠN CỨU HỘ & ĐÁNH GIÁ
+  // ===========================================================================
+
+  // Lắng nghe danh sách cứu hộ viên đã nhận đơn này
+  Stream<List<Map<String, dynamic>>> langNgheDanhSachCuuHo(String maYeuCau) {
+    return _firestore
+        .collection('ChiTietPhanCongCuuHo')
+        .where('maYeuCau', isEqualTo: maYeuCau)
+        // Lọc những người chấp nhận (không phải từ chối)
+        .where(
+          'maTrangThaiTiepNhan',
+          isNotEqualTo: 'cuuho_trangthai_phancong_tuchoi',
+        )
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs.map((doc) {
+            var data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          }).toList(),
+        );
+  }
+
+  // Lắng nghe các đánh giá đã tạo cho đơn này để cập nhật UI
+  Stream<List<DanhGiaModel>> langNgheDanhGia(String maYeuCau) {
+    return _firestore
+        .collection('DanhGia')
+        .where('maYeuCau', isEqualTo: maYeuCau)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => DanhGiaModel.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
+  }
+
+  // Cập nhật trạng thái hoàn thành toàn bộ Yêu Cầu
+  Future<bool> xacNhanHoanThanhYeuCau(String maYeuCau) async {
+    try {
+      await _firestore.collection('YeuCauCuuHo').doc(maYeuCau).update({
+        'maTinhTrangYeuCau': 'user_tinhtrang_hoanthanh',
+        'thoiGianHoanThanh': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Gửi một đánh giá
+  Future<bool> guiDanhGia(DanhGiaModel danhGia) async {
+    try {
+      final docRef = _firestore.collection('DanhGia').doc();
+      final danhGiaCoID = DanhGiaModel(
+        maDanhGia: docRef.id,
+        maYeuCau: danhGia.maYeuCau,
+        maNguoiDanhGia: danhGia.maNguoiDanhGia,
+        maNguoiCuuHo: danhGia.maNguoiCuuHo,
+        diemDanhGia: danhGia.diemDanhGia,
+        nhanXet: danhGia.nhanXet,
+        ngayTao: danhGia.ngayTao,
+      );
+      await docRef.set(danhGiaCoID.toMap());
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // 11. LỊCH SỬ CỨU HỘ & ĐÁNH GIÁ THEO TỪNG CỨU HỘ VIÊN
+  // ===========================================================================
+
+  // Lấy danh sách các đơn cứu hộ đã kết thúc của người dùng
+  Future<List<YeuCauCuuHoModel>> getLichSuYeuCauByUser(
+    String currentUserId,
+  ) async {
+    try {
+      final snap = await _firestore
+          .collection('YeuCauCuuHo')
+          .where('maNguoiYeuCau', isEqualTo: currentUserId)
+          .where(
+            'maTinhTrangYeuCau',
+            whereIn: [
+              'user_tinhtrang_hoanthanh',
+              'user_tinhtrang_dahuy',
+              'user_tinhtrang_quahandieuphoi',
+            ],
+          )
+          .get();
+
+      final list = snap.docs
+          .map((doc) => YeuCauCuuHoModel.fromMap(doc.data(), doc.id))
+          .toList();
+
+      list.sort((a, b) => b.thoiGianTao.compareTo(a.thoiGianTao));
+      return list;
+    } catch (e) {
+      print('❌ Lỗi FirebaseService.getLichSuYeuCauByUser: $e');
+      return [];
+    }
+  }
+
+  // Lấy toàn bộ đánh giá của 1 đơn theo đường dẫn:
+  // DanhGia -> {maYeuCau} -> subcollection(DanhSachCuuHoVien) -> {maNguoiCuuHo}
+  Future<Map<String, DanhGiaModel>> getDanhGiaCuuHoVienTheoYeuCau(
+    String maYeuCau,
+  ) async {
+    Map<String, DanhGiaModel> result = {};
+    try {
+      final snap = await _firestore
+          .collection('DanhGia')
+          .doc(maYeuCau)
+          .collection('DanhSachCuuHoVien')
+          .get();
+
+      for (var doc in snap.docs) {
+        final dg = DanhGiaModel.fromMap(doc.data(), doc.id);
+        final keyId = dg.maNguoiCuuHo.isNotEmpty ? dg.maNguoiCuuHo : doc.id;
+        result[keyId] = dg;
+      }
+    } catch (e) {
+      print('❌ Lỗi FirebaseService.getDanhGiaCuuHoVienTheoYeuCau: $e');
+    }
+    return result;
+  }
+
+  // Gửi đánh giá mới (Khóa chính là maNguoiCuuHo - không ghi đè nếu đã tồn tại)
+  Future<bool> guiDanhGiaCuuHoVien(DanhGiaModel danhGia) async {
+    try {
+      final docRef = _firestore
+          .collection('DanhGia')
+          .doc(danhGia.maYeuCau)
+          .collection('DanhSachCuuHoVien')
+          .doc(danhGia.maNguoiCuuHo);
+
+      final existing = await docRef.get();
+      if (existing.exists) {
+        return false;
+      }
+
+      final dataToSave = DanhGiaModel(
+        maDanhGia: danhGia.maNguoiCuuHo,
+        maYeuCau: danhGia.maYeuCau,
+        maNguoiDanhGia: danhGia.maNguoiDanhGia,
+        maNguoiCuuHo: danhGia.maNguoiCuuHo,
+        diemDanhGia: danhGia.diemDanhGia,
+        nhanXet: danhGia.nhanXet,
+        ngayTao: DateTime.now(),
+      );
+
+      await docRef.set(dataToSave.toMap());
+      return true;
+    } catch (e) {
+      print('❌ Lỗi FirebaseService.guiDanhGiaCuuHoVien: $e');
+      return false;
     }
   }
 }

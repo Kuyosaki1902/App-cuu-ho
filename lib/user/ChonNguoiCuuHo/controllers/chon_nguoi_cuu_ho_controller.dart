@@ -8,6 +8,63 @@ class ChonNguoiCuuHoController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseService _firebaseService = FirebaseService();
 
+  // Lấy danh sách TÊN kỹ năng từ /ChiTietKyNang/{userId}/DanhSachKyNang
+  // và tra cứu tên tại /KyNangCuuHo/kynangcoban/DanhSachKyNang & /KyNangCuuHo/kynangtuhoc/DanhSachKyNang
+  Future<List<String>> _fetchTenKyNangByUserId(String userId) async {
+    try {
+      final chiTietSnap = await _firestore
+          .collection('ChiTietKyNang')
+          .doc(userId)
+          .collection('DanhSachKyNang')
+          .get();
+
+      if (chiTietSnap.docs.isEmpty) return [];
+
+      final List<String> skillIds = [];
+      for (final doc in chiTietSnap.docs) {
+        final data = doc.data();
+        final rawId = (data['maKyNangCuuHo'] ?? '').toString().trim();
+        skillIds.add(rawId.isNotEmpty ? rawId : doc.id);
+      }
+
+      final List<String> tenKyNangList = [];
+      final coBanRef = _firestore
+          .collection('KyNangCuuHo')
+          .doc('kynangcoban')
+          .collection('DanhSachKyNang');
+      final tuHocRef = _firestore
+          .collection('KyNangCuuHo')
+          .doc('kynangtuhoc')
+          .collection('DanhSachKyNang');
+
+      for (final skillId in skillIds) {
+        // 1. Tìm trong nhóm kynangcoban
+        final docCoBan = await coBanRef.doc(skillId).get();
+        if (docCoBan.exists && docCoBan.data() != null) {
+          final ten = (docCoBan.data()!['ten'] ?? '').toString().trim();
+          if (ten.isNotEmpty) {
+            tenKyNangList.add(ten);
+            continue;
+          }
+        }
+
+        // 2. Nếu không có trong cơ bản thì tìm trong nhóm kynangtuhoc
+        final docTuHoc = await tuHocRef.doc(skillId).get();
+        if (docTuHoc.exists && docTuHoc.data() != null) {
+          final ten = (docTuHoc.data()!['ten'] ?? '').toString().trim();
+          if (ten.isNotEmpty) {
+            tenKyNangList.add(ten);
+          }
+        }
+      }
+
+      return tenKyNangList;
+    } catch (e) {
+      print('Lỗi lấy danh sách tên kỹ năng cho $userId: $e');
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>> fetchNearbyDoctors(
     Position currentPosition,
     double maxRadiusMeters,
@@ -19,6 +76,17 @@ class ChonNguoiCuuHoController {
 
       for (var user in onlineRescuers) {
         if (user.viDo == null || user.kinhDo == null) continue;
+
+        // Kiểm tra trực tiếp trường nhanCaCuuHo trên NguoiDung: nếu đang nhận ca (true) thì bỏ qua
+        if (user.maNguoiDung != null && user.maNguoiDung!.isNotEmpty) {
+          final userDoc = await _firestore
+              .collection('NguoiDung')
+              .doc(user.maNguoiDung)
+              .get();
+          if (userDoc.exists && userDoc.data()?['nhanCaCuuHo'] == true) {
+            continue;
+          }
+        }
 
         double distanceMeters = Geolocator.distanceBetween(
           currentPosition.latitude,
@@ -70,10 +138,13 @@ class ChonNguoiCuuHoController {
                   (dataKhongCCHN['tongLuotDanhGia'] as num?)?.toInt() ?? 0;
             }
 
-            danhSachKyNang = await _firebaseService.getSkillIdsByUserId(
-              user.maNguoiDung!,
-            );
+            danhSachKyNang = await _fetchTenKyNangByUserId(user.maNguoiDung!);
           }
+
+          // Lấy chuỗi base64 / URL avatar từ collection LuuAnh
+          final String? avatarUrl = await _firebaseService.getUserAvatarUrl(
+            user.maNguoiDung!,
+          );
 
           String formattedDistance = khoangCachMet >= 1000
               ? '${(khoangCachMet / 1000).toStringAsFixed(1)}km'
@@ -90,6 +161,7 @@ class ChonNguoiCuuHoController {
 
           loadedList.add({
             'nguoiDung': user,
+            'avatarUrl': avatarUrl,
             'coCCHN': coCCHN,
             'maChuyenNganh': maCN,
             'tenChuyenNganh': tenCN,

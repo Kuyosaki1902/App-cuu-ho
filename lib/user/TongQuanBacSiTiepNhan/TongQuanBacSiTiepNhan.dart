@@ -5,6 +5,21 @@ import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/Models/tracking_rescuer_m
 import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/views/rescuer_overview_components.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:widget_to_marker/widget_to_marker.dart';
+
+class _ArrowClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    Path path = Path();
+    path.lineTo(size.width / 2, size.height);
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
 
 class TongQuanBacSiTiepNhan extends StatefulWidget {
   final String maYeuCau;
@@ -31,18 +46,119 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
   GoogleMapController? _mapController;
 
   bool _isAutoFitEnabled = false;
-  double _bottomSheetFraction =
-      0.38; // 🌟 Phục hồi biến quản lý chiều cao bottom sheet
+  bool _isCollapsed = false;
+  int _previousRescuerCount = 0;
+  BitmapDescriptor? _victimMarkerIcon;
 
   @override
   void initState() {
     super.initState();
+    _initVictimMarkerIcon();
     _controller = RescuerOverviewController(
       maYeuCau: widget.maYeuCau,
       victimLat: widget.victimLat,
       victimLng: widget.victimLng,
     );
     _controller.initController();
+
+    _controller.trackingListNotifier.addListener(() {
+      int currentCount = _controller.trackingListNotifier.value.length;
+      if (currentCount > _previousRescuerCount) {
+        if (mounted) {
+          setState(() {
+            _isCollapsed = false;
+          });
+        }
+      }
+      _previousRescuerCount = currentCount;
+    });
+  }
+
+  Future<void> _initVictimMarkerIcon() async {
+    Widget victimMarkerWidget = Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFC81E1E),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_pin_circle_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -1),
+              child: ClipPath(
+                clipper: _ArrowClipper(),
+                child: Container(
+                  width: 14,
+                  height: 8,
+                  color: const Color(0xFFC81E1E),
+                ),
+              ),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -2),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFC81E1E),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 3,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Vị trí của bạn',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Color(0xFFC81E1E),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final icon = await victimMarkerWidget.toBitmapDescriptor(
+      waitToRender: const Duration(milliseconds: 100),
+    );
+    if (mounted) {
+      setState(() {
+        _victimMarkerIcon = icon;
+      });
+    }
   }
 
   @override
@@ -50,6 +166,34 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
     _controller.dispose();
     _mapController?.dispose();
     super.dispose();
+  }
+
+  void _openRescuerRouteDetail(TrackingRescuerModel res) {
+    final rescuerId = res.nguoiDung.maNguoiDung;
+    if (rescuerId == null) return;
+
+    double sLat =
+        widget.initialLocations?[rescuerId]?.latitude ??
+        res.nguoiDung.viDo ??
+        widget.victimLat;
+    double sLng =
+        widget.initialLocations?[rescuerId]?.longitude ??
+        res.nguoiDung.kinhDo ??
+        widget.victimLng;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChiTietDuongDiScreen(
+          maNguoiCuuHo: rescuerId,
+          startLat: sLat,
+          startLng: sLng,
+          victimLat: widget.victimLat,
+          victimLng: widget.victimLng,
+          tenBacSi: res.nguoiDung.hoTen,
+        ),
+      ),
+    );
   }
 
   void _fitAllMarkers(List<TrackingRescuerModel> rescuers) {
@@ -88,8 +232,10 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
       Marker(
         markerId: const MarkerId('victim_marker'),
         position: LatLng(widget.victimLat, widget.victimLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: const InfoWindow(title: 'Vị trí của bạn'),
+        icon:
+            _victimMarkerIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        anchor: const Offset(0.5, 0.75),
       ),
     );
     for (var res in rescuers) {
@@ -104,32 +250,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
               res.markerIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           anchor: const Offset(0.5, 0.5),
-          onTap: () {
-            double sLat =
-                widget.initialLocations?[res.nguoiDung.maNguoiDung]?.latitude ??
-                res.nguoiDung.viDo ??
-                widget.victimLat;
-            double sLng =
-                widget
-                    .initialLocations?[res.nguoiDung.maNguoiDung]
-                    ?.longitude ??
-                res.nguoiDung.kinhDo ??
-                widget.victimLng;
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChiTietDuongDiScreen(
-                  maNguoiCuuHo: res.nguoiDung.maNguoiDung!,
-                  startLat: sLat,
-                  startLng: sLng,
-                  victimLat: widget.victimLat,
-                  victimLng: widget.victimLng,
-                  tenBacSi: res.nguoiDung.hoTen,
-                ),
-              ),
-            );
-          },
+          onTap: () => _openRescuerRouteDetail(res),
           infoWindow: InfoWindow(
             title: '${res.index}. ${res.nguoiDung.hoTen}',
             snippet: 'Cách ${res.distanceKm.toStringAsFixed(1)}km',
@@ -143,160 +264,161 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
   @override
   Widget build(BuildContext context) {
     final double screenHeight = MediaQuery.of(context).size.height;
-    final double mapBottomPadding = screenHeight * _bottomSheetFraction;
 
-    return Scaffold(
-      body: ValueListenableBuilder<List<TrackingRescuerModel>>(
-        valueListenable: _controller.trackingListNotifier,
-        builder: (context, trackingList, child) {
-          if (_isAutoFitEnabled) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _fitAllMarkers(trackingList);
-            });
-          }
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+      },
+      child: Scaffold(
+        body: ValueListenableBuilder<List<TrackingRescuerModel>>(
+          valueListenable: _controller.trackingListNotifier,
+          builder: (context, trackingList, child) {
+            if (_isAutoFitEnabled) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _fitAllMarkers(trackingList);
+              });
+            }
 
-          return Stack(
-            children: [
-              // 1. BẢN ĐỒ (Đã gắn lại padding theo chiều cao BottomSheet)
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(widget.victimLat, widget.victimLng),
-                  zoom: 14.5,
-                ),
-                myLocationEnabled: false,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-                markers: _buildMarkers(trackingList),
-                onMapCreated: (GoogleMapController controller) {
-                  _mapController = controller;
-                },
-                padding: EdgeInsets.only(bottom: mapBottomPadding),
+            int displayCount = trackingList.length > 3
+                ? 3
+                : trackingList.length;
 
-                // Tự động tắt Auto-Fit khi người dùng chạm tay vuốt bản đồ
-                onCameraMoveStarted: () {
-                  if (_isAutoFitEnabled) {
-                    setState(() {
-                      _isAutoFitEnabled = false;
-                    });
-                  }
-                },
-              ),
+            double calculatedHeight = _isCollapsed
+                ? 130.0
+                : (130.0 + 40.0 + (displayCount * 85.0)).clamp(
+                    130.0,
+                    screenHeight * 0.6,
+                  );
 
-              // 2. BOTTOM SHEET
-              NotificationListener<DraggableScrollableNotification>(
-                onNotification: (notification) {
-                  setState(() {
-                    _bottomSheetFraction = notification.extent;
-                  });
-                  return true;
-                },
-                child: DraggableScrollableSheet(
-                  initialChildSize: 0.30,
-                  minChildSize: 0.18,
-                  maxChildSize: 0.42,
-                  builder: (BuildContext context, ScrollController scrollController) {
-                    return RescuerListBottomSheet(
-                      trackingList: trackingList,
-                      maYeuCau: widget.maYeuCau,
-                      currentUserId: widget.currentUserId,
-                      victimLat:
-                          widget.victimLat, // 🌟 Đảm bảo ở đây có truyền vào
-                      victimLng:
-                          widget.victimLng, // 🌟 Đảm bảo ở đây có truyền vào
-                      scrollController: scrollController,
-                      // 🌟 SỬA TẠI ĐÂY: Nhấn vào card/avatar sẽ lia map đến bác sĩ mà giữ nguyên mức zoom
-                      onRescuerTap: (lat, lng) async {
-                        setState(() {
-                          _isAutoFitEnabled =
-                              false; // Tắt chế độ tự động bao quát
-                        });
-
-                        if (_mapController != null) {
-                          // Lấy mức zoom hiện tại người dùng đang xem
-                          double currentZoom = await _mapController!
-                              .getZoomLevel();
-
-                          _mapController?.animateCamera(
-                            CameraUpdate.newCameraPosition(
-                              CameraPosition(
-                                target: LatLng(lat, lng),
-                                zoom:
-                                    currentZoom, // Giữ nguyên hiện trạng zoom, không bị phóng to thu nhỏ
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                    );
+            return Stack(
+              children: [
+                GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(widget.victimLat, widget.victimLng),
+                    zoom: 14.5,
+                  ),
+                  myLocationEnabled: false,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  markers: _buildMarkers(trackingList),
+                  onMapCreated: (GoogleMapController controller) {
+                    _mapController = controller;
+                  },
+                  padding: EdgeInsets.only(bottom: calculatedHeight),
+                  onCameraMoveStarted: () {
+                    if (_isAutoFitEnabled) {
+                      setState(() {
+                        _isAutoFitEnabled = false;
+                      });
+                    }
                   },
                 ),
-              ),
-              // 3. TOP NAV
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: RescuerTopNavBar(
-                  rescuerCount: trackingList.length,
-                  onBack: () => Navigator.pop(context),
-                  onSosPressed: () {},
-                ),
-              ),
 
-              // 4. MAP CONTROLS (Đủ 2 nút: Auto-fit & Định vị giữ zoom)
-              Positioned(
-                right: 16,
-                top: 100,
-                child: Column(
-                  children: [
-                    // Nút 1: Bật/Tắt Auto Fit (Bao quát lộ trình)
-                    MapControlButton(
-                      icon: _isAutoFitEnabled
-                          ? Icons.zoom_out_map
-                          : Icons.center_focus_strong,
-                      iconColor: _isAutoFitEnabled
-                          ? Colors.blue
-                          : Colors.black87,
-                      onTap: () {
-                        setState(() {
-                          _isAutoFitEnabled = !_isAutoFitEnabled;
-                        });
-                        if (_isAutoFitEnabled) _fitAllMarkers(trackingList);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    // Nút 2: Về vị trí nạn nhân (Giữ nguyên mức zoom hiện tại)
-                    MapControlButton(
-                      icon: Icons.my_location,
-                      onTap: () async {
-                        setState(() {
-                          _isAutoFitEnabled = false;
-                        });
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 250),
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: calculatedHeight,
+                  child: RescuerListBottomSheet(
+                    trackingList: trackingList,
+                    maYeuCau: widget.maYeuCau,
+                    currentUserId: widget.currentUserId,
+                    victimLat: widget.victimLat,
+                    victimLng: widget.victimLng,
+                    isCollapsed: _isCollapsed,
+                    onToggleCollapse: () {
+                      setState(() {
+                        _isCollapsed = !_isCollapsed;
+                      });
+                    },
+                    onRescuerAvatarTap: (item) {
+                      _openRescuerRouteDetail(item);
+                    },
+                    onRescuerTap: (lat, lng) async {
+                      setState(() {
+                        _isAutoFitEnabled = false;
+                      });
 
-                        if (_mapController != null) {
-                          double currentZoom = await _mapController!
-                              .getZoomLevel();
-
-                          _mapController?.animateCamera(
-                            CameraUpdate.newCameraPosition(
-                              CameraPosition(
-                                target: LatLng(
-                                  widget.victimLat,
-                                  widget.victimLng,
-                                ),
-                                zoom: currentZoom,
-                              ),
+                      if (_mapController != null) {
+                        double currentZoom = await _mapController!
+                            .getZoomLevel();
+                        _mapController?.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: LatLng(lat, lng),
+                              zoom: currentZoom,
                             ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
+                          ),
+                        );
+                      }
+                    },
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
+
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: RescuerTopNavBar(
+                    rescuerCount: trackingList.length,
+                    onBack: () => Navigator.pop(context),
+                    onSosPressed: () {},
+                  ),
+                ),
+
+                Positioned(
+                  right: 16,
+                  top: 100,
+                  child: Column(
+                    children: [
+                      MapControlButton(
+                        icon: _isAutoFitEnabled
+                            ? Icons.zoom_out_map
+                            : Icons.center_focus_strong,
+                        iconColor: _isAutoFitEnabled
+                            ? Colors.blue
+                            : Colors.black87,
+                        onTap: () {
+                          setState(() {
+                            _isAutoFitEnabled = !_isAutoFitEnabled;
+                          });
+                          if (_isAutoFitEnabled) _fitAllMarkers(trackingList);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      MapControlButton(
+                        icon: Icons.my_location,
+                        onTap: () async {
+                          setState(() {
+                            _isAutoFitEnabled = false;
+                          });
+
+                          if (_mapController != null) {
+                            double currentZoom = await _mapController!
+                                .getZoomLevel();
+                            _mapController?.animateCamera(
+                              CameraUpdate.newCameraPosition(
+                                CameraPosition(
+                                  target: LatLng(
+                                    widget.victimLat,
+                                    widget.victimLng,
+                                  ),
+                                  zoom: currentZoom,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
