@@ -101,13 +101,10 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
             final ChiTietMoTaHienTruongModel? moTa = data['moTa'];
             final List<Map<String, dynamic>> listCuuHo = data['listCuuHo'];
 
-            bool choTiepNhan =
-                yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_chotiepnhan' ||
-                yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_quahandieuphoi';
-            bool daPhanCong =
-                yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_daphancong';
-            bool daHoanThanh =
-                yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_hoanthanh';
+            final st = yeuCau.maTinhTrangYeuCau;
+            bool choTiepNhan = st == 'user_tinhtrang_chotiepnhan';
+            bool daPhanCong = st == 'user_tinhtrang_daphancong';
+            bool daHoanThanh = st == 'user_tinhtrang_hoanthanh';
 
             return Column(
               children: [
@@ -156,17 +153,33 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
     bool choTiepNhan,
     bool daHoanThanh,
   ) {
-    Color statusColor = choTiepNhan
+    final st = yeuCau.maTinhTrangYeuCau;
+    final bool quaHan = st == 'user_tinhtrang_quahandieuphoi';
+    final bool daHuy = st == 'user_tinhtrang_dahuy';
+
+    Color statusColor = quaHan
+        ? Colors.red
+        : daHuy
+        ? Colors.grey
+        : choTiepNhan
         ? Colors.orange
         : (daHoanThanh ? Colors.blue : primaryColor);
 
-    IconData statusIcon = choTiepNhan
+    IconData statusIcon = quaHan
+        ? Icons.error_outline
+        : daHuy
+        ? Icons.cancel_outlined
+        : choTiepNhan
         ? Icons.hourglass_empty
         : (daHoanThanh ? Icons.check_circle : Icons.directions_run);
 
-    String statusText = choTiepNhan
-        ? "ĐANG CHỜ TIẾP NHẬN"
-        : (daHoanThanh ? "ĐÃ HOÀN THÀNH" : "ĐANG TRONG QUÁ TRÌNH CỨU HỘ");
+    String statusText = quaHan
+        ? 'QUÁ HẠN ĐIỀU PHỐI - KHÔNG CÓ AI TIẾP NHẬN'
+        : daHuy
+        ? 'ĐƠN ĐÃ HỦY'
+        : choTiepNhan
+        ? 'ĐANG CHỜ TIẾP NHẬN'
+        : (daHoanThanh ? 'ĐÃ HOÀN THÀNH' : 'ĐANG TRONG QUÁ TRÌNH CỨU HỘ');
 
     return Container(
       width: double.infinity,
@@ -400,7 +413,18 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (choTiepNhan)
+            if (yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_quahandieuphoi' ||
+                yeuCau.maTinhTrangYeuCau == 'user_tinhtrang_dahuy')
+              _buildActionButton(
+                icon: Icons.home_rounded,
+                label: 'Về trang chủ',
+                color: primaryColor,
+                onPressed: () async {
+                  await YeuCauStorageService.clearActiveRequest();
+                  if (mounted) Navigator.popUntil(context, (r) => r.isFirst);
+                },
+              )
+            else if (choTiepNhan)
               _buildActionButton(
                 icon: Icons.search_rounded,
                 label: 'Quay lại tìm kiếm cứu hộ viên',

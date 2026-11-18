@@ -12,7 +12,7 @@ class ChiTietDuongDiScreen extends StatefulWidget {
   final double victimLat;
   final double victimLng;
   final String tenBacSi;
-
+  final String maYeuCau;
   const ChiTietDuongDiScreen({
     super.key,
     required this.maNguoiCuuHo,
@@ -21,6 +21,7 @@ class ChiTietDuongDiScreen extends StatefulWidget {
     required this.victimLat,
     required this.victimLng,
     required this.tenBacSi,
+    required this.maYeuCau,
   });
 
   @override
@@ -43,6 +44,7 @@ class _ChiTietDuongDiScreenState extends State<ChiTietDuongDiScreen> {
       victimLat: widget.victimLat,
       victimLng: widget.victimLng,
       tenBacSi: widget.tenBacSi,
+      maYeuCau: widget.maYeuCau,
     );
     _controller.initTracking(() {
       if (mounted) setState(() {});

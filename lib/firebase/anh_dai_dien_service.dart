@@ -1,11 +1,9 @@
-// lib/NguoiCuuHo/LuuAnh/anh_dai_dien_service.dart
+// lib/firebase/anh_dai_dien_service.dart
 //
-// Lưu ảnh đại diện theo ĐÚNG cách TrangChuController.getAvatarBase64 đang đọc:
+// Lưu/đọc ảnh đại diện theo ĐÚNG cách TrangChuController.getAvatarBase64 đang đọc:
 //   1. PhanLoaiAnh có tenPhanLoaiAnh == 'Ảnh đại diện'  -> lấy id làm maPhanLoaiAnh
 //   2. LuuAnh có maNguoiDung == uid && maPhanLoaiAnh == id  -> đọc 'base64Image'
-// Bộ đọc đó chỉ lấy MỘT bản ghi bất kỳ (limit 1, không sắp xếp), nên mỗi người
-// dùng chỉ được phép có đúng một bản ghi ảnh đại diện. Hàm lưu dưới đây cập nhật
-// bản ghi sẵn có và xóa các bản ghi dư, tránh việc hiện lại ảnh cũ.
+// Mỗi người dùng chỉ có đúng một bản ghi ảnh đại diện.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -19,23 +17,39 @@ class AnhDaiDienService {
 
   static const String tenPhanLoai = 'Ảnh đại diện';
   static const String _maPhanLoaiMacDinh = 'anh_dai_dien';
+  static const List<String> _truongAnh = [
+    'base64Image',
+    'duongDanAnh',
+    'duLieuAnh',
+    'anhURL',
+  ];
+
+  // Cache mã phân loại để không phải tra lại ở mỗi lần gọi.
+  static String? _maPhanLoaiDaTra;
 
   /// Tra mã phân loại 'Ảnh đại diện'. Chưa có và [taoNeuChuaCo] = true thì tạo.
-  /// Trả về chuỗi rỗng nếu chưa có và không được phép tạo.
   Future<String> _maPhanLoai({bool taoNeuChuaCo = false}) async {
+    if (_maPhanLoaiDaTra != null) return _maPhanLoaiDaTra!;
     final snap = await _db
         .collection('PhanLoaiAnh')
         .where('tenPhanLoaiAnh', isEqualTo: tenPhanLoai)
         .limit(1)
         .get();
-    if (snap.docs.isNotEmpty) return snap.docs.first.id;
+    if (snap.docs.isNotEmpty) return _maPhanLoaiDaTra = snap.docs.first.id;
     if (!taoNeuChuaCo) return '';
 
     await _db.collection('PhanLoaiAnh').doc(_maPhanLoaiMacDinh).set({
       'maPhanLoaiAnh': _maPhanLoaiMacDinh,
       'tenPhanLoaiAnh': tenPhanLoai,
     }, SetOptions(merge: true));
-    return _maPhanLoaiMacDinh;
+    return _maPhanLoaiDaTra = _maPhanLoaiMacDinh;
+  }
+
+  /// Các mã phân loại có thể chứa ảnh đại diện (theo tên + mã cứng dự phòng).
+  Future<List<String>> _cacMaPhanLoai() async {
+    final theoTen = await _maPhanLoai();
+    return <String>{if (theoTen.isNotEmpty) theoTen, _maPhanLoaiMacDinh}
+        .toList();
   }
 
   Query<Map<String, dynamic>> _truyVanAnh(String maNguoiDung, String maPhanLoai) {
@@ -45,18 +59,58 @@ class AnhDaiDienService {
         .where('maPhanLoaiAnh', isEqualTo: maPhanLoai);
   }
 
-  /// Chuỗi base64 hiện tại (có thể kèm tiền tố data:image/...;base64,) hoặc null.
+  /// Chuyển giá trị trường ảnh (String / Blob / Uint8List / List) về chuỗi.
+  String? _thanhChuoi(Object? v) {
+    if (v == null) return null;
+    if (v is String) return v.trim().isEmpty ? null : v;
+    if (v is Blob) return 'data:image/jpeg;base64,${base64Encode(v.bytes)}';
+    if (v is Uint8List) return 'data:image/jpeg;base64,${base64Encode(v)}';
+    if (v is List) {
+      return 'data:image/jpeg;base64,${base64Encode(List<int>.from(v))}';
+    }
+    return null;
+  }
+
+  String? _docAnh(Map<String, dynamic> d) {
+    for (final k in _truongAnh) {
+      final s = _thanhChuoi(d[k]);
+      if (s != null) return s;
+    }
+    return null;
+  }
+
+  /// Đọc một lần.
   Future<String?> layAnhDaiDien(String maNguoiDung) async {
     if (maNguoiDung.isEmpty) return null;
-    final ma = await _maPhanLoai();
-    if (ma.isEmpty) return null;
+    for (final ma in await _cacMaPhanLoai()) {
+      final snap = await _truyVanAnh(maNguoiDung, ma).limit(1).get();
+      if (snap.docs.isEmpty) continue;
+      final s = _docAnh(snap.docs.first.data());
+      if (s != null) return s;
+    }
+    return null;
+  }
 
-    final snap = await _truyVanAnh(maNguoiDung, ma).limit(1).get();
-    if (snap.docs.isEmpty) return null;
-    final d = snap.docs.first.data();
-    final v = d['base64Image'] ?? d['duongDanAnh'] ?? d['duLieuAnh'] ?? d['anhURL'];
-    final s = v?.toString();
-    return (s == null || s.isEmpty) ? null : s;
+  /// REALTIME: phát ra ảnh mới mỗi khi bản ghi LuuAnh của người dùng thay đổi
+  /// (kể cả ngay khi chính thiết bị này vừa ghi, nhờ latency compensation).
+  Stream<String?> theoDoiAnhDaiDien(String maNguoiDung) async* {
+    if (maNguoiDung.isEmpty) {
+      yield null;
+      return;
+    }
+    final cacMa = await _cacMaPhanLoai();
+    yield* _db
+        .collection('LuuAnh')
+        .where('maNguoiDung', isEqualTo: maNguoiDung)
+        .where('maPhanLoaiAnh', whereIn: cacMa)
+        .snapshots()
+        .map((snap) {
+      for (final doc in snap.docs) {
+        final s = _docAnh(doc.data());
+        if (s != null) return s;
+      }
+      return null;
+    });
   }
 
   /// Lưu (thay thế) ảnh đại diện. [bytes] là ảnh JPEG đã được thu nhỏ.
@@ -80,8 +134,6 @@ class AnhDaiDienService {
         'capNhatLuc': FieldValue.serverTimestamp(),
       });
     } else {
-      // Giữ đúng một bản ghi; chuyển ảnh về trường base64Image (trường mà bộ đọc
-      // ưu tiên) và xóa các trường cũ để không còn dữ liệu thừa (giới hạn 1 MiB/bản ghi).
       batch.update(snap.docs.first.reference, {
         'base64Image': base64Str,
         'duongDanAnh': FieldValue.delete(),

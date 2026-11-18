@@ -8,7 +8,7 @@ import 'package:cuhokhancap/user/Models/luuanhmodel.dart';
 
 class GeminiService {
   // API Key Gemini từ Google AI Studio
-  static const String _apiKey = ''; // Thay API Key của Bảo tại đây
+  static const String _apiKey = 'AQ.Ab8RN6IbAi348Spu_drxd7c9d8ked42Lrx1x133SAb9fYi50rg'; // Thay API Key của Bảo tại đây
 
   late final GenerativeModel _model;
 

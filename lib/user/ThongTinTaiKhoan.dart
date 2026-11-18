@@ -29,13 +29,6 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
     super.initState();
   }
 
-  String _getInitials(String name) {
-    if (name.trim().isEmpty) return "ND";
-    List<String> parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
   String _maskPhoneNumber(String phone) {
     if (phone.length < 6) return phone;
     return '${phone.substring(0, 4)} ••• ${phone.substring(phone.length - 3)}';
@@ -198,10 +191,7 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                   builder: (context) =>
                       ChinhSuaThongTin(manguoiDung: userRealTime),
                 ),
-              ).then((_) {
-                // Quay lại từ màn chỉnh sửa: tải lại ảnh đại diện nếu đã đổi
-                AnhDaiDienWidget.xoaCache(userRealTime.maNguoiDung);
-              });
+              );
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -553,22 +543,13 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: const BoxDecoration(
-              color: Color(0xFF00897B),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                _getInitials(ten),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          AnhDaiDienWidget(
+            key: ValueKey(nguoiThan.maNguoiThan),
+            maNguoiDung: nguoiThan.maNguoiThan,
+            hoTen: ten,
+            radius: 22,
+            fontSize: 16,
+            mauNen: const Color(0xFF00897B),
           ),
           const SizedBox(width: 12),
           Expanded(

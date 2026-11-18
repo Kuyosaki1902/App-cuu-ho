@@ -58,6 +58,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
       maYeuCau: widget.maYeuCau,
       victimLat: widget.victimLat,
       victimLng: widget.victimLng,
+      onNoRescuerLeft: _onNoRescuerLeft,
     );
     _controller.initController();
 
@@ -72,6 +73,28 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
       }
       _previousRescuerCount = currentCount;
     });
+  }
+
+  Future<void> _onNoRescuerLeft() async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Đơn không còn người tiếp nhận'),
+        content: const Text(
+          'Đơn cứu hộ hiện không còn ai tiếp nhận. '
+          'Các lời mời đã phát sẽ được thu hồi.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Về trang chủ'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   Future<void> _initVictimMarkerIcon() async {
@@ -169,6 +192,20 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
   }
 
   void _openRescuerRouteDetail(TrackingRescuerModel res) {
+    // 🌟 KHÓA KHÔNG CHO VÀO XEM CHI TIẾT KHI CỨU HỘ VIÊN ĐÃ HOÀN THÀNH
+    if (res.phanCong.maTrangThaiTiepNhan ==
+        'cuuho_trangthai_phancong_hoanthanh') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${res.nguoiDung.hoTen} đã hoàn thành nhiệm vụ cứu hộ.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final rescuerId = res.nguoiDung.maNguoiDung;
     if (rescuerId == null) return;
 
@@ -191,6 +228,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
           victimLat: widget.victimLat,
           victimLng: widget.victimLng,
           tenBacSi: res.nguoiDung.hoTen,
+          maYeuCau: widget.maYeuCau,
         ),
       ),
     );
@@ -239,6 +277,10 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
       ),
     );
     for (var res in rescuers) {
+      final bool isCompleted =
+          res.phanCong.maTrangThaiTiepNhan ==
+          'cuuho_trangthai_phancong_hoanthanh';
+
       markers.add(
         Marker(
           markerId: MarkerId('rescuer_${res.nguoiDung.maNguoiDung}'),
@@ -248,12 +290,18 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
           ),
           icon:
               res.markerIcon ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+              BitmapDescriptor.defaultMarkerWithHue(
+                isCompleted
+                    ? BitmapDescriptor.hueAzure
+                    : BitmapDescriptor.hueGreen,
+              ),
           anchor: const Offset(0.5, 0.5),
-          onTap: () => _openRescuerRouteDetail(res),
+          onTap: isCompleted ? null : () => _openRescuerRouteDetail(res),
           infoWindow: InfoWindow(
             title: '${res.index}. ${res.nguoiDung.hoTen}',
-            snippet: 'Cách ${res.distanceKm.toStringAsFixed(1)}km',
+            snippet: isCompleted
+                ? 'Đã hoàn thành cứu hộ'
+                : 'Cách ${res.distanceKm.toStringAsFixed(1)}km',
           ),
         ),
       );
@@ -290,6 +338,14 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                     130.0,
                     screenHeight * 0.6,
                   );
+
+            int movingCount = trackingList
+                .where(
+                  (r) =>
+                      r.phanCong.maTrangThaiTiepNhan ==
+                      'cuuho_trangthai_phancong_tiepnhan',
+                )
+                .length;
 
             return Stack(
               children: [
@@ -362,7 +418,9 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                   left: 0,
                   right: 0,
                   child: RescuerTopNavBar(
-                    rescuerCount: trackingList.length,
+                    rescuerCount: movingCount > 0
+                        ? movingCount
+                        : trackingList.length,
                     onBack: () => Navigator.pop(context),
                     onSosPressed: () {},
                   ),

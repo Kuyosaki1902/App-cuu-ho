@@ -37,7 +37,7 @@ class _ChatVoiAIScreenState extends State<ChatVoiAIScreen> {
     // Thêm câu chào mở đầu từ AI
     _messages.add({
       'role': 'ai',
-      'text': 'Xin chào, tôi là trợ lý sơ cứu AI 115. Vui lòng mô tả nhanh tình trạng nạn nhân để tôi hướng dẫn xử lý khẩn cấp trong lúc chờ xe cứu thương.'
+      'text': 'Xin chào, tôi là trợ lý sơ cứu AI cứu hộ. Vui lòng mô tả nhanh tình trạng nạn nhân để tôi hướng dẫn xử lý khẩn cấp trong lúc chờ xe cứu thương.'
     });
   }
 

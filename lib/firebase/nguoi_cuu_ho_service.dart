@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -7,6 +8,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
+import 'package:cuhokhancap/firebase/anh_dai_dien_service.dart';
 
 class ThongTinCuuHoData {
   final Set<Marker> markers;
@@ -22,8 +24,48 @@ class ThongTinCuuHoData {
   });
 }
 
+class _AnhCache {
+  final ui.Image? hinh;
+  final DateTime luc;
+  _AnhCache(this.hinh, this.luc);
+}
+
 class NguoiCuuHoService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AnhDaiDienService _anhService = AnhDaiDienService();
+
+  // Cache ảnh đại diện đã giải mã, để mỗi lần snapshot đổi (vị trí người cứu hộ
+  // cập nhật liên tục) không phải truy vấn + giải mã lại. Hết hạn sau 60 giây
+  // để ảnh mới của người cứu hộ sớm được vẽ lại lên marker.
+  static final Map<String, _AnhCache> _anhCache = {};
+  static const Duration _hanCacheAnh = Duration(seconds: 60);
+
+  Future<ui.Image?> _layHinhAnh(String maNguoiDung) async {
+    if (maNguoiDung.isEmpty) return null;
+    final c = _anhCache[maNguoiDung];
+    if (c != null && DateTime.now().difference(c.luc) < _hanCacheAnh) {
+      return c.hinh;
+    }
+    try {
+      final s = await _anhService.layAnhDaiDien(maNguoiDung);
+      ui.Image? hinh;
+      if (s != null && s.isNotEmpty && !s.startsWith('http')) {
+        final raw = s.contains(',') ? s.substring(s.indexOf(',') + 1) : s;
+        final bytes = base64Decode(raw.replaceAll(RegExp(r'\s+'), ''));
+        final codec = await ui.instantiateImageCodec(
+          bytes,
+          targetWidth: 90,
+          targetHeight: 90,
+        );
+        hinh = (await codec.getNextFrame()).image;
+      }
+      _anhCache[maNguoiDung] = _AnhCache(hinh, DateTime.now());
+      return hinh;
+    } catch (e) {
+      debugPrint('NguoiCuuHoService: lỗi lấy ảnh "$maNguoiDung": $e');
+      return c?.hinh; // lỗi thì dùng tạm ảnh cũ (nếu có)
+    }
+  }
 
   Stream<ThongTinCuuHoData> langNgheNguoiCuuHo(
     LatLng myPosition,
@@ -60,6 +102,11 @@ class NguoiCuuHoService {
               }
             }
           }
+
+          // Lấy ảnh đại diện của tất cả người cứu hộ song song
+          final hinhAnh = await Future.wait(
+            validRescuers.map((u) => _layHinhAnh(u.maNguoiDung ?? '')),
+          );
 
           // Xử lý chống đè (Spiderfier)
           List<LatLng> processedPositions = [];
@@ -102,7 +149,7 @@ class NguoiCuuHoService {
                 ? "${(distance / 1000).toStringAsFixed(1)} km"
                 : "${distance.toInt()} m";
 
-            final icon = await _taohinhAnhMarker(distanceStr);
+            final icon = await _taohinhAnhMarker(distanceStr, avatar: hinhAnh[i]);
 
             generatedMarkers.add(
               Marker(
@@ -148,7 +195,10 @@ class NguoiCuuHoService {
         });
   }
 
-  Future<BitmapDescriptor> _taohinhAnhMarker(String text) async {
+  Future<BitmapDescriptor> _taohinhAnhMarker(
+    String text, {
+    ui.Image? avatar,
+  }) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
     final Paint paint = Paint()..isAntiAlias = true;
@@ -162,23 +212,33 @@ class NguoiCuuHoService {
     paint.color = Colors.white;
     canvas.drawCircle(const Offset(width / 2, 28), 22.5, paint);
 
-    TextPainter iconPainter = TextPainter(textDirection: TextDirection.ltr);
-    iconPainter.text = TextSpan(
-      text: String.fromCharCode(0xe491),
-      style: const TextStyle(
-        fontSize: 30,
-        fontFamily: 'MaterialIcons',
-        color: Color(0xFF00695C),
-      ),
-    );
-    iconPainter.layout();
-    iconPainter.paint(
-      canvas,
-      Offset(
-        (width / 2) - (iconPainter.width / 2),
-        28 - (iconPainter.height / 2),
-      ),
-    );
+    if (avatar != null) {
+      // Ảnh đại diện cắt tròn, lấp đầy vòng trắng
+      final rect = Rect.fromCircle(center: const Offset(width / 2, 28), radius: 22.5);
+      canvas.save();
+      canvas.clipPath(Path()..addOval(rect));
+      paintImage(canvas: canvas, rect: rect, image: avatar, fit: BoxFit.cover);
+      canvas.restore();
+    } else {
+      // Chưa có ảnh: giữ biểu tượng cũ
+      TextPainter iconPainter = TextPainter(textDirection: TextDirection.ltr);
+      iconPainter.text = TextSpan(
+        text: String.fromCharCode(0xe491),
+        style: const TextStyle(
+          fontSize: 30,
+          fontFamily: 'MaterialIcons',
+          color: Color(0xFF00695C),
+        ),
+      );
+      iconPainter.layout();
+      iconPainter.paint(
+        canvas,
+        Offset(
+          (width / 2) - (iconPainter.width / 2),
+          28 - (iconPainter.height / 2),
+        ),
+      );
+    }
 
     paint.color = const Color(0xFF00695C);
     RRect rrectBorder = RRect.fromRectAndRadius(

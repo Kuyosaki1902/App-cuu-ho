@@ -36,11 +36,10 @@ class TimKiemCuuHoController {
   int manualSelectedCount = 0;
   GoogleMapController? mapController;
   bool isLoading = true;
-  Timer? _fallbackTimer;
   YeuCauCuuHoModel? yeuCauCuuHo;
   ChiTietMoTaHienTruongModel? chiTietMoTa;
   List<LuuAnhModel> danhSachAnhBase64 = [];
-
+  bool _disposed = false;
   Map<String, LatLng> initialRescuerLocations = {};
   LatLng currentDeviceLocation = const LatLng(10.7769, 106.6993);
 
@@ -50,8 +49,17 @@ class TimKiemCuuHoController {
   int currentScanStep = 0;
   final List<double> scanRadii = [1000, 3000, 5000];
 
-  Timer? _radarPeriodicTimer;
   Timer? _secondsTimer;
+
+  // 🌟 Bộ đếm duy nhất: mọi thứ (đồng hồ, bán kính, quét, quá hạn) đều bám vào elapsedSeconds
+  final Stopwatch _stopwatch = Stopwatch();
+  int _baseSeconds = 0; // số giây đã chạy từ phiên trước (khi mở lại app)
+  int _aiStartSecond =
+      0; // 0 = quét ngay; 60 = chờ nhóm chỉ định 60s rồi mới quét
+  bool _setupDone = false;
+  bool _switchedToAI = false;
+  bool _tickBusy = false;
+  bool _isScanning = false;
   StreamSubscription<List<ChiTietPhanCongCuuHoModel>>? _phanCongSubscription;
 
   int elapsedSeconds = 0;
@@ -73,6 +81,68 @@ class TimKiemCuuHoController {
 
   bool _hasNavigated = false;
   int get limitCans => yeuCauCuuHo?.soNguoiCanCuuHo ?? 3;
+  void _runGeminiInBackground(String maYeuCau) async {
+    try {
+      final anh = await _firebaseService
+          .getImagesByMoTaId(chiTietMoTa!.maYeuCau)
+          .timeout(const Duration(seconds: 6));
+      danhSachAnhBase64 = anh;
+
+      final result = await _geminiService
+          .analyzeSceneAndSuggestSkills(
+            moTa: chiTietMoTa!,
+            danhSachAnhBase64: anh.take(2).toList(), // tối đa 2 ảnh
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (!_isOverdueHandled)
+        aiAnalysisResult = result; // các lần quét sau dùng luôn
+    } catch (e) {
+      debugPrint('Gemini chậm/lỗi, dùng kết quả cục bộ: $e');
+    }
+  }
+
+  Map<String, dynamic> _localAnalyze(String text) {
+    final t = text.toLowerCase();
+    final chuyenNganh = <String>{};
+    final kyNang = <String>{};
+
+    void match(
+      List<String> keys, {
+      List<String> cn = const [],
+      List<String> kn = const [],
+    }) {
+      if (keys.any(t.contains)) {
+        chuyenNganh.addAll(cn);
+        kyNang.addAll(kn);
+      }
+    }
+
+    match(
+      ['ngừng tim', 'ngưng tim', 'bất tỉnh', 'không thở'],
+      cn: ['hồi sức', 'tim mạch'],
+      kn: ['kn_cpr'],
+    );
+    match(
+      ['chảy máu', 'xuất huyết', 'vết thương'],
+      cn: ['ngoại khoa'],
+      kn: ['kn_bang_bo'],
+    );
+    match(
+      ['gãy', 'trật khớp', 'té ngã', 'tai nạn'],
+      cn: ['chấn thương chỉnh hình', 'ngoại khoa'],
+      kn: ['cố định', 'kn_bang_bo'],
+    );
+    match(['đau ngực', 'đột quỵ', 'tim'], cn: ['tim mạch']);
+    match(['ngạt', 'sặc', 'khó thở'], cn: ['hồi sức'], kn: ['kn_cpr']);
+
+    return {
+      'trieuChung': text,
+      'mucDoKhanCap': 3,
+      'chuyenNganhYeuCau': chuyenNganh.toList(),
+      'kyNangYeuCau': kyNang.toList(),
+    };
+  }
 
   Future<void> initSearch(
     String maYeuCau,
@@ -90,6 +160,12 @@ class TimKiemCuuHoController {
     rescuerList.clear();
     elapsedSeconds = 0;
     currentScanStep = 0;
+    _baseSeconds = 0;
+    _aiStartSecond = 0;
+    _setupDone = false;
+    _switchedToAI = false;
+    _tickBusy = false;
+    _isScanning = false;
     markers.clear();
     circles.clear();
     onUpdate();
@@ -150,18 +226,9 @@ class TimKiemCuuHoController {
         maYeuCau,
       );
       if (savedSeconds != null && savedSeconds > 0) {
+        _baseSeconds = savedSeconds;
         elapsedSeconds = savedSeconds;
-        // Tính toán lại bước quét (Mỗi 6s nhảy 1 bậc)
-        if (elapsedSeconds >= 12) {
-          currentScanStep = 2; // Vùng 5000m
-        } else if (elapsedSeconds >= 6) {
-          currentScanStep = 1; // Vùng 3000m
-        } else {
-          currentScanStep = 0; // Vùng 1000m
-        }
-        debugPrint(
-          '🔄 Phục hồi phiên tìm kiếm cũ: Chạy được $elapsedSeconds s, bước quét: $currentScanStep',
-        );
+        debugPrint('🔄 Phục hồi phiên tìm kiếm cũ: $elapsedSeconds s');
       }
 
       if (yeuCauCuuHo != null &&
@@ -183,19 +250,17 @@ class TimKiemCuuHoController {
           kinhDo: currentDeviceLocation.longitude,
         );
       }
-
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
-      if (chiTietMoTa != null) {
-        danhSachAnhBase64 = await _firebaseService.getImagesByMoTaId(
-          chiTietMoTa!.maYeuCau,
-        );
-
-        if (yeuCauCuuHo?.maLoaiYeuCau != 'loaiyeucau_sos') {
-          aiAnalysisResult = await _geminiService.analyzeSceneAndSuggestSkills(
-            moTa: chiTietMoTa!,
-            danhSachAnhBase64: danhSachAnhBase64,
-          );
-        }
+      if (chiTietMoTa != null &&
+          yeuCauCuuHo?.maLoaiYeuCau != 'loaiyeucau_sos') {
+        // Có kết quả tạm ngay lập tức, không cần mạng
+        final g = chiTietMoTa!.ghiChuText;
+        final text = g is Map
+            ? '${(g['trieuChung'] ?? []).join(' ')} ${g['moTaChiTiet'] ?? ''}'
+            : (g?.toString() ?? '');
+        aiAnalysisResult = _localAnalyze(text);
+        // Gemini chạy nền, không chặn tìm kiếm
+        _runGeminiInBackground(maYeuCau);
       }
 
       // 🌟 3. Lắng nghe và kiểm tra Firebase
@@ -249,80 +314,19 @@ class TimKiemCuuHoController {
             );
           }
 
-          // 2. Tính thời gian chờ 60s (trừ đi số giây đã trôi qua nếu quay lại từ màn hình khác)
-          int remainingWaitSeconds = 60 - elapsedSeconds;
-
-          if (remainingWaitSeconds > 0) {
-            _fallbackTimer = Timer(
-              Duration(seconds: remainingWaitSeconds),
-              () async {
-                if (acceptedRescuerIds.isEmpty && !_isOverdueHandled) {
-                  debugPrint(
-                    '⏳ Quá 60s nhóm chỉ định không nhận, chuyển sang AI!',
-                  );
-                  await _firebaseService.updateTinhTrangYeuCau(
-                    maYeuCau,
-                    'user_tinhtrang_chotiepnhan',
-                  );
-                  startAdaptiveAIRadar(maYeuCau, onUpdate);
-                }
-              },
-            );
-          } else {
-            // Nếu đã quá 60s rồi thì chuyển sang radar AI luôn
-            startAdaptiveAIRadar(maYeuCau, onUpdate);
-          }
-        } else {
-          startAdaptiveAIRadar(maYeuCau, onUpdate);
+          // Chờ nhóm chỉ định 60s rồi mới quét AI (do _onTick điều khiển)
+          _aiStartSecond = 60;
         }
-      } else {
-        startAdaptiveAIRadar(maYeuCau, onUpdate);
       }
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
       isLoading = false;
       onUpdate();
-
-      _secondsTimer?.cancel();
-      _secondsTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-        elapsedSeconds++;
-
-        // 🌟 Định kỳ lưu thời gian quét xuống máy
-        await YeuCauStorageService.saveElapsedSeconds(maYeuCau, elapsedSeconds);
-
-        int maxTimeout =
-            (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien')
-            ? 120
-            : 60;
-
-        if (elapsedSeconds >= maxTimeout &&
-            acceptedRescuerIds.isEmpty &&
-            !_isOverdueHandled) {
-          _isOverdueHandled = true;
-          _stopAllTimers();
-
-          // Quá hạn thì xóa bộ nhớ máy
-          await YeuCauStorageService.clearActiveRequest();
-
-          debugPrint('⏳ Đã quá ${maxTimeout}s, chuyển sang QUÁ HẠN!');
-          await _firebaseService.updateTinhTrangYeuCau(
-            maYeuCau,
-            'user_tinhtrang_quahandieuphoi',
-          );
-
-          await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
-
-          for (var maCuuHo in assignedRescuerIds) {
-            await _firebaseService.updateUserOnlineStatus(
-              userId: maCuuHo,
-              isOnline: true,
-              nhanCaCuuHo: false,
-            );
-          }
-        }
-        onUpdate();
-      });
+      if (!_disposed) {
+        _setupDone = true;
+        _startTicker(maYeuCau, onUpdate);
+      }
     }
   }
 
@@ -461,30 +465,114 @@ class TimKiemCuuHoController {
         });
   }
 
-  void startAdaptiveAIRadar(String maYeuCau, Function() onUpdate) async {
-    if (_isOverdueHandled) return;
+  int get _maxSeconds =>
+      yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' ? 120 : 60;
 
-    await _executeAIScanAndAssign(maYeuCau, onUpdate);
+  // 🌟 Bán kính phụ thuộc DUY NHẤT vào thời gian quét: 0s=1000m, 15s=3000m, 30s=5000m
+  int _stepForElapsed(int sec) {
+    final t = sec - _aiStartSecond;
+    if (t >= 30) return 2; // 5000m
+    if (t >= 15) return 1; // 3000m
+    return 0; // 1000m
+  }
 
-    _radarPeriodicTimer?.cancel();
-    _radarPeriodicTimer = Timer.periodic(const Duration(seconds: 3), (
-      timer,
-    ) async {
-      if (acceptedRescuerIds.isNotEmpty || _isOverdueHandled) {
-        timer.cancel();
-        return;
+  void _startTicker(String maYeuCau, Function() onUpdate) {
+    _stopwatch
+      ..reset()
+      ..start();
+    _secondsTimer?.cancel();
+    _secondsTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final now = _baseSeconds + _stopwatch.elapsed.inSeconds;
+      if (now == elapsedSeconds) return;
+      elapsedSeconds = now;
+      YeuCauStorageService.saveElapsedSeconds(maYeuCau, elapsedSeconds);
+
+      if (_setupDone && !_isOverdueHandled && !_tickBusy) {
+        _tickBusy = true;
+        try {
+          await _onTick(maYeuCau, onUpdate);
+        } catch (e) {
+          debugPrint('Lỗi tick tìm kiếm: $e');
+        } finally {
+          _tickBusy = false;
+        }
       }
-
-      // 🌟 Mở rộng khoảng cách dựa trên bộ đếm thời gian
-      if (elapsedSeconds > 0 &&
-          elapsedSeconds % 6 == 0 &&
-          currentScanStep < scanRadii.length - 1) {
-        currentScanStep++;
-        await updateMapOverlays();
-      }
-
-      await _executeAIScanAndAssign(maYeuCau, onUpdate);
+      onUpdate();
     });
+  }
+
+  Future<void> _onTick(String maYeuCau, Function() onUpdate) async {
+    if (acceptedRescuerIds.isNotEmpty)
+      return; // đã có người nhận -> màn Tổng quan lo
+
+    if (elapsedSeconds >= _maxSeconds) {
+      await _handleOverdue(maYeuCau);
+      return;
+    }
+    if (elapsedSeconds < _aiStartSecond) return; // đang chờ nhóm chỉ định
+
+    if (!_switchedToAI) {
+      _switchedToAI = true;
+      if (_aiStartSecond > 0) {
+        debugPrint('⏳ Quá 60s nhóm chỉ định không nhận, chuyển sang AI!');
+        await _firebaseService.updateTinhTrangYeuCau(
+          maYeuCau,
+          'user_tinhtrang_chotiepnhan',
+        );
+      }
+    }
+
+    final step = _stepForElapsed(elapsedSeconds);
+    final stepChanged = step != currentScanStep;
+    if (stepChanged) {
+      currentScanStep = step;
+      await updateMapOverlays();
+    }
+    // Quét ngay khi vừa mở rộng bán kính, còn lại quét mỗi 3s
+    if (stepChanged || (elapsedSeconds - _aiStartSecond) % 3 == 0) {
+      await _scanSafely(maYeuCau, onUpdate);
+    }
+  }
+
+  Future<void> _scanSafely(String maYeuCau, Function() onUpdate) async {
+    if (_isScanning) return;
+    _isScanning = true;
+    try {
+      await _executeAIScanAndAssign(maYeuCau, onUpdate);
+    } finally {
+      _isScanning = false;
+    }
+  }
+
+  Future<void> _handleOverdue(String maYeuCau) async {
+    if (_isOverdueHandled) return;
+    _isOverdueHandled = true;
+    _stopAllTimers();
+
+    await YeuCauStorageService.clearActiveRequest();
+    debugPrint('⏳ Đã quá $_maxSeconds s, chuyển sang QUÁ HẠN!');
+
+    // 🌟 Thu hồi luôn các lời mời đã phát mà chưa ai nhận
+    await _firebaseService.cancelRemainingAssignments(maYeuCau);
+    await _firebaseService.updateTinhTrangYeuCau(
+      maYeuCau,
+      'user_tinhtrang_quahandieuphoi',
+    );
+    await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
+
+    final maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
+    if (maNanNhan != null) {
+      await _firebaseService.removeEmergencyNotification(maNanNhan: maNanNhan);
+    }
+    for (var maCuuHo in assignedRescuerIds) {
+      try {
+        await _firebaseService.updateUserOnlineStatus(
+          userId: maCuuHo,
+          isOnline: true,
+          nhanCaCuuHo: false,
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> _executeAIScanAndAssign(
@@ -951,21 +1039,22 @@ class TimKiemCuuHoController {
   }
 
   void _stopAllTimers() {
-    _radarPeriodicTimer?.cancel();
     _secondsTimer?.cancel();
-    _fallbackTimer?.cancel();
+    _stopwatch.stop();
   }
 
   // Thêm hàm này vào cuối class TimKiemCuuHoController
   void stopSearchWithoutCanceling() {
     _stopAllTimers();
     _phanCongSubscription?.cancel();
+    _disposed = true;
     debugPrint('✅ Đã ngưng quét và tắt stream, giữ nguyên đơn cứu hộ!');
   }
 
   void dispose() {
     _stopAllTimers();
     _phanCongSubscription?.cancel();
+    _disposed = true;
   }
 
   Future<void> cancelSearch(String maYeuCau) async {

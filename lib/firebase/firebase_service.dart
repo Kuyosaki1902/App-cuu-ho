@@ -985,22 +985,22 @@ class FirebaseService {
         .set(phanCong.toMap(), SetOptions(merge: true));
   }
 
+  // Thay thế hàm streamPhanCongByYeuCau cũ trong firebase_service.dart
   Stream<List<ChiTietPhanCongCuuHoModel>> streamPhanCongByYeuCau(
     String maYeuCau,
   ) {
+    // Lắng nghe tất cả các user trong bảng NguoiDung hoặc quét collectionGroup chuẩn xác hơn
     return _firestore
-        .collectionGroup(
-          'DanhSachPhanCong',
-        ) // 🌟 Đổi từ collection thành collectionGroup
+        .collectionGroup('DanhSachPhanCong')
         .where('maYeuCau', isEqualTo: maYeuCau)
         .snapshots()
-        .map(
-          (snap) => snap.docs
+        .map((snap) {
+          return snap.docs
               .map(
                 (doc) => ChiTietPhanCongCuuHoModel.fromMap(doc.data(), doc.id),
               )
-              .toList(),
-        );
+              .toList();
+        });
   }
 
   Future<void> updateTinhTrangYeuCau(
@@ -1438,86 +1438,6 @@ class FirebaseService {
         );
   }
 
-  // 🌟 1. Stream danh sách tin nhắn theo cấu trúc mới: /PhongChatCuuHo/{maYeuCau}/DanhSachTinNhan
-  Stream<List<ChiTietTinNhanModel>> streamDanhSachTinNhan(String maYeuCau) {
-    return FirebaseFirestore.instance
-        .collection('PhongChatCuuHo')
-        .doc(maYeuCau)
-        .collection('DanhSachTinNhan')
-        .orderBy('thoiGianGui', descending: false)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => ChiTietTinNhanModel.fromMap(doc.data(), doc.id))
-              .toList();
-        });
-  }
-
-  // 🌟 2. Gửi tin nhắn mới vào collection mới
-  Future<void> guiTinNhanMoi(
-    String maYeuCau,
-    ChiTietTinNhanModel tinNhan,
-  ) async {
-    await FirebaseFirestore.instance
-        .collection('PhongChatCuuHo')
-        .doc(maYeuCau)
-        .collection('DanhSachTinNhan')
-        .add(tinNhan.toMap());
-  }
-
-  // 🌟 3. Lấy thông tin user (Tên + Avatar từ LuuAnh) để hiển thị trong khung chat
-  Future<Map<String, String>> getUserInfoForChat(String userId) async {
-    String name = 'Cứu hộ viên';
-    String? avatar;
-
-    try {
-      var userDoc = await FirebaseFirestore.instance
-          .collection('NguoiDung')
-          .doc(userId)
-          .get();
-      if (userDoc.exists && userDoc.data() != null) {
-        name = userDoc.data()?['hoTen'] ?? 'Cứu hộ viên';
-      }
-
-      var imageQuery = await FirebaseFirestore.instance
-          .collection('LuuAnh')
-          .where('maNguoiDung', isEqualTo: userId)
-          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
-          .limit(1)
-          .get();
-
-      if (imageQuery.docs.isNotEmpty) {
-        avatar = imageQuery.docs.first.data()['base64Image'] as String?;
-      }
-    } catch (e) {
-      print('Lỗi lấy thông tin chat user: $e');
-    }
-
-    return {'name': name, 'avatar': avatar ?? ''};
-  }
-
-  // 🌟 4. Dịch tọa độ (viDo, kinhDo) thành tên địa chỉ thực tế
-  Future<String> getAddressFromLatLng(double lat, double lng) async {
-    try {
-      final url = Uri.parse(
-        'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
-      );
-      final response = await http.get(
-        url,
-        headers: {'User-Agent': 'cuhokhancap_app'},
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['display_name'] != null) {
-          return data['display_name'];
-        }
-      }
-    } catch (e) {
-      print('Lỗi geocoding: $e');
-    }
-    return 'Tọa độ: $lat, $lng';
-  }
-
   /// Gửi tin nhắn mới
   Future<void> guiTinNhan({
     required String maPhongChat,
@@ -1574,31 +1494,40 @@ class FirebaseService {
   // 10. HOÀN THÀNH ĐƠN CỨU HỘ & ĐÁNH GIÁ
   // ===========================================================================
 
-  // Lắng nghe danh sách cứu hộ viên đã nhận đơn này
+  // Lắng nghe danh sách cứu hộ viên trực tiếp từ YeuCauCuuHo (tránh lỗi lệch path subcollection)
   Stream<List<Map<String, dynamic>>> langNgheDanhSachCuuHo(String maYeuCau) {
-    return _firestore
-        .collection('ChiTietPhanCongCuuHo')
-        .where('maYeuCau', isEqualTo: maYeuCau)
-        // Lọc những người chấp nhận (không phải từ chối)
-        .where(
-          'maTrangThaiTiepNhan',
-          isNotEqualTo: 'cuuho_trangthai_phancong_tuchoi',
-        )
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs.map((doc) {
-            var data = doc.data();
-            data['id'] = doc.id;
-            return data;
-          }).toList(),
-        );
+    return _firestore.collection('YeuCauCuuHo').doc(maYeuCau).snapshots().map((
+      docSnap,
+    ) {
+      if (!docSnap.exists || docSnap.data() == null) return [];
+      final rawMap = Map<String, dynamic>.from(
+        docSnap.data()!['danhSachPhanCongVien'] ?? {},
+      );
+
+      final List<Map<String, dynamic>> result = [];
+      rawMap.forEach((maNguoiCuuHo, trangThai) {
+        final status = trangThai.toString();
+        if (status != 'cuuho_trangthai_phancong_tuchoi' &&
+            status != 'cuuho_trangthai_phancong_dahuy' &&
+            status != 'cuuho_trangthai_phancong_chotiepnhan' &&
+            status != 'tuchoi' &&
+            status != 'dahuy') {
+          result.add({
+            'maNguoiCuuHo': maNguoiCuuHo,
+            'maTrangThaiTiepNhan': status,
+          });
+        }
+      });
+      return result;
+    });
   }
 
-  // Lắng nghe các đánh giá đã tạo cho đơn này để cập nhật UI
+  // Lắng nghe các đánh giá đã tạo cho đơn này theo đúng cấu trúc DanhGia/{maYeuCau}/DanhSachCuuHoVien
   Stream<List<DanhGiaModel>> langNgheDanhGia(String maYeuCau) {
     return _firestore
         .collection('DanhGia')
-        .where('maYeuCau', isEqualTo: maYeuCau)
+        .doc(maYeuCau)
+        .collection('DanhSachCuuHoVien')
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -1620,26 +1549,10 @@ class FirebaseService {
     }
   }
 
-  // Gửi một đánh giá
+  // Gửi một đánh giá (lưu đúng vào DanhGia/{maYeuCau}/DanhSachCuuHoVien/{maNguoiCuuHo})
   Future<bool> guiDanhGia(DanhGiaModel danhGia) async {
-    try {
-      final docRef = _firestore.collection('DanhGia').doc();
-      final danhGiaCoID = DanhGiaModel(
-        maDanhGia: docRef.id,
-        maYeuCau: danhGia.maYeuCau,
-        maNguoiDanhGia: danhGia.maNguoiDanhGia,
-        maNguoiCuuHo: danhGia.maNguoiCuuHo,
-        diemDanhGia: danhGia.diemDanhGia,
-        nhanXet: danhGia.nhanXet,
-        ngayTao: danhGia.ngayTao,
-      );
-      await docRef.set(danhGiaCoID.toMap());
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return await guiDanhGiaCuuHoVien(danhGia);
   }
-
   // ===========================================================================
   // 11. LỊCH SỬ CỨU HỘ & ĐÁNH GIÁ THEO TỪNG CỨU HỘ VIÊN
   // ===========================================================================
@@ -1728,5 +1641,85 @@ class FirebaseService {
       print('❌ Lỗi FirebaseService.guiDanhGiaCuuHoVien: $e');
       return false;
     }
+  }
+
+  // 🌟 1. Stream danh sách tin nhắn theo cấu trúc mới: /PhongChatCuuHo/{maYeuCau}/DanhSachTinNhan
+  Stream<List<ChiTietTinNhanModel>> streamDanhSachTinNhan(String maYeuCau) {
+    return FirebaseFirestore.instance
+        .collection('PhongChatCuuHo')
+        .doc(maYeuCau)
+        .collection('DanhSachTinNhan')
+        .orderBy('thoiGianGui', descending: false)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) => ChiTietTinNhanModel.fromMap(doc.data(), doc.id))
+              .toList();
+        });
+  }
+
+  // 🌟 2. Gửi tin nhắn mới vào collection mới
+  Future<void> guiTinNhanMoi(
+    String maYeuCau,
+    ChiTietTinNhanModel tinNhan,
+  ) async {
+    await FirebaseFirestore.instance
+        .collection('PhongChatCuuHo')
+        .doc(maYeuCau)
+        .collection('DanhSachTinNhan')
+        .add(tinNhan.toMap());
+  }
+
+  // 🌟 3. Lấy thông tin user (Tên + Avatar từ LuuAnh) để hiển thị trong khung chat
+  Future<Map<String, String>> getUserInfoForChat(String userId) async {
+    String name = 'Cứu hộ viên';
+    String? avatar;
+
+    try {
+      var userDoc = await FirebaseFirestore.instance
+          .collection('NguoiDung')
+          .doc(userId)
+          .get();
+      if (userDoc.exists && userDoc.data() != null) {
+        name = userDoc.data()?['hoTen'] ?? 'Cứu hộ viên';
+      }
+
+      var imageQuery = await FirebaseFirestore.instance
+          .collection('LuuAnh')
+          .where('maNguoiDung', isEqualTo: userId)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
+          .limit(1)
+          .get();
+
+      if (imageQuery.docs.isNotEmpty) {
+        avatar = imageQuery.docs.first.data()['base64Image'] as String?;
+      }
+    } catch (e) {
+      print('Lỗi lấy thông tin chat user: $e');
+    }
+
+    return {'name': name, 'avatar': avatar ?? ''};
+  }
+
+  // 🌟 4. Dịch tọa độ (viDo, kinhDo) thành tên địa chỉ thực tế
+  Future<String> getAddressFromLatLng(double lat, double lng) async {
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'cuhokhancap_app'},
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['display_name'] != null) {
+          return data['display_name'];
+        }
+      }
+    } catch (e) {
+      print('Lỗi geocoding: $e');
+    }
+    return 'Tọa độ: $lat, $lng';
   }
 }

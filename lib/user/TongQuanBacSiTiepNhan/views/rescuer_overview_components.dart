@@ -56,7 +56,7 @@ class RescuerTopNavBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '$rescuerCount người đang đến',
+                    '$rescuerCount người đang hỗ trợ',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -117,7 +117,7 @@ class MapControlButton extends StatelessWidget {
   }
 }
 
-// 3. THẺ CỨU HỘ VIÊN (CÓ AVATAR THẬT + BẤM VÀO AVATAR SANG CHI TIẾT ĐƯỜNG ĐI)
+// 3. THẺ CỨU HỘ VIÊN (TỰ ĐỘNG KHÓA KHI ĐÃ HOÀN THÀNH)
 class RescuerItemCard extends StatefulWidget {
   final TrackingRescuerModel item;
   final VoidCallback? onTap;
@@ -211,143 +211,191 @@ class _RescuerItemCardState extends State<RescuerItemCard> {
     }
 
     return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: cardBgColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor, width: borderWidth),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              child: Text(
-                '${item.index}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // 🌟 NHẤN VÀO AVATAR SẼ NHẢY SANG CHI TIẾT ĐƯỜNG ĐI BÁC SĨ
-            GestureDetector(
-              onTap: widget.onAvatarTap,
-              child: Container(
-                padding: const EdgeInsets.all(1.5),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF0C5C4D),
-                    width: 1.5,
-                  ),
-                ),
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: const Color(0xFF0C5C4D),
-                  backgroundImage: _avatarImage,
-                  child: _avatarImage == null
-                      ? Text(
-                          item.nguoiDung.hoTen.isNotEmpty
-                              ? item.nguoiDung.hoTen
-                                    .substring(0, 1)
-                                    .toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.nguoiDung.hoTen,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.black87,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  if (isCompleted)
-                    const Text(
-                      'ĐÃ HOÀN THÀNH CỨU HỘ',
-                      style: TextStyle(
+      // 🌟 KHÓA CLICK VÀO THẺ NẾU ĐÃ HOÀN THÀNH
+      onTap: isCompleted ? null : widget.onTap,
+      child: Opacity(
+        opacity: isCompleted ? 0.85 : 1.0,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: cardBgColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor, width: borderWidth),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                child: isCompleted
+                    ? const Icon(
+                        Icons.check_circle,
                         color: Colors.blueAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  else if (isRescuing)
-                    const Text(
-                      'ĐANG TIẾN HÀNH CỨU HỘ',
-                      style: TextStyle(
-                        color: Colors.deepOrange,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  else if (isArrived)
-                    const Text(
-                      'ĐÃ ĐẾN NƠI',
-                      style: TextStyle(
-                        color: Color(0xFF0C5C4D),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    )
-                  else
-                    Row(
-                      children: [
-                        Text(
-                          '${item.estimatedTimeMinutes} phút',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF10B981),
-                          ),
+                        size: 16,
+                      )
+                    : Text(
+                        '${item.index}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const Text(
-                          '  •  ',
-                          style: TextStyle(color: Colors.grey, fontSize: 10),
-                        ),
-                        Text(
-                          '${item.distanceKm.toStringAsFixed(1)} km',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
+                        textAlign: TextAlign.center,
+                      ),
+              ),
+              const SizedBox(width: 8),
+
+              // 🌟 KHÓA CLICK VÀO AVATAR XEM ĐƯỜNG ĐI NẾU ĐÃ HOÀN THÀNH
+              GestureDetector(
+                onTap: isCompleted ? null : widget.onAvatarTap,
+                child: Container(
+                  padding: const EdgeInsets.all(1.5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isCompleted
+                          ? Colors.blueAccent
+                          : const Color(0xFF0C5C4D),
+                      width: 1.5,
                     ),
-                ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: isCompleted
+                        ? Colors.blueAccent
+                        : const Color(0xFF0C5C4D),
+                    backgroundImage: _avatarImage,
+                    child: _avatarImage == null
+                        ? Text(
+                            item.nguoiDung.hoTen.isNotEmpty
+                                ? item.nguoiDung.hoTen
+                                      .substring(0, 1)
+                                      .toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
               ),
-            ),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: const Color(0xFF0F172A),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                icon: const Icon(Icons.phone, size: 14, color: Colors.white),
-                onPressed: () {},
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.nguoiDung.hoTen,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    if (isCompleted)
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 13,
+                            color: Colors.blueAccent,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'ĐÃ HOÀN THÀNH CỨU HỘ',
+                            style: TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (isRescuing)
+                      const Text(
+                        'ĐANG TIẾN HÀNH CỨU HỘ',
+                        style: TextStyle(
+                          color: Colors.deepOrange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      )
+                    else if (isArrived)
+                      const Text(
+                        'ĐÃ ĐẾN NƠI',
+                        style: TextStyle(
+                          color: Color(0xFF0C5C4D),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Text(
+                            '${item.estimatedTimeMinutes} phút',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                          const Text(
+                            '  •  ',
+                            style: TextStyle(color: Colors.grey, fontSize: 10),
+                          ),
+                          Text(
+                            '${item.distanceKm.toStringAsFixed(1)} km',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              if (isCompleted)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Đã xong',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                )
+              else
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF0F172A),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(
+                      Icons.phone,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {},
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -381,6 +429,7 @@ class RescuerListBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Sáng nút Hoàn thành khi có ít nhất 1 cứu hộ viên đã hoàn thành
     bool hasCompletedRescuer = trackingList.any(
       (r) =>
           r.phanCong.maTrangThaiTiepNhan ==
@@ -449,7 +498,6 @@ class RescuerListBottomSheet extends StatelessWidget {
                           builder: (context) => ChatVoiBacSiScreen(
                             maPhongChat: maYeuCau,
                             maNguoiCuuHo: defaultRescuerId,
-                            
                             targetName: 'Đội ngũ Cứu hộ',
                             targetAvatar:
                                 'https://ui-avatars.com/api/?name=Cuu+Ho&background=046450&color=fff',

@@ -1,7 +1,9 @@
-// lib/NguoiCuuHo/LuuAnh/anh_dai_dien_widget.dart
+// lib/user/Design/anh_dai_dien_widget.dart
 //
-// Widget avatar dùng chung: tự truy vấn ảnh đại diện qua AnhDaiDienService,
-// có cache trong bộ nhớ và tự rơi về chữ cái viết tắt khi chưa có ảnh.
+// Avatar dùng chung, REALTIME: lắng nghe Firestore nên ảnh tự đổi ngay khi
+// người dùng cập nhật, không cần quay lại/làm mới màn hình. Có cache để vẽ
+// ngay ảnh gần nhất trong lúc chờ kết nối, và rơi về chữ cái viết tắt khi chưa có ảnh.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -24,18 +26,16 @@ class AnhDaiDienWidget extends StatefulWidget {
   final double fontSize;
   final Color mauNen;
 
-  // Cache: maNguoiDung -> chuỗi ảnh ('' nghĩa là đã tra nhưng không có ảnh).
+  // maNguoiDung -> chuỗi ảnh gần nhất ('' = đã tra nhưng không có ảnh).
   static final Map<String, String> _cache = {};
-  static final ValueNotifier<int> _phienBan = ValueNotifier<int>(0);
 
-  /// Gọi sau khi người dùng đổi/xóa ảnh đại diện để các avatar tải lại.
+  /// Giữ lại để tương thích code cũ. Không còn bắt buộc vì widget đã realtime.
   static void xoaCache([String? maNguoiDung]) {
     if (maNguoiDung == null) {
       _cache.clear();
     } else {
       _cache.remove(maNguoiDung);
     }
-    _phienBan.value++;
   }
 
   @override
@@ -45,61 +45,62 @@ class AnhDaiDienWidget extends StatefulWidget {
 class _AnhDaiDienWidgetState extends State<AnhDaiDienWidget> {
   final AnhDaiDienService _service = AnhDaiDienService();
 
-  Future<String>? _future;
+  StreamSubscription<String?>? _sub;
+  String _anh = '';
   ImageProvider? _provider;
   String? _providerNguon;
 
   @override
   void initState() {
     super.initState();
-    AnhDaiDienWidget._phienBan.addListener(_taiLai);
-    _future = _tai();
+    _batDau();
   }
 
   @override
   void didUpdateWidget(covariant AnhDaiDienWidget old) {
     super.didUpdateWidget(old);
-    if (old.maNguoiDung != widget.maNguoiDung) _taiLai();
+    if (old.maNguoiDung != widget.maNguoiDung) _batDau();
   }
 
   @override
   void dispose() {
-    AnhDaiDienWidget._phienBan.removeListener(_taiLai);
+    _sub?.cancel();
     super.dispose();
   }
 
-  void _taiLai() {
-    if (!mounted) return;
-    setState(() => _future = _tai());
-  }
-
-  Future<String> _tai() async {
+  void _batDau() {
+    _sub?.cancel();
     final id = widget.maNguoiDung;
-    if (id.isEmpty) return '';
-    final daCo = AnhDaiDienWidget._cache[id];
-    if (daCo != null) return daCo;
-    try {
-      final s = await _service.layAnhDaiDien(id) ?? '';
-      AnhDaiDienWidget._cache[id] = s;
-      return s;
-    } catch (_) {
-      return ''; // lỗi mạng: không cache để lần sau thử lại
-    }
+    _anh = AnhDaiDienWidget._cache[id] ?? '';
+    if (id.isEmpty) return;
+
+    _sub = _service.theoDoiAnhDaiDien(id).listen(
+      (s) {
+        final moi = s ?? '';
+        AnhDaiDienWidget._cache[id] = moi;
+        if (mounted && moi != _anh) setState(() => _anh = moi);
+      },
+      onError: (Object e, StackTrace st) {
+        debugPrint('AnhDaiDienWidget: lỗi theo dõi ảnh của "$id": $e');
+      },
+    );
   }
 
   ImageProvider? _giaiMa(String s) {
     if (s.isEmpty) return null;
-    if (_providerNguon == s) return _provider; // tránh decode lại mỗi lần build
+    if (_providerNguon == s) return _provider;
     ImageProvider? p;
     try {
       if (s.startsWith('http')) {
         p = NetworkImage(s);
       } else {
         final raw = s.contains(',') ? s.substring(s.indexOf(',') + 1) : s;
-        final Uint8List bytes = base64Decode(raw.trim());
+        final Uint8List bytes =
+            base64Decode(raw.replaceAll(RegExp(r'\s+'), ''));
         p = MemoryImage(bytes);
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('AnhDaiDienWidget: không giải mã được ảnh: $e');
       p = null;
     }
     _providerNguon = s;
@@ -117,7 +118,16 @@ class _AnhDaiDienWidgetState extends State<AnhDaiDienWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final chuViet = CircleAvatar(
+    final provider = _giaiMa(_anh);
+    if (provider != null) {
+      return CircleAvatar(
+        radius: widget.radius,
+        backgroundColor: widget.mauNen,
+        backgroundImage: provider,
+        onBackgroundImageError: (_, __) {},
+      );
+    }
+    return CircleAvatar(
       radius: widget.radius,
       backgroundColor: widget.mauNen,
       child: Text(
@@ -128,20 +138,6 @@ class _AnhDaiDienWidgetState extends State<AnhDaiDienWidget> {
           fontSize: widget.fontSize,
         ),
       ),
-    );
-
-    return FutureBuilder<String>(
-      future: _future,
-      builder: (context, snap) {
-        final provider = _giaiMa(snap.data ?? '');
-        if (provider == null) return chuViet;
-        return CircleAvatar(
-          radius: widget.radius,
-          backgroundColor: widget.mauNen,
-          backgroundImage: provider,
-          onBackgroundImageError: (_, __) {},
-        );
-      },
     );
   }
 }

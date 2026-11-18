@@ -19,6 +19,18 @@ class TheoDoiTinhTrangController {
       ValueNotifier(null);
 
   StreamSubscription<DocumentSnapshot>? _requestSub;
+  int _seq = 0;
+  bool _disposed = false;
+  NguoiDungModel? _nanNhanCache;
+  ChiTietMoTaHienTruongModel? _moTaCache;
+  final Map<String, Map<String, dynamic>> _rescuerCache = {};
+
+  static const _accepted = {
+    'cuuho_trangthai_phancong_tiepnhan',
+    'cuuho_trangthai_phancong_daden',
+    'cuuho_trangthai_phancong_dangcuuho',
+    'cuuho_trangthai_phancong_hoanthanh',
+  };
 
   void init() {
     _requestSub = FirebaseFirestore.instance
@@ -26,69 +38,52 @@ class TheoDoiTinhTrangController {
         .doc(maYeuCau)
         .snapshots()
         .listen((doc) async {
-          if (doc.exists && doc.data() != null) {
-            try {
-              // 1. Lấy thông tin Yêu Cầu
-              YeuCauCuuHoModel yeuCau = YeuCauCuuHoModel.fromMap(
-                doc.data() as Map<String, dynamic>,
-                doc.id,
-              );
+          final seq = ++_seq;
+          if (!doc.exists || doc.data() == null) {
+            if (!_disposed) requestDataNotifier.value = {'isEmpty': true};
+            return;
+          }
+          try {
+            final yeuCau = YeuCauCuuHoModel.fromMap(doc.data()!, doc.id);
+            _nanNhanCache ??= await _firebaseService.getUserById(
+              yeuCau.maNguoiYeuCau,
+            );
+            _moTaCache ??= await _firebaseService.getMoTaHienTruongById(
+              maYeuCau,
+            );
 
-              // 2. Lấy thông tin Nạn Nhân
-              NguoiDungModel? nanNhan = await _firebaseService.getUserById(
-                yeuCau.maNguoiYeuCau,
-              );
+            final entries = yeuCau.danhSachPhanCongVien.entries.where(
+              (e) => _accepted.contains(e.value),
+            );
 
-              // 3. Lấy Mô Tả Hiện Trường (Triệu chứng, Ghi chú)
-              ChiTietMoTaHienTruongModel? moTa = await _firebaseService
-                  .getMoTaHienTruongById(maYeuCau);
+            final listCuuHo = (await Future.wait(
+              entries.map((e) async {
+                final cache = _rescuerCache[e.key] ??= {
+                  'user': await _firebaseService.getUserById(e.key),
+                  'avatar': await _firebaseService.getUserAvatarUrl(e.key),
+                };
+                if (cache['user'] == null) return null;
+                return {...cache, 'trangThai': e.value};
+              }),
+            )).whereType<Map<String, dynamic>>().toList();
 
-              // 4. Lấy danh sách Cứu Hộ Viên (Đã loại những người từ chối/hủy)
-              List<Map<String, dynamic>> listCuuHo = [];
-
-              for (var entry in yeuCau.danhSachPhanCongVien.entries) {
-                String maCuuHo = entry.key;
-                String trangThai = entry.value;
-
-                if (trangThai != 'cuuho_trangthai_phancong_tuchoi' &&
-                    trangThai != 'cuuho_trangthai_phancong_dahuy' &&
-                    trangThai != 'tuchoi' &&
-                    trangThai != 'dahuy') {
-                  NguoiDungModel? userCuuHo = await _firebaseService
-                      .getUserById(maCuuHo);
-
-                  if (userCuuHo != null) {
-                    String? avatar = await _firebaseService.getUserAvatarUrl(
-                      maCuuHo,
-                    );
-
-                    listCuuHo.add({
-                      'user': userCuuHo,
-                      'trangThai': trangThai,
-                      'avatar': avatar,
-                    });
-                  }
-                }
-              }
-
-              // Cập nhật State
-              requestDataNotifier.value = {
-                'isEmpty': false,
-                'yeuCau': yeuCau,
-                'nanNhan': nanNhan,
-                'moTa': moTa,
-                'listCuuHo': listCuuHo,
-              };
-            } catch (e) {
-              debugPrint('❌ Lỗi map data TheoDoiTinhTrang: $e');
-            }
-          } else {
-            requestDataNotifier.value = {'isEmpty': true}; // Đơn không tồn tại
+            if (_disposed || seq != _seq)
+              return; // có snapshot mới hơn -> bỏ kết quả cũ
+            requestDataNotifier.value = {
+              'isEmpty': false,
+              'yeuCau': yeuCau,
+              'nanNhan': _nanNhanCache,
+              'moTa': _moTaCache,
+              'listCuuHo': listCuuHo,
+            };
+          } catch (e) {
+            debugPrint('❌ Lỗi map data TheoDoiTinhTrang: $e');
           }
         });
   }
 
   void dispose() {
+    _disposed = true;
     _requestSub?.cancel();
     requestDataNotifier.dispose();
   }

@@ -1,21 +1,19 @@
+// lib/user/ThongTInHoanThanhCuuHo/controllers/hoan_thanh_don_controller.dart
 import 'dart:async';
+import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/Models/danhgiamodel.dart';
 import 'package:flutter/material.dart';
-import 'package:cuhokhancap/firebase/firebase_service.dart'; // Đổi import gọi thẳng FirebaseService
 
 class HoanThanhDonController {
   final String maYeuCau;
   final String currentUserId;
-  final FirebaseService _service =
-      FirebaseService(); // Khởi tạo FirebaseService tổng
+  final FirebaseService _service = FirebaseService();
 
-  // Danh sách chi tiết phân công
   final ValueNotifier<List<Map<String, dynamic>>> danhSachPhanCongNotifier =
       ValueNotifier([]);
-  // Danh sách đánh giá
   final ValueNotifier<List<DanhGiaModel>> danhGiaNotifier = ValueNotifier([]);
-  // Trạng thái nút xác nhận
   final ValueNotifier<bool> isButtonEnabledNotifier = ValueNotifier(false);
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(true);
 
   StreamSubscription? _phanCongSub;
   StreamSubscription? _danhGiaSub;
@@ -23,32 +21,35 @@ class HoanThanhDonController {
   HoanThanhDonController({required this.maYeuCau, required this.currentUserId});
 
   void init() {
-    // 1. Lắng nghe chi tiết phân công
+    isLoadingNotifier.value = true;
+
+    // 1. Lắng nghe danh sách cứu hộ viên từ YeuCauCuuHo
     _phanCongSub = _service.langNgheDanhSachCuuHo(maYeuCau).listen((danhSach) {
       danhSachPhanCongNotifier.value = danhSach;
       _kiemTraDieuKienHoanThanh(danhSach);
+      isLoadingNotifier.value = false;
     });
 
-    // 2. Lắng nghe danh giá
+    // 2. Lắng nghe đánh giá
     _danhGiaSub = _service.langNgheDanhGia(maYeuCau).listen((danhGia) {
       danhGiaNotifier.value = danhGia;
     });
   }
 
-  // 🌟 ĐIỀU KIỆN KÍCH HOẠT NÚT HOÀN THÀNH KÉP
   void _kiemTraDieuKienHoanThanh(List<Map<String, dynamic>> danhSach) {
     if (danhSach.isEmpty) {
       isButtonEnabledNotifier.value = false;
       return;
     }
 
-    // Yêu cầu MỌI cứu hộ viên (đã tiếp nhận) đều phải có trạng thái hoanthanh
-    bool tatCaDaHoanThanh = danhSach.every(
-      (phien) =>
-          phien['maTrangThaiTiepNhan'] == 'cuuho_trangthai_phancong_hoanthanh',
-    );
+    // Đồng bộ với màn hình Tổng quan: có ít nhất 1 cứu hộ viên hoàn thành là mở nút xác nhận
+    bool daHoanThanh = danhSach.any((phien) {
+      final status = (phien['maTrangThaiTiepNhan'] ?? '').toString();
+      return status == 'cuuho_trangthai_phancong_hoanthanh' ||
+          status == 'hoanthanh';
+    });
 
-    isButtonEnabledNotifier.value = tatCaDaHoanThanh;
+    isButtonEnabledNotifier.value = daHoanThanh;
   }
 
   Future<bool> submitDanhGia(
@@ -57,7 +58,7 @@ class HoanThanhDonController {
     String nhanXet,
   ) async {
     final danhGiaMoi = DanhGiaModel(
-      maDanhGia: '',
+      maDanhGia: maNguoiCuuHo,
       maYeuCau: maYeuCau,
       maNguoiDanhGia: currentUserId,
       maNguoiCuuHo: maNguoiCuuHo,
@@ -65,7 +66,7 @@ class HoanThanhDonController {
       nhanXet: nhanXet,
       ngayTao: DateTime.now(),
     );
-    return await _service.guiDanhGia(danhGiaMoi);
+    return await _service.guiDanhGiaCuuHoVien(danhGiaMoi);
   }
 
   Future<bool> hoanThanhChuyenDi() async {
@@ -78,5 +79,6 @@ class HoanThanhDonController {
     danhSachPhanCongNotifier.dispose();
     danhGiaNotifier.dispose();
     isButtonEnabledNotifier.dispose();
+    isLoadingNotifier.dispose();
   }
 }

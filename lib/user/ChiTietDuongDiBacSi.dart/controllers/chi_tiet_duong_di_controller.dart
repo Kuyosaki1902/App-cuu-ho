@@ -32,7 +32,7 @@ class ChiTietDuongDiController {
   final double victimLat;
   final double victimLng;
   final String tenBacSi;
-
+  final String maYeuCau;
   final FirebaseService _fbService = FirebaseService();
   GoogleMapController? mapController;
   StreamSubscription? _locationSub;
@@ -65,6 +65,7 @@ class ChiTietDuongDiController {
     required this.victimLat,
     required this.victimLng,
     required this.tenBacSi,
+    required this.maYeuCau,
   }) {
     currentCurLat = startLat;
     currentCurLng = startLng;
@@ -77,29 +78,20 @@ class ChiTietDuongDiController {
 
     khoangCachBanDau_OSRM = await _fetchOSRMRoute(startLat, startLng);
 
-    final String todayStr = DateTime.now().toString().substring(0, 10);
-    _phanCongSub = FirebaseFirestore.instance
-        .collection('ChiTietPhanCongCuuHo')
-        .doc(maNguoiCuuHo)
-        .collection('DanhSachNgay')
-        .doc(todayStr)
-        .collection('DanhSachPhanCong')
-        .snapshots()
-        .listen((snapshot) {
-          for (var doc in snapshot.docs) {
-            final data = doc.data();
-            if (data['maYeuCau'] != null) {
-              String trangThai = data['maTrangThaiTiepNhan'] ?? '';
-              if (trangThai == 'cuuho_trangthai_phancong_daden') {
-                _isAlreadyArrived = true;
-                progressValue = 1.0;
-                trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
-                estimatedTime = "0 phút";
-                _uiUpdateCallback?.call();
-              }
-            }
-          }
-        });
+    _phanCongSub = _fbService.streamPhanCongByYeuCau(maYeuCau).listen((list) {
+      for (final pc in list) {
+        if (pc.maNguoiCuuHo != maNguoiCuuHo) continue; // đúng người, đúng đơn
+        final t = pc.maTrangThaiTiepNhan;
+        if (t == 'cuuho_trangthai_phancong_daden' ||
+            t == 'cuuho_trangthai_phancong_dangcuuho') {
+          _isAlreadyArrived = true;
+          progressValue = 1.0;
+          trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
+          estimatedTime = "0 phút";
+          _uiUpdateCallback?.call();
+        }
+      }
+    });
 
     _locationSub = FirebaseFirestore.instance
         .collection('NguoiDung')
@@ -107,8 +99,10 @@ class ChiTietDuongDiController {
         .snapshots()
         .listen((docSnap) async {
           if (docSnap.exists && docSnap.data() != null) {
-            double curLat = docSnap.data()?['viDo'] ?? startLat;
-            double curLng = docSnap.data()?['kinhDo'] ?? startLng;
+            double curLat =
+                (docSnap.data()?['viDo'] as num?)?.toDouble() ?? startLat;
+            double curLng =
+                (docSnap.data()?['kinhDo'] as num?)?.toDouble() ?? startLng;
 
             double bearing = _calculateBearing(
               currentCurLat,
@@ -238,7 +232,7 @@ class ChiTietDuongDiController {
     Function() onUpdate,
   ) async {
     final url = Uri.parse(
-      'http://router.project-osrm.org/route/v1/driving/$curLng,$curLat;$victimLng,$victimLat?overview=full&geometries=polyline',
+      'https://router.project-osrm.org/route/v1/driving/$curLng,$curLat;$victimLng,$victimLat?overview=full&geometries=polyline',
     );
 
     try {
