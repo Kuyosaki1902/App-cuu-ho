@@ -1,24 +1,40 @@
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/controllers/anh_dai_dien_service.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/thanh_tich_common.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/models/quy_tac_diem.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/controllers/xep_hang_controller.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/models/xep_hang_model.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/thanh_tich_common.dart';
 
 class XepHangScreen extends StatelessWidget {
   final String userId;
-  const XepHangScreen({super.key, required this.userId});
 
-  static Future<void> mo(BuildContext context, String userId) {
+  /// Việc cần làm trước khi tải bảng "Từ trước đến nay" (ví dụ làm mới điểm tổng),
+  /// do nơi mở màn hình truyền vào để Xếp hạng không phải import tính năng Thành tích.
+  final Future<void> Function()? lamMoiDiem;
+
+  const XepHangScreen({super.key, required this.userId, this.lamMoiDiem});
+
+  static Future<void> mo(
+    BuildContext context,
+    String userId, {
+    Future<void> Function()? lamMoiDiem,
+  }) {
     return Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => XepHangScreen(userId: userId)),
+      MaterialPageRoute(
+        builder: (_) => XepHangScreen(userId: userId, lamMoiDiem: lamMoiDiem),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => XepHangController(userId)..taiBangXepHang(),
+      create: (_) =>
+          XepHangController(userId, lamMoiTruocKhiTaiTatCa: lamMoiDiem)
+            ..taiBangXepHang(),
       child: Scaffold(
         backgroundColor: const Color(0xFFF7F8FC),
         appBar: AppBar(
@@ -35,7 +51,7 @@ class XepHangScreen extends StatelessWidget {
               builder: (ctx) => TextButton.icon(
                 onPressed: () => _hienCachTinhDiem(ctx),
                 icon: const Icon(Icons.info_outline_rounded, size: 18),
-                label: const Text('Tính\nđiểm'),
+                label: const Text('Cách\nxếp hạng'),
               ),
             ),
           ],
@@ -100,11 +116,6 @@ class _NoiDungXepHang extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
-          if (c.rankCaNhan != null) ...[
-            _TheCapBac(tt: c.rankCaNhan!),
-            const SizedBox(height: 24),
-          ],
-
           if (bang.isEmpty)
             const TrangThaiRong(
               icon: Icons.emoji_events_outlined,
@@ -121,106 +132,6 @@ class _NoiDungXepHang extends StatelessWidget {
                 theoKy: theoKy,
               ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TheCapBac extends StatelessWidget {
-  final XepHangItem tt;
-  const _TheCapBac({required this.tt});
-
-  @override
-  Widget build(BuildContext context) {
-    final cap = tt.capBac;
-    final tiep = cap.capTiepTheo;
-    final diem = tt.diem;
-    final tienDo = tiep == null
-        ? 1.0
-        : ((diem - cap.diemToiThieu) / (tiep.diemToiThieu - cap.diemToiThieu))
-              .clamp(0.0, 1.0);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cap.mau, cap.mau.withOpacity(0.75)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: cap.mau.withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(cap.icon, color: Colors.white, size: 28),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Cấp ${cap.ten}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      tt.tenHienThi,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              NhanLoai(loai: tt.loaiHoSo, tren: true),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: tienDo,
-              minHeight: 8,
-              backgroundColor: Colors.white.withOpacity(0.25),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            tiep == null
-                ? 'Bạn đã đạt cấp cao nhất'
-                : 'Còn ${tiep.diemToiThieu - diem} điểm để lên cấp ${tiep.ten}',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ],
       ),
     );
@@ -330,7 +241,7 @@ class _CotPodium extends StatelessWidget {
     final it = item;
     if (it == null) return SizedBox(height: cao);
     final laToi = it.maNguoiDung == userId;
-
+    AnhDaiDienService avatar = AnhDaiDienService();
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -351,17 +262,12 @@ class _CotPodium extends StatelessWidget {
               width: 2,
             ),
           ),
-          child: CircleAvatar(
+          child: _AvatarNguoiDung(
+            userId: it.maNguoiDung,
+            tenHienThi: it.tenHienThi,
             radius: coVuongMien ? 28 : 24,
-            backgroundColor: mau.withOpacity(0.15),
-            child: Text(
-              chuCai(it.tenHienThi),
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                color: mau,
-                fontSize: coVuongMien ? 20 : 17,
-              ),
-            ),
+            mau: mau,
+            fontSize: coVuongMien ? 20 : 17,
           ),
         ),
         const SizedBox(height: 6),
@@ -444,17 +350,12 @@ class _DongXepHang extends StatelessWidget {
               ),
             ),
           ),
-          CircleAvatar(
+          _AvatarNguoiDung(
+            userId: item.maNguoiDung,
+            tenHienThi: item.tenHienThi,
             radius: 18,
-            backgroundColor: const Color(0xFFF1F5F9),
-            child: Text(
-              chuCai(item.tenHienThi),
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                color: kXam,
-                fontSize: 14,
-              ),
-            ),
+            mau: kXam,
+            fontSize: 14,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -565,7 +466,7 @@ void _hienCachTinhDiem(BuildContext context) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Cách tính điểm',
+            'Cách xếp hạng',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -573,56 +474,69 @@ void _hienCachTinhDiem(BuildContext context) {
             ),
           ),
           const SizedBox(height: 12),
-          const _DongCongThuc('+10', 'điểm cho mỗi ca hoàn thành'),
-          const _DongCongThuc(
-            '+0…20',
-            'điểm chuyên cần = 20 × tỷ lệ nhận ca (khi đã được phân công từ 5 ca)',
+          _DongCongThuc(
+            'Tuần, tháng',
+            'Xếp theo số ca hoàn thành trong kỳ (${QuyTacDiem.diemMoiCa} điểm/ca).',
           ),
           const _DongCongThuc(
-            '+0…20',
-            'điểm chất lượng = (số sao trung bình − 3) × 10 (khi có từ 3 lượt đánh giá)',
+            'Tất cả',
+            'Xếp theo tổng điểm tích luỹ, gồm cả chuyên cần, chất lượng và ca bỏ lỡ.',
           ),
-          const _DongCongThuc('−2', 'điểm cho mỗi ca bỏ lỡ (trừ tối đa 20)'),
-          const SizedBox(height: 14),
-          const Text(
-            'Cấp bậc',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: kDen,
-            ),
+          const _DongCongThuc(
+            'Đồng hạng',
+            'Cùng điểm thì cùng thứ hạng; thứ tự trong nhóm xét theo số ca rồi tên.',
           ),
-          const SizedBox(height: 8),
-          for (final c in CapBac.tatCa)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Icon(c.icon, size: 18, color: c.mau),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      c.ten,
-                      style: const TextStyle(fontSize: 13, color: kDen),
-                    ),
-                  ),
-                  Text(
-                    'từ ${c.diemToiThieu} điểm',
-                    style: const TextStyle(fontSize: 12.5, color: kXam),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           const Text(
-            'Bảng xếp hạng tuần và tháng chỉ tính số ca hoàn thành trong kỳ '
-            '(10 điểm/ca). Bảng "Từ trước đến nay" dùng tổng điểm ở trên.',
+            'Chi tiết công thức điểm và cấp bậc có trong màn hình Thành tích.',
             style: TextStyle(fontSize: 12, height: 1.4, color: kXam),
           ),
         ],
       ),
     ),
   );
+}
+
+class _AvatarNguoiDung extends StatelessWidget {
+  final String userId;
+  final String tenHienThi;
+  final double radius;
+  final Color mau;
+  final double fontSize;
+
+  const _AvatarNguoiDung({
+    required this.userId,
+    required this.tenHienThi,
+    required this.radius,
+    required this.mau,
+    required this.fontSize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final future = context.read<XepHangController>().layAvatarProvider(userId);
+    return FutureBuilder<ImageProvider?>(
+      future: future,
+      builder: (context, snap) {
+        final img = snap.data;
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: mau.withOpacity(0.15),
+          backgroundImage: img,
+          child: img != null
+              ? null
+              : Text(
+                  chuCai(tenHienThi),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: mau,
+                    fontSize: fontSize,
+                  ),
+                ),
+        );
+      },
+    );
+  }
 }
 
 class _DongCongThuc extends StatelessWidget {
@@ -638,7 +552,7 @@ class _DongCongThuc extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 56,
+            width: 84,
             child: Text(
               dau,
               style: const TextStyle(

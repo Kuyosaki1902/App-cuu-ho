@@ -12,8 +12,6 @@ import 'widgets/victim_info_card.dart';
 
 class Manhinhcho extends StatefulWidget {
   final String currentUserId;
-
-  /// Mã ca cần chờ. Để rỗng thì lấy ca đang chờ tiếp nhận đầu tiên.
   final String maYeuCauCuuHo;
 
   const Manhinhcho({

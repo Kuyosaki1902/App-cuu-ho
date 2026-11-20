@@ -32,6 +32,7 @@ class HoSoCuuHoKhongCCHNModel {
   final String? tomTatCuuHo;
   final String? ghiChu;
   final String thoiGianOnline;
+
   /// Giờ nộp hồ sơ. Khi gửi, controller ghi đè bằng FieldValue.serverTimestamp()
   /// để đếm ngược thẩm định không phụ thuộc đồng hồ máy người dùng.
   final String thoiGianNop;
@@ -125,8 +126,8 @@ class HoSoCuuHoKhongCCHNModel {
       'diemDanhGia': diemDanhGia,
       'tongLuotDanhGia': tongLuotDanhGia,
       'soLuongCaDuocPhat': soLuongCaDuocPhat,
-      'soluongCaDaNhan': soluongCaDaNhan,
-      'soLuongDaKhongNhan': soLuongDaKhongNhan,
+      'soLuongCaDaNhan': soluongCaDaNhan,
+      'soLuongCaKhongNhan': soLuongDaKhongNhan,
       'soLuongCaHoanThanh': soLuongCaHoanThanh,
       'capDoUyTin': capDoUyTin,
       'kyNangDaXacMinh': kyNangDaXacMinh,
@@ -162,8 +163,8 @@ class HoSoCuuHoKhongCCHNModel {
       diemDanhGia: (map['diemDanhGia'] ?? 0.0).toDouble(),
       tongLuotDanhGia: map['tongLuotDanhGia'] ?? 0,
       soLuongCaDuocPhat: map['soLuongCaDuocPhat'] ?? 0,
-      soluongCaDaNhan: map['soluongCaDaNhan'] ?? 0,
-      soLuongDaKhongNhan: map['soLuongDaKhongNhan'] ?? 0,
+      soluongCaDaNhan: map['soLuongCaDaNhan'] ?? 0,
+      soLuongDaKhongNhan: map['soLuongCaKhongNhan'] ?? 0,
       soLuongCaHoanThanh: map['soLuongCaHoanThanh'] ?? 0,
       capDoUyTin: map['capDoUyTin'] ?? 0,
       kyNangDaXacMinh: List<String>.from(map['kyNangDaXacMinh'] ?? const []),

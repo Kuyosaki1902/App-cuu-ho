@@ -1,17 +1,24 @@
+import 'dart:convert';
+
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/controllers/anh_dai_dien_service.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/controllers/xep_hang_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/models/xep_hang_model.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/services/xep_hang_service.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/services/thanh_tich_service.dart';
+import 'package:flutter/material.dart';
 
 class XepHangController extends ChangeNotifier {
-  XepHangController(this.userId) {
-    _ttService = ThanhTichService();
-    _xhService = XepHangService();
-  }
+  /// [lamMoiTruocKhiTaiTatCa]: việc do nơi ghép màn hình cung cấp (ví dụ làm mới
+  /// điểm tổng) chạy trước khi tải bảng "Từ trước đến nay". Xếp hạng không cần biết
+  /// việc đó thuộc tính năng nào.
+  XepHangController(
+    this.userId, {
+    XepHangService? service,
+    this.lamMoiTruocKhiTaiTatCa,
+  }) : _service = service ?? XepHangService();
 
   final String userId;
-  late final ThanhTichService _ttService;
-  late final XepHangService _xhService;
+  final XepHangService _service;
+  final Future<void> Function()? lamMoiTruocKhiTaiTatCa;
 
   bool _disposed = false;
   int _lanTai = 0;
@@ -19,14 +26,32 @@ class XepHangController extends ChangeNotifier {
   KyXepHang ky = KyXepHang.tuan;
   List<XepHangItem> bangXepHang = const [];
   XepHangItem? mucCuaToi;
-  XepHangItem?
-  rankCaNhan; // Chứa dữ liệu xếp hạng mọi thời gian để sinh Cấp bậc
   bool dangTaiBang = false;
   String? loiBang;
 
   String get nhanKy => XepHangService.nhanKy(ky);
   bool get toiTrongBang =>
       mucCuaToi != null && bangXepHang.any((e) => e.maNguoiDung == userId);
+
+  final AnhDaiDienService _avatarService = AnhDaiDienService();
+  final Map<String, Future<ImageProvider?>> _avatarCache = {};
+
+  Future<ImageProvider?> layAvatarProvider(String uid) {
+    if (uid.isEmpty) return Future.value(null);
+    return _avatarCache.putIfAbsent(uid, () async {
+      try {
+        final raw = await _avatarService.layAnhDaiDien(uid);
+        if (raw == null || raw.isEmpty) return null;
+        if (raw.startsWith('http://') || raw.startsWith('https://')) {
+          return NetworkImage(raw);
+        }
+        final clean = raw.contains(',') ? raw.split(',').last : raw;
+        return MemoryImage(base64Decode(clean.trim()));
+      } catch (_) {
+        return null;
+      }
+    });
+  }
 
   Future<void> doiKy(KyXepHang moi) async {
     if (moi == ky) return;
@@ -44,31 +69,27 @@ class XepHangController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (kyHienTai == KyXepHang.tatCa) {
+      if (kyHienTai == KyXepHang.tatCa && lamMoiTruocKhiTaiTatCa != null) {
         try {
-          await _ttService.dongBoTuHoSo(userId);
+          await lamMoiTruocKhiTaiTatCa!();
         } catch (e) {
-          debugPrint('$e');
+          debugPrint('XepHang: làm mới điểm thất bại: $e');
         }
       }
 
-      // Load data bảng và item hiện tại
-      final fBang = _xhService.layBangXepHang(kyHienTai);
-      final fMuc = _xhService.layMucCuaToi(kyHienTai, userId);
-      // Luôn load All-Time Rank của user để đổ vào UI _TheCapBac
-      final fRank = _xhService.layMucCuaToi(KyXepHang.tatCa, userId);
-
+      final fBang = _service.layBangXepHang(kyHienTai);
+      final fMuc = _service.layMucCuaToi(kyHienTai, userId);
       final bang = await fBang;
       final muc = await fMuc;
-      final rank = await fRank;
 
       if (lan != _lanTai) return;
       bangXepHang = bang;
       mucCuaToi = muc;
-      rankCaNhan = rank;
     } catch (e) {
-      if (lan == _lanTai)
+      debugPrint('XepHang: lỗi tải bảng: $e');
+      if (lan == _lanTai) {
         loiBang = 'Không tải được bảng xếp hạng. Thử lại sau.';
+      }
     }
 
     if (lan == _lanTai) dangTaiBang = false;

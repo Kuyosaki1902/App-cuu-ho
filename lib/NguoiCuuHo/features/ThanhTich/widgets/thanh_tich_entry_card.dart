@@ -1,7 +1,10 @@
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/controllers/thanh_tich_service.dart';
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/thanh_tich_screen.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/xep_hang_screen.dart';
 
+/// Điểm ghép duy nhất của hai tính năng: Thành tích và Xếp hạng không import nhau,
+/// chỉ thẻ này biết cả hai. Đặt ở thư mục dùng chung, không thuộc bên nào.
 class ThanhTichEntryCard extends StatelessWidget {
   final String userId;
   const ThanhTichEntryCard({super.key, required this.userId});
@@ -17,7 +20,7 @@ class ThanhTichEntryCard extends StatelessWidget {
             mau: const Color(0xFFCA8A04),
             nen: const Color(0xFFFEF3C7),
             tieuDe: 'Thành tích',
-            moTa: 'Cấp bậc, huy hiệu',
+            moTa: 'Cấp bậc, huy hiệu, điểm',
             onTap: bam ? null : () => ThanhTichScreen.mo(context, userId),
           ),
         ),
@@ -29,7 +32,16 @@ class ThanhTichEntryCard extends StatelessWidget {
             nen: const Color(0xFFFEE2E2),
             tieuDe: 'Xếp hạng',
             moTa: 'Tuần, tháng, mọi thời gian',
-            onTap: bam ? null : () => XepHangScreen.mo(context, userId),
+            onTap: bam
+                ? null
+                : () => XepHangScreen.mo(
+                    context,
+                    userId,
+                    // Xếp hạng "Từ trước đến nay" cần điểm tổng mới nhất.
+                    lamMoiDiem: () async {
+                      await ThanhTichService().dongBoTuHoSo(userId);
+                    },
+                  ),
           ),
         ),
       ],

@@ -1,64 +1,96 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/xep_hang_model.dart';
+import 'package:flutter/foundation.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/ma_ky.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/models/xep_hang_model.dart';
 
 class XepHangService {
   XepHangService({FirebaseFirestore? firestore})
     : _db = firestore ?? FirebaseFirestore.instance;
   final FirebaseFirestore _db;
 
-  static List<int> _tuanIso(DateTime d) {
-    final ngay = DateTime.utc(d.year, d.month, d.day);
-    final thuNam = ngay.add(Duration(days: 4 - ngay.weekday));
-    final dauNam = DateTime.utc(thuNam.year, 1, 1);
-    final tuan = (thuNam.difference(dauNam).inDays ~/ 7) + 1;
-    return [thuNam.year, tuan];
-  }
-
-  static String maTuan(DateTime d) {
-    final t = _tuanIso(d);
-    return 'tuan_${t[0]}-W${t[1].toString().padLeft(2, '0')}';
-  }
-
-  static String maThang(DateTime d) =>
-      'thang_${d.year}-${d.month.toString().padLeft(2, '0')}';
-
   static String nhanKy(KyXepHang ky, [DateTime? luc]) {
     final d = luc ?? DateTime.now();
-    final t = _tuanIso(d);
     switch (ky) {
       case KyXepHang.tuan:
+        final t = MaKy.tuanIso(d);
         return 'Tuần ${t[1]}/${t[0]}';
       case KyXepHang.thang:
-        return 'Tháng ${d.month}/${d.year}';
+        return 'Tháng ${MaKy.soThang(d)}/${MaKy.namCuaThang(d)}';
       case KyXepHang.tatCa:
         return 'Từ trước đến nay';
     }
   }
 
+  CollectionReference<Map<String, dynamic>> _thanhVienKy(String maKy) =>
+      _db.collection('XepHangKy').doc(maKy).collection('ThanhVien');
+
   CollectionReference<Map<String, dynamic>> _nguon(KyXepHang ky) {
     final now = DateTime.now();
     switch (ky) {
       case KyXepHang.tuan:
-        return _db
-            .collection('XepHangKy')
-            .doc(maTuan(now))
-            .collection('ThanhVien');
+        return _thanhVienKy(MaKy.tuan(now));
       case KyXepHang.thang:
-        return _db
-            .collection('XepHangKy')
-            .doc(maThang(now))
-            .collection('ThanhVien');
+        return _thanhVienKy(MaKy.thang(now));
       case KyXepHang.tatCa:
-        return _db.collection('ThanhTichCuuHo');
+        return _db.collection(
+          'ThanhTichCuuHo',
+        ); // bản sao công khai do Thành tích làm mới
     }
   }
 
   String _truongSapXep(KyXepHang ky) =>
       ky == KyXepHang.tatCa ? 'diem' : 'soCaHoanThanh';
 
+  // ── Ghi nhận ───────────────────────────────────────────────────────
+  /// Cộng 1 ca vào bảng tuần và tháng. Chống ghi trùng bằng cờ [daGhiXepHang]
+  /// ngay trên bản ghi phân công của chính ca đó, nên không cần bảng `ThanhTichCa`.
+  ///
+  /// [phanCongRef]: `ChiTietPhanCongCuuHo/{uid}/DanhSachNgay/{ngay}/DanhSachPhanCong/{maYeuCau}`.
+  /// Trả về false nếu ca này đã được ghi trước đó hoặc có lỗi.
+  Future<bool> ghiNhanCaHoanThanh({
+    required DocumentReference<Map<String, dynamic>> phanCongRef,
+    required String uid,
+    required String tenHienThi,
+    required String loaiHoSo,
+    DateTime? luc,
+  }) async {
+    if (uid.isEmpty) return false;
+    final thoiDiem = luc ?? DateTime.now();
+    final tuanRef = _thanhVienKy(MaKy.tuan(thoiDiem)).doc(uid);
+    final thangRef = _thanhVienKy(MaKy.thang(thoiDiem)).doc(uid);
+
+    try {
+      return await _db.runTransaction<bool>((tx) async {
+        final pc = await tx.get(phanCongRef);
+        if (pc.data()?['daGhiXepHang'] == true) return false;
+
+        tx.set(phanCongRef, {
+          'daGhiXepHang': true,
+          'thoiGianGhiXepHang': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        final chung = {
+          'maNguoiDung': uid,
+          'tenHienThi': tenHienThi,
+          'loaiHoSo': loaiHoSo,
+          'soCaHoanThanh': FieldValue.increment(1),
+          'capNhatLuc': FieldValue.serverTimestamp(),
+        };
+        tx.set(tuanRef, chung, SetOptions(merge: true));
+        tx.set(thangRef, chung, SetOptions(merge: true));
+        return true;
+      });
+    } catch (e) {
+      // Không nuốt lỗi im lặng như bản cũ: caller cần biết để thử lại.
+      debugPrint('XepHang: không ghi được xếp hạng kỳ: $e');
+      return false;
+    }
+  }
+
+  // ── Đọc ────────────────────────────────────────────────────────────
   Future<List<XepHangItem>> layBangXepHang(
     KyXepHang ky, {
-    int gioiHan = 50,
+    int gioiHan = 10,
   }) async {
     final snap = await _nguon(
       ky,

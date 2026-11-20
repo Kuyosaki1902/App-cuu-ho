@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../controllers/emergency_alert_controller.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TienTrinhCuuHo/widgets/rescue_theme.dart';
 
@@ -11,7 +10,6 @@ class DoctorHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<EmergencyAlertController>();
-    final hasUrl = c.doctorAvatarUrl != null && c.doctorAvatarUrl!.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -29,18 +27,12 @@ class DoctorHeaderCard extends StatelessWidget {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: RC.blueSoft,
-                backgroundImage: hasUrl ? NetworkImage(c.doctorAvatarUrl!) : null,
-                onBackgroundImageError: hasUrl ? (_, __) {} : null,
-                child: hasUrl
-                    ? null
-                    : Text(
-                        c.doctorInitials,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: RC.blue,
-                        ),
-                      ),
+                backgroundImage: c.avatarBytes != null
+                    ? MemoryImage(c.avatarBytes!)
+                    : null,
+                child: c.avatarBytes == null
+                    ? const Icon(Icons.person, color: Colors.white, size: 24)
+                    : null,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -70,7 +62,10 @@ class DoctorHeaderCard extends StatelessWidget {
                             c.doctorRoleLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: RC.muted),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: RC.muted,
+                            ),
                           ),
                         ),
                       ],
@@ -83,7 +78,10 @@ class DoctorHeaderCard extends StatelessWidget {
                   tooltip: 'Tắt chuông',
                   onPressed: c.stopEmergencySound,
                   icon: const Icon(Icons.volume_off_outlined, color: RC.ink),
-                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
                 ),
             ],
           ),

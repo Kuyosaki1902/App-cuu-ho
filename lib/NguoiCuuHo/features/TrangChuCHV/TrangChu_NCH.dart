@@ -251,7 +251,6 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                       role: controller.role,
                       maVaiTro: controller.maVaiTro,
                       capDoUyTin: controller.capDoUyTin,
-                      // 🟢 avatar đã cache ở controller, không còn FutureBuilder
                       avatarBytes: controller.avatarBytes,
                     ),
 
@@ -314,6 +313,7 @@ class _TrangchunguoicuuhoState extends State<Trangchunguoicuuho> {
                           () => controller.currentUserModel != null
                               ? ThongTinTaiKhoan(
                                   nguoiDung: controller.currentUserModel!,
+                                  avatarBytes: controller.avatarBytes,
                                 )
                               : const Center(
                                   child: CircularProgressIndicator(),

@@ -1,9 +1,9 @@
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/thanh_tich_common.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/models/quy_tac_diem.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/controllers/thanh_tich_controller.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/models/thanh_tich_model.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/xep_hang_screen.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/thanh_tich_common.dart';
 
 class ThanhTichScreen extends StatelessWidget {
   final String userId;
@@ -31,6 +31,15 @@ class ThanhTichScreen extends StatelessWidget {
             'Thành tích',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 26),
           ),
+          actions: [
+            Builder(
+              builder: (ctx) => TextButton.icon(
+                onPressed: () => _hienCachTinhDiem(ctx),
+                icon: const Icon(Icons.info_outline_rounded, size: 18),
+                label: const Text('Tính\nđiểm'),
+              ),
+            ),
+          ],
         ),
         body: const _NoiDungThanhTich(),
       ),
@@ -71,6 +80,8 @@ class _NoiDungThanhTich extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
+          _TheCapBac(tt: tt),
+          const SizedBox(height: 14),
           _DiemCaNhan(tt: tt),
           const SizedBox(height: 14),
           _LuoiChiSo(tt: tt),
@@ -434,6 +445,219 @@ class _TieuDe extends StatelessWidget {
         fontWeight: FontWeight.w800,
         letterSpacing: 0.6,
         color: kXam,
+      ),
+    );
+  }
+}
+
+class _TheCapBac extends StatelessWidget {
+  final ThanhTichModel tt;
+  const _TheCapBac({required this.tt});
+
+  @override
+  Widget build(BuildContext context) {
+    final cap = tt.capBac;
+    final tiep = cap.capTiepTheo;
+    final diem = tt.diem;
+    final tienDo = tiep == null
+        ? 1.0
+        : ((diem - cap.diemToiThieu) / (tiep.diemToiThieu - cap.diemToiThieu))
+              .clamp(0.0, 1.0);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cap.mau, cap.mau.withOpacity(0.75)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: cap.mau.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(cap.icon, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cấp ${cap.ten}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      tt.tenHienThi,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              NhanLoai(loai: tt.loaiHoSo, tren: true),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: tienDo,
+              minHeight: 8,
+              backgroundColor: Colors.white.withOpacity(0.25),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            tiep == null
+                ? 'Bạn đã đạt cấp cao nhất'
+                : 'Còn ${tiep.diemToiThieu - diem} điểm để lên cấp ${tiep.ten}',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _hienCachTinhDiem(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (_) => SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Cách tính điểm',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: kDen,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _DongCongThuc(
+            '+${QuyTacDiem.diemMoiCa}',
+            'điểm cho mỗi ca hoàn thành',
+          ),
+          _DongCongThuc(
+            '+0…${QuyTacDiem.diemChuyenCanToiDa}',
+            'điểm chuyên cần = ${QuyTacDiem.diemChuyenCanToiDa} × tỷ lệ nhận ca '
+                '(khi đã được phân công từ ${QuyTacDiem.soCaToiThieuTinhChuyenCan} ca)',
+          ),
+          _DongCongThuc(
+            '+0…${((5 - QuyTacDiem.saoCoSo) * QuyTacDiem.heSoChatLuong).round()}',
+            'điểm chất lượng = (số sao trung bình − ${QuyTacDiem.saoCoSo.round()}) × '
+                '${QuyTacDiem.heSoChatLuong.round()} '
+                '(khi có từ ${QuyTacDiem.luotDanhGiaToiThieu} lượt đánh giá)',
+          ),
+          _DongCongThuc(
+            '−${QuyTacDiem.diemTruMoiCaBoLo}',
+            'điểm cho mỗi ca bỏ lỡ (trừ tối đa ${QuyTacDiem.diemTruToiDa})',
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Cấp bậc',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: kDen,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final c in CapBac.tatCa)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Icon(c.icon, size: 18, color: c.mau),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      c.ten,
+                      style: const TextStyle(fontSize: 13, color: kDen),
+                    ),
+                  ),
+                  Text(
+                    'từ ${c.diemToiThieu} điểm',
+                    style: const TextStyle(fontSize: 12.5, color: kXam),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DongCongThuc extends StatelessWidget {
+  final String dau;
+  final String noiDung;
+  const _DongCongThuc(this.dau, this.noiDung);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 56,
+            child: Text(
+              dau,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: kDo,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              noiDung,
+              style: const TextStyle(fontSize: 13, height: 1.35, color: kDen),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,7 +26,7 @@ class TeamMembersCard extends StatelessWidget {
           child: Row(
             children: [
               if (hasTeam) ...[
-                _AvatarStack(names: members.map((m) => m['name'].toString()).toList()),
+                _AvatarStack(members: members),
                 const SizedBox(width: 12),
               ] else ...[
                 const Icon(Icons.person_outline, color: RC.muted, size: 22),
@@ -71,7 +72,9 @@ class TeamMembersCard extends StatelessWidget {
       final s = m['status'].toString();
       counts[s] = (counts[s] ?? 0) + 1;
     }
-    return counts.entries.map((e) => '${e.value} ${e.key.toLowerCase()}').join(' · ');
+    return counts.entries
+        .map((e) => '${e.value} ${e.key.toLowerCase()}')
+        .join(' · ');
   }
 
   void _showTeamSheet(BuildContext context) {
@@ -88,13 +91,15 @@ class TeamMembersCard extends StatelessWidget {
   }
 }
 
+// Thay class _AvatarStack bằng:
 class _AvatarStack extends StatelessWidget {
-  final List<String> names;
-  const _AvatarStack({required this.names});
+  final List<Map<String, dynamic>> members;
+  const _AvatarStack({required this.members});
 
   @override
   Widget build(BuildContext context) {
-    final shown = names.take(3).toList();
+    final c = context.read<RescueProcessController>();
+    final shown = members.take(3).toList();
     return SizedBox(
       width: 32 + (shown.length - 1) * 20.0,
       height: 32,
@@ -106,19 +111,36 @@ class _AvatarStack extends StatelessWidget {
               child: Container(
                 width: 32,
                 height: 32,
-                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: RC.blueSoft,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),
-                child: Text(
-                  shown[i].isNotEmpty ? shown[i].trim().split(' ').last[0].toUpperCase() : '?',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: RC.blue,
-                  ),
+                child: FutureBuilder<Uint8List?>(
+                  future: c.getMemberAvatarBytes(shown[i]['id'].toString()),
+                  builder: (_, snap) {
+                    final bytes = snap.data;
+                    final name = shown[i]['name'].toString();
+                    final initial = name.isNotEmpty
+                        ? name.trim().split(' ').last[0].toUpperCase()
+                        : '?';
+                    return CircleAvatar(
+                      radius: 14,
+                      backgroundColor: RC.blueSoft,
+                      backgroundImage: bytes != null
+                          ? MemoryImage(bytes)
+                          : null,
+                      child: bytes == null
+                          ? Text(
+                              initial,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: RC.blue,
+                              ),
+                            )
+                          : null,
+                    );
+                  },
                 ),
               ),
             ),
@@ -207,20 +229,36 @@ class _TeamSheet extends StatelessWidget {
                       final color = _statusColor(status);
                       final phone = m['phone'].toString();
                       final name = m['name'].toString();
+                      final id = m['id'].toString();
+                      final initial = name.isNotEmpty
+                          ? name.trim().split(' ').last[0].toUpperCase()
+                          : '?';
+
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: RC.blueSoft,
-                              child: Text(
-                                name.isNotEmpty ? name.trim().split(' ').last[0].toUpperCase() : '?',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: RC.blue,
-                                ),
-                              ),
+                            FutureBuilder<Uint8List?>(
+                              future: c.getMemberAvatarBytes(id),
+                              builder: (context, snapshot) {
+                                final bytes = snapshot.data;
+                                return CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: RC.blueSoft,
+                                  backgroundImage: bytes != null
+                                      ? MemoryImage(bytes)
+                                      : null,
+                                  child: bytes == null
+                                      ? Text(
+                                          initial,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: RC.blue,
+                                          ),
+                                        )
+                                      : null,
+                                );
+                              },
                             ),
                             const SizedBox(width: 12),
                             Expanded(

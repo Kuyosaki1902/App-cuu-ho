@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
+import 'dart:typed_data';
 import '../controllers/rescue_process_controller.dart';
 import 'rescue_theme.dart';
 
@@ -28,7 +28,7 @@ class ProcessStepperHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              _Avatar(url: c.doctorAvatarUrl, initials: c.doctorInitials),
+              _Avatar(bytes: c.victimAvatar, initials: c.doctorInitials),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -104,13 +104,20 @@ class ProcessStepperHeader extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  final String? url;
+  final Uint8List? bytes;
   final String initials;
-  const _Avatar({required this.url, required this.initials});
+
+  const _Avatar({this.bytes, required this.initials});
 
   @override
   Widget build(BuildContext context) {
-    final hasUrl = url != null && url!.isNotEmpty;
+    final hasBytes = bytes != null && bytes!.isNotEmpty;
+
+    ImageProvider? imageProvider;
+    if (hasBytes) {
+      imageProvider = MemoryImage(bytes!);
+    }
+
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
@@ -120,9 +127,8 @@ class _Avatar extends StatelessWidget {
       child: CircleAvatar(
         radius: 19,
         backgroundColor: RC.redSoft,
-        backgroundImage: hasUrl ? NetworkImage(url!) : null,
-        onBackgroundImageError: hasUrl ? (_, __) {} : null,
-        child: hasUrl
+        backgroundImage: imageProvider,
+        child: imageProvider != null
             ? null
             : Text(
                 initials,

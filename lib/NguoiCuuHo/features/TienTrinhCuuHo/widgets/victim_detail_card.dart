@@ -24,10 +24,15 @@ class VictimDetailCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 22,
                 backgroundColor: RC.redSoft,
-                child: Icon(Icons.person, color: RC.red, size: 24),
+                backgroundImage: c.victimAvatar != null
+                    ? MemoryImage(c.victimAvatar!)
+                    : null,
+                child: c.victimAvatar == null
+                    ? const Icon(Icons.person, color: RC.red, size: 24)
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -368,7 +373,7 @@ class _FieldSheetState extends State<_FieldSheet> {
   void _send(RescueProcessController c) {
     final text = _input.text.trim();
     if (text.isEmpty) return;
-    c.guiTinNhan(text);
+    c.guiTinNhan(c.currentDoctorId, text);
     _input.clear();
   }
 
@@ -377,7 +382,8 @@ class _FieldSheetState extends State<_FieldSheet> {
     final c = context.watch<RescueProcessController>();
     final mq = MediaQuery.of(context);
     // Thu chiều cao theo bàn phím để ô nhập tin nhắn không bị che.
-    final available = mq.size.height - mq.viewInsets.bottom - mq.padding.top - 8;
+    final available =
+        mq.size.height - mq.viewInsets.bottom - mq.padding.top - 8;
     final height = math.min(mq.size.height * 0.92, available);
 
     return Padding(
@@ -421,8 +427,14 @@ class _FieldSheetState extends State<_FieldSheet> {
                 labelColor: RC.red,
                 unselectedLabelColor: RC.muted,
                 indicatorColor: RC.red,
-                labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                tabs: [Tab(text: 'Hiện trường'), Tab(text: 'Tin nhắn')],
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+                tabs: [
+                  Tab(text: 'Hiện trường'),
+                  Tab(text: 'Tin nhắn'),
+                ],
               ),
               const Divider(height: 1, color: RC.line),
               Expanded(
@@ -621,8 +633,9 @@ class _FieldSheetState extends State<_FieldSheet> {
                     final file = m.fileDinhKemUrl;
 
                     return Align(
-                      alignment:
-                          mine ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: mine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: maxBubble),
                         child: Container(

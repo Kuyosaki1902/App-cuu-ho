@@ -32,8 +32,7 @@ class TienTrinhCuuHo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) =>
-          RescueProcessController(currentUserId, maYeuCauCuuHo, dayKey: dayKey),
+      create: (_) => RescueProcessController(currentUserId, maYeuCauCuuHo),
       child: _RescueView(
         currentUserId: currentUserId,
         maYeuCauCuuHo: maYeuCauCuuHo,

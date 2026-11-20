@@ -26,7 +26,12 @@ class VictimInfoCard extends StatelessWidget {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: style.soft,
-                child: Icon(Icons.person, color: style.color, size: 24),
+                backgroundImage: c.victimAvatar != null
+                    ? MemoryImage(c.victimAvatar!)
+                    : null,
+                child: c.victimAvatar == null
+                    ? const Icon(Icons.person, color: Colors.white, size: 24)
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(

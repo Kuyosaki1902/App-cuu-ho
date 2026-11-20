@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:cuhokhancap/NguoiCuuHo/Models/nguoidungmodel.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +16,22 @@ Uint8List? _decodeB64(String? s) => TrangChuController.bytesFromBase64(s);
 
 class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
   /// Bán kính quét người xung quanh (dùng chung cho controller, map, header).
-  static const double kNearbyRadiusMeters = 10.0;
+  /// GPS điện thoại thường sai 5-15 m ngoài trời, hơn nữa khi ở trong nhà, nên
+  /// 10 m nhỏ hơn sai số và sẽ bỏ sót người đứng ngay cạnh. Nên giữ >= 25 m.
+  static const double kNearbyRadiusMeters = 30.0;
+
+  /// Sai số GPS (trung bình hai bên) được cộng thêm vào bán kính, tối đa mức này.
+  static const double kMaxAccuracySlackMeters = 20.0;
+
+  /// Bỏ qua fix GPS có sai số lớn hơn mức này khi đã có vị trí tốt hơn.
+  static const double kMaxUsableAccuracyMeters = 50.0;
+
+  /// Đã ở trong vùng "gần" thì chỉ bị loại khi vượt bán kính nhân hệ số này,
+  /// để người đứng sát mép không nhấp nháy vào/ra.
+  static const double kNearbyExitFactor = 1.3;
+
+  /// Bỏ qua người dùng có vị trí quá cũ (nếu có trường capNhatLuc).
+  static const Duration kMaxLocationAge = Duration(minutes: 3);
   GoogleMapController? mapController;
   StreamSubscription<Position>? _positionStreamSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
@@ -243,7 +258,7 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     if (_userID.isEmpty) return;
     try {
       await _firestore.collection('NguoiDung').doc(_userID).set({
-        'nhanCaCuuHo': onDuty,
+        'nhanCaCuuHo': !onDuty,
         'isOnline': onDuty,
       }, SetOptions(merge: true));
     } catch (e) {
@@ -382,10 +397,7 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     _positionStreamSubscription?.cancel();
     _positionStreamSubscription =
         Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 3,
-          ),
+          locationSettings: _streamSettings(),
         ).listen(
           (Position p) => _updateLocationOnMap(
             LatLng(p.latitude, p.longitude),
@@ -393,6 +405,50 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
           ),
           onError: (e) => debugPrint('Lỗi stream GPS: $e'),
         );
+  }
+
+  LocationSettings _streamSettings() {
+    // Cập nhật dày để bộ lọc có đủ mẫu; việc ghi Firestore vẫn bị throttle.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 1,
+        intervalDuration: const Duration(seconds: 2),
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 1,
+    );
+  }
+
+  // Bộ lọc Kalman 1 chiều: làm mượt vị trí, fix có sai số nhỏ được tin hơn.
+  LatLng? _filtered;
+  double _variance = 0;
+  DateTime? _filteredAt;
+  static const double _processNoiseMps = 3.0; // người đi bộ/xe chậm
+
+  LatLng _smooth(LatLng raw, double accuracy) {
+    final now = DateTime.now();
+    final prev = _filtered;
+    final last = _filteredAt;
+    if (prev == null ||
+        last == null ||
+        now.difference(last) > const Duration(seconds: 15)) {
+      _filtered = raw;
+      _variance = accuracy * accuracy;
+    } else {
+      final dt = now.difference(last).inMilliseconds / 1000.0;
+      _variance += dt * _processNoiseMps * _processNoiseMps;
+      final k = _variance / (_variance + accuracy * accuracy);
+      _filtered = LatLng(
+        prev.latitude + k * (raw.latitude - prev.latitude),
+        prev.longitude + k * (raw.longitude - prev.longitude),
+      );
+      _variance = (1 - k) * _variance;
+    }
+    _filteredAt = now;
+    return _filtered!;
   }
 
   // Throttle ghi vị trí lên Firestore
@@ -420,8 +476,8 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
       await _firestore.collection('NguoiDung').doc(_userID).set({
         'viDo': pos.latitude,
         'kinhDo': pos.longitude,
+        'doChinhXac': _gpsAccuracy,
         'isOnline': true,
-        'capNhatLuc': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Lỗi cập nhật vị trí CHV lên Firestore: $e');
@@ -432,8 +488,18 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _updateLocationOnMap(LatLng newPos, {double? accuracy}) async {
     if (_isDisposed) return;
+    if (accuracy != null) {
+      final recent =
+          _filteredAt != null &&
+          DateTime.now().difference(_filteredAt!) < const Duration(seconds: 20);
+      // Fix quá nhiễu trong khi đã có vị trí tốt hơn: bỏ qua.
+      if (accuracy > kMaxUsableAccuracyMeters && _filtered != null && recent) {
+        return;
+      }
+      newPos = _smooth(newPos, math.max(accuracy, 1.0));
+      _gpsAccuracy = math.sqrt(_variance);
+    }
     _currentPosition = newPos;
-    if (accuracy != null) _gpsAccuracy = accuracy;
     _isLoadingLocation = false;
     notifyListeners();
 
@@ -572,29 +638,31 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<String?> getAvatarBase64(String maNguoiDung) async {
     try {
-      final phanLoaiSnap = await _firestore
-          .collection('PhanLoaiAnh')
-          .where('tenPhanLoaiAnh', isEqualTo: 'Ảnh đại diện')
-          .limit(1)
-          .get();
-      if (phanLoaiSnap.docs.isEmpty) return null;
-
-      final maPhanLoaiAvatar = phanLoaiSnap.docs.first.id;
       final luuAnhSnap = await _firestore
           .collection('LuuAnh')
           .where('maNguoiDung', isEqualTo: maNguoiDung)
-          .where('maPhanLoaiAnh', isEqualTo: maPhanLoaiAvatar)
-          .limit(1)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
           .get();
 
-      if (luuAnhSnap.docs.isNotEmpty) {
-        final data = luuAnhSnap.docs.first.data();
-        return data['base64Image'] ?? data['duongDanAnh'] ?? data['duLieuAnh'];
-      }
+      if (luuAnhSnap.docs.isEmpty) return null;
+
+      // Sắp xếp phía client theo capNhatLuc giảm dần để lấy ảnh mới nhất (tránh lỗi thiếu Composite Index)
+      final docs = luuAnhSnap.docs.toList();
+      docs.sort((a, b) {
+        final tA = a.data()['capNhatLuc'];
+        final tB = b.data()['capNhatLuc'];
+        final msA = tA is Timestamp ? tA.millisecondsSinceEpoch : 0;
+        final msB = tB is Timestamp ? tB.millisecondsSinceEpoch : 0;
+        return msB.compareTo(msA);
+      });
+
+      final data = docs.first.data();
+      return (data['base64Image'] ?? data['duongDanAnh'] ?? data['duLieuAnh'])
+          ?.toString();
     } catch (e) {
       debugPrint('Lỗi lấy ảnh đại diện Base64: $e');
+      return null;
     }
-    return null;
   }
 
   static Uint8List? bytesFromBase64(String? base64String) {
@@ -660,6 +728,7 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
   // QUÉT NGƯỜI XUNG QUANH
   // ---------------------------------------------------------------------------
   int _nearbySeq = 0;
+  final Set<String> _nearbyIds = {};
   List<QueryDocumentSnapshot<Map<String, dynamic>>> _onlineDocs = [];
   final Map<String, List<Map<String, dynamic>>> _relativesCache = {};
 
@@ -703,7 +772,18 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
         userLat,
         userLng,
       );
-      if (dist > kNearbyRadiusMeters) continue;
+
+      // Cộng sai số GPS hai bên vào ngưỡng; chưa biết sai số bên kia thì giả
+      // định 15 m. Đang ở trong vùng thì dùng ngưỡng thoát rộng hơn.
+      final theirAcc = (data['doChinhXac'] as num?)?.toDouble();
+      final slack = math.min(
+        ((_gpsAccuracy ?? 15.0) + (theirAcc ?? 15.0)) / 2,
+        kMaxAccuracySlackMeters,
+      );
+      final limit =
+          (kNearbyRadiusMeters + slack) *
+          (_nearbyIds.contains(doc.id) ? kNearbyExitFactor : 1.0);
+      if (dist > limit) continue;
 
       // Cache người thân: tránh N+1 query mỗi lần snapshot / mỗi lần di chuyển
       List<Map<String, dynamic>>? relatives = _relativesCache[doc.id];
@@ -727,6 +807,9 @@ class TrangChuController extends ChangeNotifier with WidgetsBindingObserver {
     // Đã có lần tính mới hơn -> bỏ kết quả cũ (tránh ghi đè sai thứ tự)
     if (seq != _nearbySeq || _isDisposed) return;
     _nearbyUsers = temp;
+    _nearbyIds
+      ..clear()
+      ..addAll(temp.map((e) => e['userId'].toString()));
     notifyListeners();
   }
 

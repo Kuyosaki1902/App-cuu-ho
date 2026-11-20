@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dart_geohash/dart_geohash.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,6 +12,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+Uint8List? _decodeB64(String? s) => EmergencyAlertController.bytesFromBase64(s);
 
 /// Giai đoạn của lời mời nhận ca. UI chỉ cần lắng nghe giá trị này để điều hướng.
 enum AlertPhase {
@@ -51,7 +52,10 @@ class AlertStatus {
 
 class EmergencyAlertController extends ChangeNotifier {
   static const int totalSeconds = 180;
+  Uint8List? _avatarBytes;
+  Uint8List? get avatarBytes => _avatarBytes;
 
+  Uint8List? get victimAvatar => _victimAvatar;
   // Tốc độ trung bình ước tính trong đô thị (km/h). OSRM demo công cộng chỉ
   // có dữ liệu ô tô và bỏ qua profile xe, nên thời gian được ước tính từ quãng đường.
   static const double _motoKmH = 30;
@@ -108,7 +112,9 @@ class EmergencyAlertController extends ChangeNotifier {
   String address = 'Đang tải địa chỉ...';
   String victimName = 'Đang tải...';
   String victimPhone = '';
+  String victimID = '';
   Map<String, dynamic>? _victimProfile;
+  Uint8List? _victimAvatar;
   bool _victimProfileLoaded = false;
   LatLng? _geocodedFor;
   Future<void> _applyChain = Future.value();
@@ -160,7 +166,7 @@ class EmergencyAlertController extends ChangeNotifier {
   }
 
   Future<void> _run() async {
-    await _fetchDoctorInfo();
+    await _fetchDoctorInfo().then((_) => _loadAvatar());
     if (_disposed) return;
     _assignmentSub?.cancel();
     _assignmentSub = _firestore
@@ -207,6 +213,16 @@ class EmergencyAlertController extends ChangeNotifier {
 
   void _onAssignmentSnapshot(QuerySnapshot<Map<String, dynamic>> snap) {
     if (_disposed) return;
+    // --- THÊM ĐOẠN NÀY ĐỂ DEBUG ---
+    debugPrint('🔔 [DEBUG SNAPSHOT] Đã nhận thay đổi từ Firestore!');
+    for (var change in snap.docChanges) {
+      debugPrint(' - Document ID: ${change.doc.id}');
+      debugPrint(
+        ' - Loại thay đổi (type): ${change.type}',
+      ); // added, modified, removed
+      debugPrint(' - Dữ liệu mới: ${change.doc.data()}');
+    }
+    // ----------------------------
     final doc = _pick(snap.docs);
 
     if (!_processed) {
@@ -260,8 +276,6 @@ class EmergencyAlertController extends ChangeNotifier {
       if (data == null) return;
       doctorName = (data['hoTen'] ?? 'Cứu hộ viên').toString();
       doctorRoleId = (data['maVaiTro'] ?? '').toString();
-      doctorAvatarUrl = (data['anhDaiDien'] ?? data['avatar'])?.toString();
-
       // Chỉ dùng vị trí trong hồ sơ khi chưa có GPS, và đánh dấu là gần đúng.
       if (!hasGpsFix && myLocation.latitude == 0.0) {
         final loc = _parseLocation(data);
@@ -312,7 +326,7 @@ class EmergencyAlertController extends ChangeNotifier {
             AlertStatus.tuChoi,
             AlertPhase.expired,
             reason: 'Hết thời gian phản hồi',
-            statField: 'soLuongDaKhongNhan',
+            statField: 'soLuongCaKhongNhan',
           ),
         );
       } else if (left % 2 == 0) {
@@ -379,7 +393,7 @@ class EmergencyAlertController extends ChangeNotifier {
     AlertStatus.tuChoi,
     AlertPhase.rejected,
     reason: reason,
-    statField: 'soLuongDaKhongNhan',
+    statField: 'soLuongCaKhongNhan',
   );
 
   /// Người báo tin hủy: không tính là lỗi của cứu hộ viên nên không cộng "không nhận".
@@ -494,6 +508,10 @@ class EmergencyAlertController extends ChangeNotifier {
       await _firestore.collection(target).doc(currentDoctorId).set({
         fieldName: FieldValue.increment(1),
       }, SetOptions(merge: true));
+      await _firestore.collection('ThanhTichCuuHo').doc(currentDoctorId).set({
+        fieldName: FieldValue.increment(1),
+        'capNhatLuc': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Lỗi cập nhật thống kê hồ sơ: $e');
     }
@@ -545,7 +563,8 @@ class EmergencyAlertController extends ChangeNotifier {
         final p = u.data();
         if (p != null) {
           _victimProfile = p;
-          victimName = (p['hoTen'] ?? 'Nạn nhân khẩn cấp').toString();
+          victimID = (p['maNguoiDung']).toString();
+          victimName = (p['hoTen']).toString();
           victimPhone = (p['soDienThoai'] ?? '').toString();
         }
       }
@@ -885,6 +904,61 @@ class EmergencyAlertController extends ChangeNotifier {
     if (isSoundOn) {
       isSoundOn = false;
       notifyListeners();
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // Hình ảnh
+  // ════════════════════════════════════════════════════════════════════
+  static Uint8List? bytesFromBase64(String? base64String) {
+    if (base64String == null || base64String.isEmpty) return null;
+    try {
+      final clean = base64String.contains(',')
+          ? base64String.split(',').last
+          : base64String;
+      return base64Decode(clean.trim());
+    } catch (e) {
+      debugPrint('Lỗi giải mã Base64: $e');
+      return null;
+    }
+  }
+
+  /// Tải avatar 1 lần, cache dạng bytes (không query lại mỗi lần build).
+  Future<void> _loadAvatar() async {
+    _avatarBytes = await compute(
+      _decodeB64,
+      await getAvatarBase64(currentDoctorId),
+    );
+    _victimAvatar = await compute(_decodeB64, await getAvatarBase64(victimID));
+    notifyListeners();
+  }
+
+  Future<String?> getAvatarBase64(String maNguoiDung) async {
+    try {
+      final luuAnhSnap = await _firestore
+          .collection('LuuAnh')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
+          .get();
+
+      if (luuAnhSnap.docs.isEmpty) return null;
+
+      // Sắp xếp phía client theo capNhatLuc giảm dần để lấy ảnh mới nhất (tránh lỗi thiếu Composite Index)
+      final docs = luuAnhSnap.docs.toList();
+      docs.sort((a, b) {
+        final tA = a.data()['capNhatLuc'];
+        final tB = b.data()['capNhatLuc'];
+        final msA = tA is Timestamp ? tA.millisecondsSinceEpoch : 0;
+        final msB = tB is Timestamp ? tB.millisecondsSinceEpoch : 0;
+        return msB.compareTo(msA);
+      });
+
+      final data = docs.first.data();
+      return (data['base64Image'] ?? data['duongDanAnh'] ?? data['duLieuAnh'])
+          ?.toString();
+    } catch (e) {
+      debugPrint('Lỗi lấy ảnh đại diện Base64: $e');
+      return null;
     }
   }
 

@@ -6,7 +6,6 @@ import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/controllers/thanh_tich
 import 'package:cuhokhancap/NguoiCuuHo/Models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Models/chitiettinnhanmodel.dart';
 import 'package:dart_geohash/dart_geohash.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -14,6 +13,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/widgets/thong_tin_cuu_ho.dart';
+import 'package:cuhokhancap/NguoiCuuHo/Features/XepHang/controllers/xep_hang_service.dart';
+
+Uint8List? _decodeB64(String? s) => RescueProcessController.bytesFromBase64(s);
 
 /// Trạng thái quyền / dịch vụ vị trí, để UI báo rõ cho cứu hộ viên.
 enum LocationStatus {
@@ -90,6 +93,13 @@ class RescueProcessController extends ChangeNotifier {
   static const int stepArrived = 1;
   static const int stepRescuing = 2;
   static const int stepCompleted = 3;
+
+  Uint8List? _currenUserAvatar;
+  Uint8List? _victimAvatar;
+  final Map<String, Uint8List?> _avatarCache = {};
+  final Map<String, Future<Uint8List?>> _avatarFutures = {};
+  Uint8List? get currenUserAvatar => _currenUserAvatar;
+  Uint8List? get victimAvatar => _victimAvatar;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String currentDoctorId;
@@ -171,7 +181,6 @@ class RescueProcessController extends ChangeNotifier {
   // ── Đội ngũ ────────────────────────────────────────────────────────
   List<Map<String, dynamic>> teamMembers = [];
   final Map<String, Map<String, dynamic>> _userCache = {};
-  List<String> _assignedIds = [];
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _requestSub;
   Future<void> _applyChain = Future.value();
 
@@ -203,7 +212,10 @@ class RescueProcessController extends ChangeNotifier {
   // Khởi tạo
   // ════════════════════════════════════════════════════════════════════
   Future<void> _init() async {
-    await Future.wait([_fetchDoctorInfo(), _restoreProgress()]);
+    await Future.wait([
+      _fetchDoctorInfo().then((_) => _loadAvatar()),
+      _restoreProgress(),
+    ]);
     if (_disposed) return;
     // Ca đã hoàn thành (mở lại sau khi tắt app) thì không cần theo dõi GPS.
     if (currentStep < stepCompleted) unawaited(_startLocationTracking());
@@ -215,7 +227,7 @@ class RescueProcessController extends ChangeNotifier {
     }
     _listenRequest();
     unawaited(_fetchChiTietMoTaHienTruong());
-    _listenToTinNhan();
+    _listenToTinNhan(currentDoctorId);
   }
 
   Future<void> _fetchDoctorInfo() async {
@@ -633,6 +645,7 @@ class RescueProcessController extends ChangeNotifier {
             victimName = (p['hoTen'] ?? 'Nạn nhân').toString();
             victimPhone = (p['soDienThoai'] ?? '').toString();
           }
+          unawaited(_loadVictimAvatar(uid)); // <-- Tải avatar nạn nhân tại đây
         }
       }
 
@@ -678,6 +691,20 @@ class RescueProcessController extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadAvatar() async {
+    _currenUserAvatar = await compute(
+      _decodeB64,
+      await getAvatarBase64(currentDoctorId),
+    );
+    notifyListeners();
+  }
+
+  Future<void> _loadVictimAvatar(String uid) async {
+    if (uid.isEmpty) return;
+    _victimAvatar = await compute(_decodeB64, await getAvatarBase64(uid));
+    notifyListeners();
+  }
+
   String _roleLabelOf(dynamic maVaiTro) {
     switch (maVaiTro?.toString()) {
       case 'vaitro_cuuhococc':
@@ -711,7 +738,6 @@ class RescueProcessController extends ChangeNotifier {
     final map = raw is Map
         ? Map<String, dynamic>.from(raw)
         : <String, dynamic>{};
-    _assignedIds = map.keys.toList();
 
     final list = <Map<String, dynamic>>[];
     for (final id in map.keys) {
@@ -789,12 +815,68 @@ class RescueProcessController extends ChangeNotifier {
   // ════════════════════════════════════════════════════════════════════
   // Chat
   // ════════════════════════════════════════════════════════════════════
-  void _listenToTinNhan() {
+  // void _listenToTinNhan() {
+  //   _tinNhanSub?.cancel();
+  //   _tinNhanSub = _firestore
+  //       .collection('ChiTietTinNhan')
+  //       .where('maPhongChat', isEqualTo: maYeuCau)
+  //       .orderBy('thoiGianGui', descending: true)
+  //       .snapshots()
+  //       .listen(
+  //         (snapshot) {
+  //           chatError = false;
+  //           danhSachTinNhan = snapshot.docs
+  //               .map((d) => ChiTietTinNhanModel.fromMap(d.data(), d.id))
+  //               .toList();
+  //           notifyListeners();
+  //         },
+  //         onError: (Object e) {
+  //           // Thường do thiếu composite index (maPhongChat + thoiGianGui):
+  //           // Firebase in kèm đường dẫn tạo index trong log.
+  //           debugPrint('Lỗi stream tin nhắn: $e');
+  //           chatError = true;
+  //           notifyListeners();
+  //         },
+  //       );
+  // }
+
+  // Future<void> guiTinNhan(String noiDung) async {
+  //   if (noiDung.trim().isEmpty) return;
+  //   try {
+  //     final msg = ChiTietTinNhanModel(
+  //       maTinNhan: '',
+  //       maPhongChat: maYeuCau,
+  //       maNguoiGui: currentDoctorId,
+  //       noiDung: noiDung.trim(),
+  //       loaiTinNhan: 'text',
+  //       thoiGianGui: DateTime.now(),
+  //     );
+  //     unawaited(
+  //       _firestore
+  //           .collection('ChiTietTinNhan')
+  //           .add(msg.toMap())
+  //           .then((_) {})
+  //           .catchError((Object e) => debugPrint('Lỗi gửi tin nhắn: $e')),
+  //     );
+  //   } catch (e) {
+  //     debugPrint('Lỗi gửi tin nhắn: $e');
+  //   }
+  // }
+  // Tạo getter để tái sử dụng đường dẫn chuẩn
+  CollectionReference<Map<String, dynamic>> _tinNhanRef(String targetUserId) {
+    return _firestore
+        .collection('PhongChatCuuHo')
+        .doc(maYeuCau)
+        .collection('DanhSachTinNhan');
+  }
+
+  void _listenToTinNhan(String targetUserId) {
     _tinNhanSub?.cancel();
-    _tinNhanSub = _firestore
-        .collection('ChiTietTinNhan')
-        .where('maPhongChat', isEqualTo: maYeuCau)
-        .orderBy('thoiGianGui', descending: true)
+    _tinNhanSub = _tinNhanRef(targetUserId)
+        .orderBy(
+          'thoiGianGui',
+          descending: true,
+        ) // Không cần .where('maPhongChat') nữa vì đã nằm trong doc(maYeuCau) rồi
         .snapshots()
         .listen(
           (snapshot) {
@@ -805,8 +887,6 @@ class RescueProcessController extends ChangeNotifier {
             notifyListeners();
           },
           onError: (Object e) {
-            // Thường do thiếu composite index (maPhongChat + thoiGianGui):
-            // Firebase in kèm đường dẫn tạo index trong log.
             debugPrint('Lỗi stream tin nhắn: $e');
             chatError = true;
             notifyListeners();
@@ -814,7 +894,7 @@ class RescueProcessController extends ChangeNotifier {
         );
   }
 
-  Future<void> guiTinNhan(String noiDung) async {
+  Future<void> guiTinNhan(String targetUserId, String noiDung) async {
     if (noiDung.trim().isEmpty) return;
     try {
       final msg = ChiTietTinNhanModel(
@@ -826,10 +906,9 @@ class RescueProcessController extends ChangeNotifier {
         thoiGianGui: DateTime.now(),
       );
       unawaited(
-        _firestore
-            .collection('ChiTietTinNhan')
+        _tinNhanRef(targetUserId)
             .add(msg.toMap())
-            .then((_) {})
+            // ignore: invalid_return_type_for_catch_error
             .catchError((Object e) => debugPrint('Lỗi gửi tin nhắn: $e')),
       );
     } catch (e) {
@@ -943,27 +1022,34 @@ class RescueProcessController extends ChangeNotifier {
       alreadyDone = data?['maTrangThaiTiepNhan'] == RescueStatus.hoanThanh;
     } catch (_) {}
 
-    // Phát các lệnh ghi cùng lúc: Firestore xếp hàng offline theo thứ tự.
-    await Future.wait([
-      _safe(
-        'status',
-        () => _writeStatus(RescueStatus.hoanThanh, {
-          'currentStep': stepCompleted,
-          'thoiGianHoanThanh': Timestamp.fromDate(now),
-          'thoiGianCanThiepGiay': rescueElapsedSeconds,
-          'tongThoiGianCaGiay': totalCaSeconds,
-          'baoCaoXuTri': r.toMap(),
-        }),
-      ),
-      if (!alreadyDone) ...[
-        _safe('stats', () => _capNhatThongKeHoSo('soLuongCaHoanThanh')),
+    // 1. Ghi trạng thái hoàn thành trước để đảm bảo document phân công đã tồn tại
+    await _safe(
+      'status',
+      () => _writeStatus(RescueStatus.hoanThanh, {
+        'currentStep': stepCompleted,
+        'thoiGianHoanThanh': Timestamp.fromDate(now),
+        'thoiGianCanThiepGiay': rescueElapsedSeconds,
+        'tongThoiGianCaGiay': totalCaSeconds,
+        'baoCaoXuTri': r.toMap(),
+      }),
+    );
 
-        // THÊM ĐOẠN CODE NÀY VÀO ĐÂY:
-        _safe('thanh_tich', () async {
-          final thanhTichService = ThanhTichService(firestore: _firestore);
-          await thanhTichService.ghiNhanCaHoanThanh(currentDoctorId, maYeuCau);
+    // 2. Cập nhật thống kê -> đồng bộ Thành tích -> ghi Xếp hạng tuần/tháng (TUẦN TỰ)
+    await Future.wait([
+      if (!alreadyDone)
+        _safe('stats_and_rank', () async {
+          await _capNhatThongKeHoSo('soLuongCaHoanThanh');
+          await ThanhTichService(
+            firestore: _firestore,
+          ).dongBoTuHoSo(currentDoctorId);
+          await XepHangService(firestore: _firestore).ghiNhanCaHoanThanh(
+            phanCongRef: _assignmentRef,
+            uid: currentDoctorId,
+            tenHienThi: rutGonTen(doctorName),
+            loaiHoSo: loaiHoSoTuVaiTro(doctorRoleId),
+            luc: now,
+          );
         }),
-      ],
       _safe('record', () => _saveRescueRecord(r, now)),
       _safe('release', releaseRescueDuty),
     ]);
@@ -993,8 +1079,12 @@ class RescueProcessController extends ChangeNotifier {
           }),
         ),
         if (!alreadyCancelled)
-          _safe('stats', () => _capNhatThongKeHoSo('soLuongDaKhongNhan')),
-        _safe('release', releaseRescueDuty),
+          _safe('stats', () async {
+            await _capNhatThongKeHoSo('soLuongCaKhongNhan');
+            await ThanhTichService(
+              firestore: _firestore,
+            ).dongBoTuHoSo(currentDoctorId);
+          }),
       ]);
     }
 
@@ -1033,12 +1123,13 @@ class RescueProcessController extends ChangeNotifier {
     String target = '';
     if (role == 'vaitro_cuuhococc') {
       target = 'HoSoCuuHoCoCCHN';
-    } else if (role == 'vaitro_cuhochuacocc' ||
-        role == 'vaitro_cuhokhongcocc') {
+    } else if (role == 'vaitro_cuuhochuacocc' ||
+        role == 'vaitro_cuuhokhongcocc') {
       target = 'HoSoCuuHoKhongCCHN';
     }
     if (target.isEmpty) return;
 
+    // Chỉ cập nhật vào bảng hồ sơ gốc; ThanhTichCuuHo sẽ được dongBoTuHoSo() làm mới ngay sau đó.
     await _firestore.collection(target).doc(currentDoctorId).set({
       fieldName: FieldValue.increment(1),
     }, SetOptions(merge: true));
@@ -1138,6 +1229,64 @@ class RescueProcessController extends ChangeNotifier {
     final parts = doctorName.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.last.isEmpty) return 'CH';
     return parts.last.substring(0, 1).toUpperCase();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // Hình ảnh
+  // ════════════════════════════════════════════════════════════════════
+  static Uint8List? bytesFromBase64(String? base64String) {
+    if (base64String == null || base64String.isEmpty) return null;
+    try {
+      final clean = base64String.contains(',')
+          ? base64String.split(',').last
+          : base64String;
+      return base64Decode(clean.trim());
+    } catch (e) {
+      debugPrint('Lỗi giải mã Base64: $e');
+      return null;
+    }
+  }
+
+  Future<Uint8List?> getMemberAvatarBytes(String userId) {
+    if (_avatarCache.containsKey(userId)) {
+      return Future.value(_avatarCache[userId]);
+    }
+    return _avatarFutures[userId] ??= () async {
+      final b64 = await getAvatarBase64(userId);
+      final bytes = bytesFromBase64(b64);
+      _avatarCache[userId] = bytes;
+      return bytes;
+    }();
+  }
+
+  Future<String?> getAvatarBase64(String maNguoiDung) async {
+    if (maNguoiDung.isEmpty) return null;
+    try {
+      final luuAnhSnap = await _firestore
+          .collection('LuuAnh')
+          .where('maNguoiDung', isEqualTo: maNguoiDung)
+          .where('maPhanLoaiAnh', isEqualTo: 'anh_dai_dien')
+          .get();
+
+      if (luuAnhSnap.docs.isEmpty) return null;
+
+      // Sắp xếp phía client theo capNhatLuc giảm dần để lấy ảnh mới nhất (tránh lỗi thiếu Composite Index)
+      final docs = luuAnhSnap.docs.toList();
+      docs.sort((a, b) {
+        final tA = a.data()['capNhatLuc'];
+        final tB = b.data()['capNhatLuc'];
+        final msA = tA is Timestamp ? tA.millisecondsSinceEpoch : 0;
+        final msB = tB is Timestamp ? tB.millisecondsSinceEpoch : 0;
+        return msB.compareTo(msA);
+      });
+
+      final data = docs.first.data();
+      return (data['base64Image'] ?? data['duongDanAnh'] ?? data['duLieuAnh'])
+          ?.toString();
+    } catch (e) {
+      debugPrint('Lỗi lấy ảnh đại diện Base64: $e');
+      return null;
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════

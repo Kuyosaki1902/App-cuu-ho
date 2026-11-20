@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/chinh_sua_thong_tin.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // THÊM THƯ VIỆN NÀY
@@ -9,8 +11,12 @@ import 'package:cuhokhancap/BackgroundService/background_service.dart';
 
 class ThongTinTaiKhoan extends StatefulWidget {
   final NguoiDungModel nguoiDung;
-
-  const ThongTinTaiKhoan({super.key, required this.nguoiDung});
+  final Uint8List? avatarBytes;
+  const ThongTinTaiKhoan({
+    super.key,
+    required this.nguoiDung,
+    required this.avatarBytes,
+  });
 
   @override
   State<ThongTinTaiKhoan> createState() => _ThongTinTaiKhoanState();
@@ -63,7 +69,7 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                 children: [
                   _buildHeader(context, userRealTime),
                   const SizedBox(height: 16),
-                  _buildProfileCard(userRealTime),
+                  _buildProfileCard(userRealTime, widget.avatarBytes),
                   const SizedBox(height: 24),
                   _buildSectionTitle(
                     icon: Icons.location_on_outlined,
@@ -189,7 +195,10 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
     );
   }
 
-  Widget _buildProfileCard(NguoiDungModel userRealTime) {
+  Widget _buildProfileCard(
+    NguoiDungModel userRealTime,
+    Uint8List? avatarBytes,
+  ) {
     String tenHienThi = userRealTime.hoTen.isNotEmpty
         ? userRealTime.hoTen
         : "Người dùng";
@@ -211,14 +220,16 @@ class _ThongTinTaiKhoanState extends State<ThongTinTaiKhoan> {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: const Color(0xFF00695C),
-                    child: Text(
-                      avatarInitials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
-                      ),
-                    ),
+                    backgroundImage: avatarBytes != null
+                        ? MemoryImage(avatarBytes!)
+                        : null,
+                    child: avatarBytes == null
+                        ? const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 24,
+                          )
+                        : null,
                   ),
                   Container(
                     padding: const EdgeInsets.all(4),

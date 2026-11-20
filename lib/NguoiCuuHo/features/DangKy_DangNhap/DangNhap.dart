@@ -291,33 +291,19 @@ class _DangNhapState extends State<DangNhap> {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
-                    Icons.emergency,
+                    Icons.emergency_share_rounded,
                     color: Color(0xFFB71C1C),
                     size: 40,
                   ),
-                ),
-                const CircleAvatar(
-                  radius: 10,
-                  backgroundColor: Color(0xFF1565C0),
-                  child: Icon(Icons.check, color: Colors.white, size: 14),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
           const Text(
-            'CỨU HỘ KHẨN CẤP',
+            'CHUYÊN VIÊN CỨU HỘ\nSƠ CỨU KHẦN CẤP',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const Text(
-            '(PARTNER)',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Colors.red,
-            ),
           ),
           const SizedBox(height: 8),
           const Text(

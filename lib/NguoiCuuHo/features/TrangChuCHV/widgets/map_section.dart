@@ -1,9 +1,12 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:cuhokhancap/NguoiCuuHo/Features/DangKy_DangNhap/controllers/anh_dai_dien_service.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/TrangChuCHV/controllers/trang_chu_controller.dart';
 import 'package:cuhokhancap/core/color/Color_CHV.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'dart:convert';
+import 'dart:typed_data';
 
 class MapSection extends StatefulWidget {
   final LatLng? currentPosition;
@@ -137,9 +140,18 @@ class _MapSectionState extends State<MapSection> {
     }
 
     final users = List<Map<String, dynamic>>.from(widget.nearbyUsers);
+    AnhDaiDienService avatar = AnhDaiDienService();
     for (final user in users) {
       final String userId = (user['userId'] ?? '').toString();
-      final Uint8List? avatarBytes = user['avatarBytes'];
+      final String? base64Str = await avatar.layAnhDaiDien(userId);
+
+      Uint8List? avatarBytes;
+      if (base64Str != null && base64Str.isNotEmpty) {
+        final cleanBase64 = base64Str.contains(',')
+            ? base64Str.split(',').last
+            : base64Str;
+        avatarBytes = base64Decode(cleanBase64);
+      }
 
       Color markerColor = Colors.white;
       String? relationBadge;
@@ -709,7 +721,7 @@ class _MapSectionState extends State<MapSection> {
           // Camera được controller điều khiển bằng animateCamera.
           initialCameraPosition: CameraPosition(
             target: widget.currentPosition!,
-            zoom: 24,
+            zoom: 19.9,
           ),
           onMapCreated: widget.onMapCreated,
           myLocationEnabled: false,

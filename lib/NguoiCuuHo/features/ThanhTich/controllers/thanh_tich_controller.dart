@@ -1,5 +1,5 @@
+import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/controllers/thanh_tich_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/services/thanh_tich_service.dart';
 import 'package:cuhokhancap/NguoiCuuHo/Features/ThanhTich/models/thanh_tich_model.dart';
 
 class ThanhTichController extends ChangeNotifier {
