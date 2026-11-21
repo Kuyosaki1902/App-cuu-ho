@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "998666199099",
+    "firebase_url": "https://cuuhokhancap-d5178-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "cuuhokhancap-d5178",
     "storage_bucket": "cuuhokhancap-d5178.firebasestorage.app"
   },
@@ -10,6 +11,25 @@
         "mobilesdk_app_id": "1:998666199099:android:9c28813ce90f1f66017c1e",
         "android_client_info": {
           "package_name": "com.example.cuhokhancap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALf3yCcrBfrZ0J7lwUOmjA38SNssmacq8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:998666199099:android:94ba167e3897fc55017c1e",
+        "android_client_info": {
+          "package_name": "com.example.cuhokhancap_cuuho"
         }
       },
       "oauth_client": [],
