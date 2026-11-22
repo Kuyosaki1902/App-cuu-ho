@@ -4,38 +4,49 @@ import 'package:flutter/material.dart';
 
 const Color primaryColor = Color(0xFF046450);
 
+// Bộ nhớ đệm: cùng một chuỗi avatar luôn trả về CÙNG một ImageProvider.
+// Trước đây mỗi lần vẽ lại tạo MemoryImage mới nên ảnh bị giải mã lại liên tục.
+final Map<String, ImageProvider?> _avatarCache = {};
+
 ImageProvider? decodeAvatarImage(String? rawAvatar) {
   if (rawAvatar == null || rawAvatar.trim().isEmpty) return null;
   final cleaned = rawAvatar.trim();
+
+  if (_avatarCache.containsKey(cleaned)) return _avatarCache[cleaned];
+
+  ImageProvider? provider;
   if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
-    return NetworkImage(cleaned);
+    provider = NetworkImage(cleaned);
+  } else {
+    try {
+      final base64Part = cleaned.contains(',')
+          ? cleaned.split(',').last.trim()
+          : cleaned;
+      provider = MemoryImage(base64Decode(base64Part));
+    } catch (_) {
+      provider = null;
+    }
   }
-  try {
-    final base64Part = cleaned.contains(',')
-        ? cleaned.split(',').last.trim()
-        : cleaned;
-    return MemoryImage(base64Decode(base64Part));
-  } catch (_) {
-    return null;
-  }
+
+  if (_avatarCache.length >= 50) _avatarCache.clear(); // giới hạn bộ nhớ
+  _avatarCache[cleaned] = provider;
+  return provider;
 }
 
+/// Thanh tiêu đề cho CHAT NHÓM (nạn nhân + tối đa 3 cứu hộ viên).
+/// Không còn avatar/khoảng cách/giờ đến của một người riêng lẻ.
 class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
-  final String targetName;
-  final String targetAvatar;
-  final String distanceText;
+  final String title;
+  final String subtitle;
 
   const ChatAppBar({
     super.key,
-    required this.targetName,
-    required this.targetAvatar,
-    this.distanceText = '-- km',
+    this.title = 'Nhóm cứu hộ',
+    this.subtitle = 'Nạn nhân và đội ngũ cứu hộ',
   });
 
   @override
   Widget build(BuildContext context) {
-    final avatarProvider = decodeAvatarImage(targetAvatar);
-
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -56,30 +67,10 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 8,
       title: Row(
         children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: primaryColor,
-                backgroundImage: avatarProvider,
-                child: avatarProvider == null
-                    ? const Icon(Icons.person, color: Colors.white)
-                    : null,
-              ),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-            ],
+          const CircleAvatar(
+            radius: 20,
+            backgroundColor: primaryColor,
+            child: Icon(Icons.groups_rounded, color: Colors.white),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -87,7 +78,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  targetName,
+                  title,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -96,26 +87,15 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Đang di chuyển (cách $distanceText)',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -343,7 +323,6 @@ class ChatMessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (isMe) const SizedBox(width: 40),
         ],
       ),
     );
@@ -381,8 +360,14 @@ class ChatBottomInput extends StatelessWidget {
                 ),
                 child: TextField(
                   controller: controller,
-                  maxLines: null,
+                  // maxLines: null (cũ) làm ô nhập thành nhiều dòng: phím Enter chỉ xuống
+                  // dòng và onSubmitted không bao giờ được gọi. Đặt keyboardType text
+                  // + giới hạn 4 dòng thì phím Gửi hoạt động.
+                  minLines: 1,
+                  maxLines: 4,
+                  keyboardType: TextInputType.text,
                   textInputAction: TextInputAction.send,
+                  onEditingComplete: () {}, // giữ bàn phím mở sau khi gửi
                   onSubmitted: (_) => onSend(),
                   decoration: InputDecoration(
                     hintText: 'Nhập tin nhắn cứu hộ...',

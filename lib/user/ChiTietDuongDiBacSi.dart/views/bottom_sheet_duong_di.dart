@@ -1,6 +1,7 @@
 // lib/user/ChiTietDuongDi/views/bottom_sheet_duong_di.dart
 import 'dart:convert';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
+import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/views/rescuer_overview_components.dart';
 import 'package:flutter/material.dart';
 import '../controllers/chi_tiet_duong_di_controller.dart';
 import 'package:cuhokhancap/user/ChatVoiBacSi/ChatVoiBacSi.dart';
@@ -35,14 +36,11 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
 
   void _handleDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0.0;
-    // Vuốt xuống -> thu gọn
     if (_dragDeltaY > 25 || velocity > 250) {
       if (!widget.isCollapsed) {
         widget.onCollapseChanged(true);
       }
-    }
-    // Vuốt lên -> mở rộng
-    else if (_dragDeltaY < -25 || velocity < -250) {
+    } else if (_dragDeltaY < -25 || velocity < -250) {
       if (widget.isCollapsed) {
         widget.onCollapseChanged(false);
       }
@@ -82,7 +80,6 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Thanh kéo: nhấn hoặc vuốt đều thu gọn / mở rộng
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => widget.onCollapseChanged(!isCollapsed),
@@ -179,7 +176,6 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
                 const SizedBox(height: 16),
               ],
 
-              // Thanh tiến trình (luôn hiện cả khi thu gọn lẫn mở rộng)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -341,7 +337,7 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatVoiBacSiScreen(
-                                maPhongChat: controller.maNguoiCuuHo,
+                                maPhongChat: controller.maYeuCau,
                                 maNguoiCuuHo: controller.maNguoiCuuHo,
                                 targetName: tenBacSi,
                                 targetAvatar:
@@ -377,7 +373,13 @@ class _ChiTietDuongDiBottomSheetState extends State<ChiTietDuongDiBottomSheet> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () {},
+                        onPressed: () {
+                          showEmergencyContactSheet(
+                            context,
+                            rescuerName: tenBacSi,
+                            rescuerPhone: controller.soDienThoai,
+                          );
+                        },
                         icon: const Icon(
                           Icons.phone,
                           color: Colors.white,

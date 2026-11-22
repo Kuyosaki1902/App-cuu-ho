@@ -14,6 +14,8 @@ import 'package:cuhokhancap/user/Models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/Models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/Models/yeucaucuuhomodel.dart';
+// Dùng hàm bỏ dấu tiếng Việt để so khớp chuyên ngành/kỹ năng không phụ thuộc dấu
+import 'package:cuhokhancap/user/Models/videohuongdanmodel.dart' show boDauTiengViet;
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
 
 class _ArrowClipper extends CustomClipper<Path> {
@@ -28,6 +30,18 @@ class _ArrowClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+class _RescuerScoreInfo {
+  final String chuyenNganh;
+  final List<String> skillIds;
+  _RescuerScoreInfo(this.chuyenNganh, this.skillIds);
+}
+
+class _Catalogs {
+  final Map<String, String> kyNang; // mã -> tên
+  final List<String> chuyenNganh;
+  _Catalogs(this.kyNang, this.chuyenNganh);
 }
 
 class TimKiemCuuHoController {
@@ -70,6 +84,10 @@ class TimKiemCuuHoController {
 
   Map<String, dynamic>? aiAnalysisResult;
 
+  // Cache để không đọc lại Firestore mỗi 3 giây cho cùng một cứu hộ viên
+  final Map<String, _RescuerScoreInfo> _scoreInfoCache = {};
+  _Catalogs? _catalogCache;
+
   String get formattedElapsedTime {
     int minutes = elapsedSeconds ~/ 60;
     int seconds = elapsedSeconds % 60;
@@ -81,29 +99,86 @@ class TimKiemCuuHoController {
 
   bool _hasNavigated = false;
   int get limitCans => yeuCauCuuHo?.soNguoiCanCuuHo ?? 3;
+  // ---------------------------------------------------------------------------
+  // Danh mục hợp lệ (kỹ năng + chuyên ngành) để Gemini CHỈ được chọn trong đó,
+  // nhờ vậy kết quả khớp chính xác với dữ liệu cứu hộ viên khi chấm điểm.
+  // ---------------------------------------------------------------------------
+  Future<_Catalogs> _loadCatalogs() async {
+    if (_catalogCache != null) return _catalogCache!;
+
+    final kyNang = <String, String>{};
+    final chuyenNganh = <String>{};
+
+    try {
+      final dm = await _firebaseService.getDanhMucKyNang();
+      for (final k in dm) {
+        final ma = k['ma'] ?? '';
+        if (ma.isNotEmpty) kyNang[ma] = k['ten'] ?? ma;
+      }
+    } catch (e) {
+      debugPrint('Không đọc được danh mục kỹ năng: $e');
+    }
+
+    try {
+      final snap = await _firebaseService.getHoSoCoCCHNSnapshot();
+      for (final d in snap.docs) {
+        final t = (d.data()['tenChuyenNganh'] ?? '').toString().trim();
+        if (t.isNotEmpty) chuyenNganh.add(t);
+      }
+    } catch (e) {
+      debugPrint('Không đọc được danh mục chuyên ngành: $e');
+    }
+
+    return _catalogCache = _Catalogs(kyNang, chuyenNganh.toList());
+  }
+
   void _runGeminiInBackground(String maYeuCau) async {
     try {
+      final moTa = chiTietMoTa;
+      if (moTa == null) return;
+
+      final catalogs = await _loadCatalogs();
+
       final anh = await _firebaseService
-          .getImagesByMoTaId(chiTietMoTa!.maYeuCau)
+          .getImagesByMoTaId(moTa.maYeuCau)
           .timeout(const Duration(seconds: 6));
       danhSachAnhBase64 = anh;
 
+      // Chạy nền nên có thể chờ lâu hơn; GeminiService tự giới hạn ~18s
       final result = await _geminiService
           .analyzeSceneAndSuggestSkills(
-            moTa: chiTietMoTa!,
-            danhSachAnhBase64: anh.take(2).toList(), // tối đa 2 ảnh
+            moTa: moTa,
+            danhSachAnhBase64: anh,
+            kyNangHopLe: catalogs.kyNang,
+            chuyenNganhHopLe: catalogs.chuyenNganh,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 25));
 
-      if (!_isOverdueHandled)
-        aiAnalysisResult = result; // các lần quét sau dùng luôn
+      if (_disposed || _isOverdueHandled) return;
+
+      // Gemini lỗi/không ra kết quả thì trả về danh sách rỗng -> KHÔNG được ghi đè
+      // kết quả cục bộ đã có. Mỗi danh sách rỗng sẽ giữ lại bản cục bộ.
+      final geminiCn = _asStringList(result['chuyenNganhYeuCau']);
+      final geminiKn = _asStringList(result['kyNangYeuCau']);
+      final local = aiAnalysisResult;
+      aiAnalysisResult = {
+        'trieuChung': result['trieuChung'] ?? local?['trieuChung'] ?? '',
+        'chuyenNganhYeuCau': geminiCn.isNotEmpty
+            ? geminiCn
+            : _asStringList(local?['chuyenNganhYeuCau']),
+        'kyNangYeuCau': geminiKn.isNotEmpty
+            ? geminiKn
+            : _asStringList(local?['kyNangYeuCau']),
+      };
     } catch (e) {
-      debugPrint('Gemini chậm/lỗi, dùng kết quả cục bộ: $e');
+      debugPrint('Gemini chậm/lỗi, giữ kết quả cục bộ: $e');
     }
   }
 
+  // Kết quả tạm tính ngay trên máy (không cần mạng). Trả về ĐÚNG mã kỹ năng
+  // trong CSDL (kn_cpr, kn_bang_bo, kn_co_dinh, kn_bong, kn_di_vat, kn_duoi_nuoc).
   Map<String, dynamic> _localAnalyze(String text) {
-    final t = text.toLowerCase();
+    final t = boDauTiengViet(text); // bỏ dấu: "chảy máu" và "chay mau" đều khớp
     final chuyenNganh = <String>{};
     final kyNang = <String>{};
 
@@ -119,26 +194,39 @@ class TimKiemCuuHoController {
     }
 
     match(
-      ['ngừng tim', 'ngưng tim', 'bất tỉnh', 'không thở'],
+      ['ngung tim', 'ngung tho', 'bat tinh', 'khong tho', 'ngat xiu'],
       cn: ['hồi sức', 'tim mạch'],
       kn: ['kn_cpr'],
     );
     match(
-      ['chảy máu', 'xuất huyết', 'vết thương'],
+      ['chay mau', 'xuat huyet', 'vet thuong', 'bi cat', 'bi dam'],
       cn: ['ngoại khoa'],
       kn: ['kn_bang_bo'],
     );
     match(
-      ['gãy', 'trật khớp', 'té ngã', 'tai nạn'],
+      ['gay xuong', 'gay chan', 'gay tay', 'trat khop', 'te nga', 'tai nan'],
       cn: ['chấn thương chỉnh hình', 'ngoại khoa'],
-      kn: ['cố định', 'kn_bang_bo'],
+      kn: ['kn_co_dinh', 'kn_bang_bo'],
     );
-    match(['đau ngực', 'đột quỵ', 'tim'], cn: ['tim mạch']);
-    match(['ngạt', 'sặc', 'khó thở'], cn: ['hồi sức'], kn: ['kn_cpr']);
+    match(['bi bong', 'bong lua', 'bong nuoc', 'bong hoa chat'], kn: ['kn_bong']);
+    match(
+      ['hoc di vat', 'nghen', 'sac nuoc', 'sac thuc an', 'mac xuong'],
+      cn: ['hồi sức'],
+      kn: ['kn_di_vat'],
+    );
+    match(
+      ['duoi nuoc', 'chet duoi', 'ngop nuoc'],
+      cn: ['hồi sức'],
+      kn: ['kn_duoi_nuoc', 'kn_cpr'],
+    );
+    match(
+      ['dau nguc', 'dot quy', 'nhoi mau co tim', 'dau tim', 'benh tim'],
+      cn: ['tim mạch'],
+    );
+    match(['kho tho', 'ngat tho'], cn: ['hồi sức']);
 
     return {
       'trieuChung': text,
-      'mucDoKhanCap': 3,
       'chuyenNganhYeuCau': chuyenNganh.toList(),
       'kyNangYeuCau': kyNang.toList(),
     };
@@ -485,7 +573,9 @@ class TimKiemCuuHoController {
       final now = _baseSeconds + _stopwatch.elapsed.inSeconds;
       if (now == elapsedSeconds) return;
       elapsedSeconds = now;
-      YeuCauStorageService.saveElapsedSeconds(maYeuCau, elapsedSeconds);
+      if (!_isOverdueHandled) {
+        YeuCauStorageService.saveElapsedSeconds(maYeuCau, elapsedSeconds);
+      }
 
       if (_setupDone && !_isOverdueHandled && !_tickBusy) {
         _tickBusy = true;
@@ -547,31 +637,61 @@ class TimKiemCuuHoController {
   Future<void> _handleOverdue(String maYeuCau) async {
     if (_isOverdueHandled) return;
     _isOverdueHandled = true;
-    _stopAllTimers();
+    // 🌟 KHÔNG dừng bộ đếm: đồng hồ vẫn chạy tiếp sau khi quá hạn.
+    // Ticker chỉ còn cập nhật giao diện; việc quét / phân công đã bị chặn bởi
+    // cờ _isOverdueHandled trong _startTicker.
+    debugPrint('⏳ Đã quá $_maxSeconds s, chuyển sang QUÁ HẠN (đồng hồ vẫn chạy)!');
 
-    await YeuCauStorageService.clearActiveRequest();
-    debugPrint('⏳ Đã quá $_maxSeconds s, chuyển sang QUÁ HẠN!');
+    // Mỗi bước độc lập: một bước lỗi không làm bỏ qua các bước còn lại
+    Future<void> safe(String label, Future<dynamic> Function() job) async {
+      try {
+        await job();
+      } catch (e) {
+        debugPrint('⚠️ _handleOverdue[$label]: $e');
+      }
+    }
 
-    // 🌟 Thu hồi luôn các lời mời đã phát mà chưa ai nhận
-    await _firebaseService.cancelRemainingAssignments(maYeuCau);
-    await _firebaseService.updateTinhTrangYeuCau(
-      maYeuCau,
-      'user_tinhtrang_quahandieuphoi',
+    // Quan trọng nhất: đổi trạng thái đơn trước
+    await safe(
+      'trangThai',
+      () => _firebaseService.updateTinhTrangYeuCau(
+        maYeuCau,
+        'user_tinhtrang_quahandieuphoi',
+      ),
     );
-    await _firebaseService.removeRequestFromRealtimeDB(maYeuCau);
+    yeuCauCuuHo = yeuCauCuuHo?.copyWith(
+      maTinhTrangYeuCau: 'user_tinhtrang_quahandieuphoi',
+    );
+
+    await safe('xoaGhiNhoMay', () => YeuCauStorageService.clearActiveRequest());
+
+    // Thu hồi các lời mời đã phát mà chưa ai nhận
+    await safe(
+      'thuHoiLoiMoi',
+      () => _firebaseService.cancelRemainingAssignments(maYeuCau),
+    );
+    await safe(
+      'realtimeDB',
+      () => _firebaseService.removeRequestFromRealtimeDB(maYeuCau),
+    );
 
     final maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
     if (maNanNhan != null) {
-      await _firebaseService.removeEmergencyNotification(maNanNhan: maNanNhan);
+      await safe(
+        'thongBaoNguoiThan',
+        () => _firebaseService.removeEmergencyNotification(maNanNhan: maNanNhan),
+      );
     }
-    for (var maCuuHo in assignedRescuerIds) {
-      try {
-        await _firebaseService.updateUserOnlineStatus(
+
+    for (final maCuuHo in assignedRescuerIds) {
+      await safe(
+        'moKhoa_$maCuuHo',
+        () => _firebaseService.updateUserOnlineStatus(
           userId: maCuuHo,
           isOnline: true,
           nhanCaCuuHo: false,
-        );
-      } catch (_) {}
+        ),
+      );
     }
   }
 
@@ -665,36 +785,57 @@ class TimKiemCuuHoController {
     onUpdate();
   }
 
+  List<String> _asStringList(dynamic v) =>
+      v is List ? v.map((e) => e.toString()).toList() : <String>[];
+
+  // Đọc chuyên ngành + kỹ năng của cứu hộ viên 1 lần rồi dùng lại (cache)
+  Future<_RescuerScoreInfo> _getRescuerInfo(String uid) async {
+    final cached = _scoreInfoCache[uid];
+    if (cached != null) return cached;
+
+    final hoSoF = _firebaseService.getHoSoCoCCHN(uid);
+    final skillsF = _firebaseService.getSkillIdsByUserId(uid);
+    final hoSo = await hoSoF;
+    final skills = await skillsF;
+
+    return _scoreInfoCache[uid] = _RescuerScoreInfo(
+      hoSo?.tenChuyenNganh ?? '',
+      skills,
+    );
+  }
+
   Future<double> _calculateAIScore(
     NguoiDungModel user,
     double distanceMeters,
   ) async {
     double score = 0.0;
-    List<String> reqChuyenNganh = List<String>.from(
-      aiAnalysisResult?['chuyenNganhYeuCau'] ?? [],
+    final reqChuyenNganh = _asStringList(
+      aiAnalysisResult?['chuyenNganhYeuCau'],
     );
-    List<String> reqKyNang = List<String>.from(
-      aiAnalysisResult?['kyNangYeuCau'] ?? [],
-    );
+    final reqKyNang = _asStringList(aiAnalysisResult?['kyNangYeuCau']);
 
-    final hoSoCoCCHN = await _firebaseService.getHoSoCoCCHN(user.maNguoiDung!);
-    if (hoSoCoCCHN != null) {
-      String cn = hoSoCoCCHN.tenChuyenNganh.toLowerCase();
-      for (var req in reqChuyenNganh) {
-        if (cn.contains(req.toLowerCase())) {
-          score += 8000.0;
-        }
+    final info = await _getRescuerInfo(user.maNguoiDung!);
+
+    // Chuyên ngành: so khớp không phân biệt dấu, hai chiều
+    final cn = boDauTiengViet(info.chuyenNganh).trim();
+    if (cn.isNotEmpty) {
+      for (final req in reqChuyenNganh) {
+        final r = boDauTiengViet(req).trim();
+        if (r.isEmpty) continue;
+        if (cn.contains(r) || r.contains(cn)) score += 8000.0;
       }
     }
 
-    List<String> userSkillIds = await _firebaseService.getSkillIdsByUserId(
-      user.maNguoiDung!,
-    );
-    for (var skId in userSkillIds) {
-      for (var req in reqKyNang) {
-        if (skId.toLowerCase().contains(req.toLowerCase()) ||
-            req.toLowerCase().contains(skId.toLowerCase())) {
+    // Kỹ năng: mỗi kỹ năng của cứu hộ viên chỉ được cộng 1 lần
+    for (final skId in info.skillIds) {
+      final s = boDauTiengViet(skId).trim();
+      if (s.isEmpty) continue;
+      for (final req in reqKyNang) {
+        final r = boDauTiengViet(req).trim();
+        if (r.isEmpty) continue;
+        if (s == r || s.contains(r) || r.contains(s)) {
           score += 5000.0;
+          break;
         }
       }
     }

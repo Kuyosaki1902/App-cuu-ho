@@ -1,10 +1,12 @@
-// lib/BangXepHangCuuHo/controllers/bang_xep_hang_controller.dart
-
+// lib/user/BangXepHangCuuHo/controllers/bang_xep_hang_controller.dart
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
-import 'package:cuhokhancap/user/models/hosocuuhococchnmodel.dart';
-import 'package:cuhokhancap/user/models/hosocuuhokhongcchnmodel.dart';
 
+// =============================================================================
+// MODEL HIỂN THỊ
+// =============================================================================
 class RescuerLeaderboardItemModel {
   final int rank;
   final NguoiDungModel user;
@@ -13,6 +15,10 @@ class RescuerLeaderboardItemModel {
   final String organization;
   final double rating;
   final int reviewsCount;
+  final String? avatarRaw;
+
+  /// Mã kỹ năng của cứu hộ viên (ChiTietKyNang/{uid}/DanhSachKyNang) - dùng để lọc
+  final List<String> skillIds;
 
   RescuerLeaderboardItemModel({
     required this.rank,
@@ -22,130 +28,352 @@ class RescuerLeaderboardItemModel {
     required this.organization,
     required this.rating,
     required this.reviewsCount,
+    this.avatarRaw,
+    this.skillIds = const [],
+  });
+
+  RescuerLeaderboardItemModel copyWithRank(int newRank) =>
+      RescuerLeaderboardItemModel(
+        rank: newRank,
+        user: user,
+        casesCount: casesCount,
+        specialty: specialty,
+        organization: organization,
+        rating: rating,
+        reviewsCount: reviewsCount,
+        avatarRaw: avatarRaw,
+        skillIds: skillIds,
+      );
+}
+
+class KyNangOption {
+  final String ma;
+  final String ten;
+  final String nhom; // key nhóm: kynangcoban / kynangtuhoc / ''
+  final String tenNhom;
+
+  const KyNangOption({
+    required this.ma,
+    required this.ten,
+    required this.nhom,
+    required this.tenNhom,
   });
 }
 
+/// Các lựa chọn của nút lọc: lấy từ toàn bộ hồ sơ / danh mục kỹ năng,
+/// KHÔNG phụ thuộc tab đang xem (tab ít người vẫn thấy đủ lựa chọn).
+class LeaderboardFilterOptions {
+  final List<String> specialties;
+  final List<KyNangOption> skills;
+
+  const LeaderboardFilterOptions({
+    required this.specialties,
+    required this.skills,
+  });
+}
+
+// Hồ sơ rút gọn, đọc thẳng từ Map nên không phụ thuộc phiên bản model hồ sơ
+class _HoSoTomTat {
+  final String uid;
+  final String loai; // cchn | khongcchn
+  final String specialty;
+  final String organization;
+  final double rating;
+  final int reviewsCount;
+  final int tongCaHoanThanh;
+
+  _HoSoTomTat({
+    required this.uid,
+    required this.loai,
+    required this.specialty,
+    required this.organization,
+    required this.rating,
+    required this.reviewsCount,
+    required this.tongCaHoanThanh,
+  });
+}
+
+class _DongXepHang {
+  final String uid;
+  final int soCa;
+  final String loaiHoSo;
+  _DongXepHang(this.uid, this.soCa, this.loaiHoSo);
+}
+
+// =============================================================================
+// CONTROLLER
+// =============================================================================
 class BangXepHangController {
   final FirebaseService _firebaseService = FirebaseService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  Future<List<RescuerLeaderboardItemModel>> fetchLeaderboard(
-    int selectedTab,
-  ) async {
-    // 0: Tuần này ('tuan'), 1: Tháng này ('thang'), 2: Tất cả ('tatCa')
-    String filterKey = 'tuan';
-    if (selectedTab == 1) {
-      filterKey = 'thang';
-    } else if (selectedTab == 2) {
-      filterKey = 'tatCa';
-    }
+  Map<String, _HoSoTomTat>? _profileCache;
 
-    // ⚡ 1. Đọc song song cả 2 collection Hồ sơ thông qua FirebaseService
-    final results = await Future.wait([
+  // Hồ sơ ở các trạng thái này chưa/không đủ điều kiện xuất hiện trên bảng xếp hạng
+  static const Set<String> _trangThaiKhongXepHang = {
+    'cuuho_trangthai_hoso_tiepnhan',
+    'cuuho_trangthai_hoso_dangthamdinh',
+    'cuuho_trangthai_hoso_canbosung',
+    'cuuho_trangthai_hoso_tuchoi',
+    'cuuho_trangthai_hoso_tamkhoa',
+    'CHO_DUYET',
+  };
+
+  // ---------------------------------------------------------------------------
+  // Tiện ích parse an toàn (soLuongCaHoanThanh có thể là int HOẶC Map {tuan,thang,tatCa})
+  // ---------------------------------------------------------------------------
+  static int _toInt(dynamic v) {
+    if (v is num) return v.toInt();
+    if (v is Map) return _toInt(v['tatCa']);
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
+  static double _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v) ?? 0.0;
+    return 0.0;
+  }
+
+  static String _uidOf(Map<String, dynamic> d, String docId) {
+    final f = (d['maNguoiDung'] ?? '').toString().trim();
+    return f.isNotEmpty ? f : docId;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Làm mới dữ liệu đệm
+  // ---------------------------------------------------------------------------
+  void refresh() {
+    _profileCache = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // HỒ SƠ: đọc 1 lần cả 2 collection, dùng cho mọi tab
+  // ---------------------------------------------------------------------------
+  Future<Map<String, _HoSoTomTat>> _loadProfiles() async {
+    if (_profileCache != null) return _profileCache!;
+
+    final snaps = await Future.wait([
       _firebaseService.getHoSoCoCCHNSnapshot(),
       _firebaseService.getHoSoKhongCCHNSnapshot(),
     ]);
 
-    List<Map<String, dynamic>> rawDataList = [];
-    Set<String> userIdsSet = {};
+    final map = <String, _HoSoTomTat>{};
 
-    // 2. Trích xuất thông tin hồ sơ có CCHN
-    for (var doc in results[0].docs) {
-      final data = doc.data();
-      final hoSo = HoSoCuuHoCoCCHNModel.fromMap(data, doc.id);
+    for (final doc in snaps[0].docs) {
+      final d = doc.data();
+      final status = (d['maTrangThaiHoSo'] ?? '').toString();
+      if (_trangThaiKhongXepHang.contains(status)) continue;
 
-      int cases = 0;
-      if (data['soLuongCaHoanThanh'] is Map) {
-        cases = (data['soLuongCaHoanThanh'][filterKey] as num?)?.toInt() ?? 0;
-      } else if (data['soLuongCaHoanThanh'] is num) {
-        cases = (data['soLuongCaHoanThanh'] as num).toInt();
-      }
+      final uid = _uidOf(d, doc.id);
+      final tenCN = (d['tenChuyenNganh'] ?? '').toString().trim();
+      final chucDanh = (d['chucDanh'] ?? '').toString().trim();
+      final donVi = (d['donViCongTac'] ?? '').toString().trim();
 
-      if (hoSo.maNguoiDung != null && hoSo.maNguoiDung!.isNotEmpty) {
-        userIdsSet.add(hoSo.maNguoiDung!);
-        rawDataList.add({
-          'userId': hoSo.maNguoiDung,
-          'cases': cases,
-          'specialty': hoSo.tenChuyenNganh.isNotEmpty
-              ? hoSo.tenChuyenNganh
-              : hoSo.chucDanh,
-          'organization': hoSo.donViCongTac.isNotEmpty
-              ? hoSo.donViCongTac
-              : 'Đội Cứu hộ Y tế',
-          'rating': hoSo.diemDanhGia,
-          'reviewsCount': hoSo.tongLuotDanhGia,
-        });
-      }
+      map[uid] = _HoSoTomTat(
+        uid: uid,
+        loai: 'cchn',
+        specialty: tenCN.isNotEmpty
+            ? tenCN
+            : (chucDanh.isNotEmpty ? chucDanh : 'Cứu hộ Y tế'),
+        organization: donVi.isNotEmpty ? donVi : 'Đội Cứu hộ Y tế',
+        rating: _toDouble(d['diemDanhGia']),
+        reviewsCount: _toInt(d['tongLuotDanhGia']),
+        tongCaHoanThanh: _toInt(d['soLuongCaHoanThanh']),
+      );
     }
 
-    // 3. Trích xuất thông tin hồ sơ KHÔNG CCHN
-    for (var doc in results[1].docs) {
-      final data = doc.data();
-      final hoSo = HoSoCuuHoKhongCCHNModel.fromMap(data, doc.id);
+    for (final doc in snaps[1].docs) {
+      final d = doc.data();
+      final status = (d['maTrangThaiHoSo'] ?? '').toString();
+      if (_trangThaiKhongXepHang.contains(status)) continue;
 
-      int cases = 0;
-      if (data['soLuongCaHoanThanh'] is Map) {
-        cases = (data['soLuongCaHoanThanh'][filterKey] as num?)?.toInt() ?? 0;
-      } else if (data['soLuongCaHoanThanh'] is num) {
-        cases = (data['soLuongCaHoanThanh'] as num).toInt();
-      }
+      final uid = _uidOf(d, doc.id);
+      if (map.containsKey(uid)) continue; // đã có hồ sơ CCHN thì ưu tiên CCHN
 
-      if (hoSo.maNguoiDung != null && hoSo.maNguoiDung!.isNotEmpty) {
-        userIdsSet.add(hoSo.maNguoiDung!);
-        rawDataList.add({
-          'userId': hoSo.maNguoiDung,
-          'cases': cases,
-          'specialty': 'Cứu hộ & Hỗ trợ cộng đồng',
-          'organization': hoSo.doiNhom ?? 'Tình nguyện viên Cứu hộ',
-          'rating': hoSo.diemDanhGia,
-          'reviewsCount': hoSo.tongLuotDanhGia,
-        });
-      }
+      final doiNhom = (d['doiNhom'] ?? '').toString().trim();
+      map[uid] = _HoSoTomTat(
+        uid: uid,
+        loai: 'khongcchn',
+        specialty: 'Cứu hộ & Hỗ trợ cộng đồng',
+        organization: doiNhom.isNotEmpty ? doiNhom : 'Tình nguyện viên Cứu hộ',
+        rating: _toDouble(d['diemDanhGia']),
+        reviewsCount: _toInt(d['tongLuotDanhGia']),
+        tongCaHoanThanh: _toInt(d['soLuongCaHoanThanh']),
+      );
     }
 
-    if (userIdsSet.isEmpty) return [];
+    _profileCache = map;
+    return map;
+  }
 
-    // ⚡ 4. Lấy NguoiDung thông qua FirebaseService
-    List<String> userIds = userIdsSet.toList();
-    List<NguoiDungModel> userList = await _firebaseService.getUsersByIds(
-      userIds,
-    );
+  // ---------------------------------------------------------------------------
+  // LỰA CHỌN CHO NÚT LỌC
+  // ---------------------------------------------------------------------------
+  Future<LeaderboardFilterOptions> loadFilterOptions() async {
+    final profiles = await _loadProfiles();
+    final specialties =
+        profiles.values
+            .map((p) => p.specialty)
+            .where((s) => s.trim().isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
 
-    Map<String, NguoiDungModel> userMap = {
-      for (var user in userList) user.maNguoiDung!: user,
-    };
+    List<KyNangOption> skills = [];
+    try {
+      final catalog = await _firebaseService.getDanhMucKyNang();
+      skills = catalog
+          .map(
+            (k) => KyNangOption(
+              ma: k['ma'] ?? '',
+              ten: k['ten'] ?? '',
+              nhom: k['nhom'] ?? '',
+              tenNhom: k['tenNhom'] ?? 'Khác',
+            ),
+          )
+          .where((k) => k.ma.isNotEmpty)
+          .toList();
+    } catch (_) {}
 
-    // 5. Ghép dữ liệu & Sắp xếp giảm dần theo số ca
-    List<RescuerLeaderboardItemModel> fullList = [];
-    for (var raw in rawDataList) {
-      final String uid = raw['userId'];
-      if (userMap.containsKey(uid)) {
-        fullList.add(
-          RescuerLeaderboardItemModel(
-            rank: 0,
-            user: userMap[uid]!,
-            casesCount: raw['cases'],
-            specialty: raw['specialty'],
-            organization: raw['organization'],
-            rating: raw['rating'],
-            reviewsCount: raw['reviewsCount'],
+    return LeaderboardFilterOptions(specialties: specialties, skills: skills);
+  }
+
+  /// Lọc: trong cùng nhóm là HOẶC (chọn 1 trong các mục), giữa 2 nhóm là VÀ.
+  static List<RescuerLeaderboardItemModel> applyFilters(
+    List<RescuerLeaderboardItemModel> list, {
+    required Set<String> specialties,
+    required Set<String> skills,
+  }) {
+    return list.where((item) {
+      if (specialties.isNotEmpty && !specialties.contains(item.specialty)) {
+        return false;
+      }
+      if (skills.isNotEmpty && !item.skillIds.any(skills.contains)) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // BẢNG XẾP HẠNG
+  // ---------------------------------------------------------------------------
+  /// selectedTab: 0 = tuần, 1 = tháng, 2 = tất cả
+  Future<List<RescuerLeaderboardItemModel>> fetchLeaderboard(
+    int selectedTab, {
+    DateTime? targetDate,
+  }) async {
+    final profiles = await _loadProfiles();
+    final rows = <_DongXepHang>[];
+
+    if (selectedTab == 2) {
+      // TẤT CẢ: số ca = tổng ca hoàn thành trong hồ sơ
+      for (final p in profiles.values) {
+        rows.add(_DongXepHang(p.uid, p.tongCaHoanThanh, p.loai));
+      }
+    } else {
+      final date = targetDate ?? DateTime.now();
+      final kyId = _firebaseService.taoMaKyXepHang(
+        date,
+        isThang: selectedTab == 1,
+      );
+      final thanhVien = await _firebaseService.layThanhVienXepHangKy(kyId);
+      final seen = <String>{};
+      for (final tv in thanhVien) {
+        final uid = (tv['maNguoiDung'] ?? '').toString().trim();
+        if (uid.isEmpty || !seen.add(uid)) continue;
+        rows.add(
+          _DongXepHang(
+            uid,
+            (tv['soCaHoanThanh'] as int?) ?? 0,
+            (tv['loaiHoSo'] ?? '').toString(),
           ),
         );
       }
     }
 
-    fullList.sort((a, b) => b.casesCount.compareTo(a.casesCount));
+    return _buildItems(rows, profiles);
+  }
 
-    return List.generate(fullList.length, (index) {
-      final item = fullList[index];
-      return RescuerLeaderboardItemModel(
-        rank: index + 1,
-        user: item.user,
-        casesCount: item.casesCount,
-        specialty: item.specialty,
-        organization: item.organization,
-        rating: item.rating,
-        reviewsCount: item.reviewsCount,
+  Future<List<RescuerLeaderboardItemModel>> _buildItems(
+    List<_DongXepHang> rows,
+    Map<String, _HoSoTomTat> profiles,
+  ) async {
+    if (rows.isEmpty) return [];
+
+    final userMap = await _loadUserMap(rows.map((r) => r.uid).toSet());
+
+    final built = await Future.wait(
+      rows.map((r) async {
+        final user = userMap[r.uid];
+        if (user == null) return null;
+
+        // chạy song song avatar + kỹ năng
+        final avatarF = _firebaseService.getUserAvatarUrl(r.uid);
+        final skillsF = _firebaseService.getSkillIdsByUserId(r.uid);
+        final avatar = await avatarF;
+        final skills = await skillsF;
+
+        final hs = profiles[r.uid];
+        return RescuerLeaderboardItemModel(
+          rank: 0,
+          user: user,
+          casesCount: r.soCa,
+          specialty: hs?.specialty ?? 'Cứu hộ & Hỗ trợ cộng đồng',
+          organization: hs?.organization ?? 'Đội ngũ cứu hộ',
+          rating: hs?.rating ?? 0.0,
+          reviewsCount: hs?.reviewsCount ?? 0,
+          avatarRaw: avatar,
+          skillIds: skills,
+        );
+      }),
+    );
+
+    final items = built.whereType<RescuerLeaderboardItemModel>().toList()
+      ..sort((a, b) => b.casesCount.compareTo(a.casesCount));
+
+    return List.generate(items.length, (i) => items[i].copyWithRank(i + 1));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Nạp thông tin người dùng (doc id hoặc trường maNguoiDung đều khớp được)
+  // ---------------------------------------------------------------------------
+  Future<Map<String, NguoiDungModel>> _loadUserMap(Set<String> userIds) async {
+    final Map<String, NguoiDungModel> userMap = {};
+    final List<String> idList = userIds.toList();
+
+    void addDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+      final data = Map<String, dynamic>.from(doc.data());
+      final String fieldUid = (data['maNguoiDung'] ?? '').toString().trim();
+      final String resolvedId = fieldUid.isNotEmpty ? fieldUid : doc.id;
+      data['maNguoiDung'] = resolvedId;
+      final model = NguoiDungModel.fromMap(data);
+      userMap[doc.id] = model;
+      userMap[resolvedId] = model;
+    }
+
+    for (var i = 0; i < idList.length; i += 30) {
+      final chunk = idList.sublist(
+        i,
+        i + 30 > idList.length ? idList.length : i + 30,
       );
-    });
+
+      final byDocId = await _firestore
+          .collection('NguoiDung')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      byDocId.docs.forEach(addDoc);
+
+      final missing = chunk.where((id) => !userMap.containsKey(id)).toList();
+      if (missing.isNotEmpty) {
+        final byField = await _firestore
+            .collection('NguoiDung')
+            .where('maNguoiDung', whereIn: missing)
+            .get();
+        byField.docs.forEach(addDoc);
+      }
+    }
+    return userMap;
   }
 }

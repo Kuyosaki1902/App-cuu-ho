@@ -1,4 +1,4 @@
-// lib/BangXepHangCuuHo/BangXepHangCuuHo.dart
+// lib/user/BangXepHangCuuHo/BangXepHangCuuHo.dart
 
 import 'package:flutter/material.dart';
 import 'controllers/bang_xep_hang_controller.dart';
@@ -13,43 +13,57 @@ class BangXepHangCuuHo extends StatefulWidget {
 }
 
 class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
+  static const Color _green = Color(0xFF006A55);
+
   final BangXepHangController _controller = BangXepHangController();
 
   int selectedTab = 0; // 0: Tuần này, 1: Tháng này, 2: Tất cả
   final List<String> tabs = ['Tuần này', 'Tháng này', 'Tất cả'];
 
-  // Biến lưu trữ tiêu chí sắp xếp: 'cases' (Số ca) hoặc 'rating' (Đánh giá sao)
   String currentSortOption = 'cases';
 
-  // Biến lưu trữ tập hợp chuyên ngành được chọn để lọc
+  // Bộ lọc (giữ nguyên khi đổi tab vì lựa chọn lấy từ toàn bộ dữ liệu)
   Set<String> selectedSpecialties = {};
+  Set<String> selectedSkills = {};
 
   late Future<List<RescuerLeaderboardItemModel>> _leaderboardFuture;
+  late Future<LeaderboardFilterOptions> _optionsFuture;
+
+  int get _filterCount => selectedSpecialties.length + selectedSkills.length;
 
   @override
   void initState() {
     super.initState();
     _leaderboardFuture = _controller.fetchLeaderboard(selectedTab);
+    _optionsFuture = _controller.loadFilterOptions();
   }
 
   void _onTabChanged(int index) {
     if (selectedTab != index) {
       setState(() {
         selectedTab = index;
-        selectedSpecialties
-            .clear(); // Reset bộ lọc chuyên ngành khi đổi Tab thời gian
         _leaderboardFuture = _controller.fetchLeaderboard(index);
       });
     }
   }
 
-  // 🌟 Hàm tính toán & hiển thị mốc thời gian động theo ngày thực tế
+  /// Tải lại toàn bộ (nút "Thử lại" / kéo để làm mới)
+  Future<void> _reload() async {
+    _controller.refresh();
+    setState(() {
+      _leaderboardFuture = _controller.fetchLeaderboard(selectedTab);
+      _optionsFuture = _controller.loadFilterOptions();
+    });
+    try {
+      await _leaderboardFuture;
+    } catch (_) {}
+  }
+
   String _getTimeDisplayText() {
     final now = DateTime.now();
 
     switch (selectedTab) {
       case 0:
-        // Tính Thứ 2 đầu tuần và Chủ Nhật cuối tuần hiện tại
         final monday = now.subtract(Duration(days: now.weekday - 1));
         final sunday = monday.add(const Duration(days: 6));
 
@@ -61,7 +75,6 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
         return 'Tuần này ($startStr - $endStr)';
 
       case 1:
-        // Hiển thị Tháng/Năm hiện tại
         final monthStr = now.month.toString().padLeft(2, '0');
         return 'Tháng này ($monthStr/${now.year})';
 
@@ -73,9 +86,26 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
     }
   }
 
-  // Màn hình nhỏ (BottomSheet) cho phép chọn nhiều chuyên ngành cùng lúc
-  void _showSpecialtyFilterDialog(List<String> availableSpecialties) {
-    Set<String> tempSelected = Set.from(selectedSpecialties);
+  // ===========================================================================
+  // BẢNG LỌC: CHUYÊN NGÀNH + KỸ NĂNG
+  // ===========================================================================
+  Future<void> _showFilterSheet() async {
+    LeaderboardFilterOptions options;
+    try {
+      options = await _optionsFuture;
+    } catch (_) {
+      options = const LeaderboardFilterOptions(specialties: [], skills: []);
+    }
+    if (!mounted) return;
+
+    final Set<String> tempSpecialties = Set.from(selectedSpecialties);
+    final Set<String> tempSkills = Set.from(selectedSkills);
+
+    // Gom kỹ năng theo nhóm, giữ thứ tự xuất hiện
+    final Map<String, List<KyNangOption>> skillGroups = {};
+    for (final k in options.skills) {
+      skillGroups.putIfAbsent(k.tenNhom, () => []).add(k);
+    }
 
     showModalBottomSheet(
       context: context,
@@ -84,13 +114,68 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (BuildContext context) {
+      builder: (BuildContext sheetContext) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
+            final int total = tempSpecialties.length + tempSkills.length;
+
+            Widget chip({
+              required String label,
+              required bool selected,
+              required VoidCallback onTap,
+            }) {
+              return FilterChip(
+                label: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                    color: selected ? _green : Colors.black87,
+                  ),
+                ),
+                selected: selected,
+                showCheckmark: false,
+                selectedColor: _green.withOpacity(0.12),
+                backgroundColor: Colors.grey.shade100,
+                side: BorderSide(color: selected ? _green : Colors.transparent),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                onSelected: (_) => setModalState(onTap),
+              );
+            }
+
+            Widget sectionTitle(String text, {String? hint}) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 14, bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (hint != null)
+                      Text(
+                        hint,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }
+
             return Container(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.7,
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -100,38 +185,36 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                     child: Container(
                       width: 40,
                       height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
+                      margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Lọc theo Chuyên ngành',
+                        'Bộ lọc cứu hộ viên',
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
                       ),
-                      if (tempSelected.isNotEmpty)
+                      if (total > 0)
                         GestureDetector(
-                          onTap: () {
-                            setModalState(() {
-                              tempSelected.clear();
-                            });
-                          },
+                          onTap: () => setModalState(() {
+                            tempSpecialties.clear();
+                            tempSkills.clear();
+                          }),
                           child: const Row(
                             children: [
                               Icon(
                                 Icons.refresh_rounded,
                                 size: 14,
-                                color: Color(0xFF006A55),
+                                color: _green,
                               ),
                               SizedBox(width: 4),
                               Text(
@@ -139,7 +222,7 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF006A55),
+                                  color: _green,
                                 ),
                               ),
                             ],
@@ -147,69 +230,92 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Chọn một hoặc nhiều chuyên ngành để lọc danh sách:',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  const Divider(height: 20),
+                  const Divider(height: 16),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ---- CHUYÊN NGÀNH ----
+                          sectionTitle(
+                            'Chuyên ngành',
+                            hint: 'Chọn một hoặc nhiều chuyên ngành',
+                          ),
+                          if (options.specialties.isEmpty)
+                            Text(
+                              'Chưa có dữ liệu chuyên ngành',
+                              style: TextStyle(color: Colors.grey.shade500),
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: options.specialties.map((s) {
+                                return chip(
+                                  label: s,
+                                  selected: tempSpecialties.contains(s),
+                                  onTap: () {
+                                    if (!tempSpecialties.remove(s)) {
+                                      tempSpecialties.add(s);
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            ),
 
-                  if (availableSpecialties.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(
-                        child: Text(
-                          'Không có chuyên ngành nào để lọc',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                    )
-                  else
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: availableSpecialties.length,
-                        itemBuilder: (context, index) {
-                          final specialty = availableSpecialties[index];
-                          final isChecked = tempSelected.contains(specialty);
-
-                          return CheckboxListTile(
-                            activeColor: const Color(0xFF006A55),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                            ),
-                            title: Text(
-                              specialty,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isChecked
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: isChecked
-                                    ? const Color(0xFF006A55)
-                                    : Colors.black87,
-                              ),
-                            ),
-                            value: isChecked,
-                            onChanged: (bool? value) {
-                              setModalState(() {
-                                if (value == true) {
-                                  tempSelected.add(specialty);
-                                } else {
-                                  tempSelected.remove(specialty);
-                                }
-                              });
-                            },
-                          );
-                        },
+                          // ---- KỸ NĂNG (theo nhóm) ----
+                          sectionTitle(
+                            'Kỹ năng cứu hộ',
+                            hint:
+                                'Hiển thị người có ít nhất một kỹ năng đã chọn',
+                          ),
+                          if (skillGroups.isEmpty)
+                            Text(
+                              'Chưa có dữ liệu kỹ năng',
+                              style: TextStyle(color: Colors.grey.shade500),
+                            )
+                          else
+                            ...skillGroups.entries.map((g) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      g.key,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: g.value.map((k) {
+                                        return chip(
+                                          label: k.ten.isNotEmpty
+                                              ? k.ten
+                                              : k.ma,
+                                          selected: tempSkills.contains(k.ma),
+                                          onTap: () {
+                                            if (!tempSkills.remove(k.ma)) {
+                                              tempSkills.add(k.ma);
+                                            }
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                        ],
                       ),
                     ),
-
-                  const SizedBox(height: 16),
-
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -221,7 +327,7 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                             ),
                             side: BorderSide(color: Colors.grey.shade300),
                           ),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () => Navigator.pop(sheetContext),
                           child: const Text(
                             'Hủy',
                             style: TextStyle(
@@ -235,7 +341,7 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006A55),
+                            backgroundColor: _green,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -244,14 +350,13 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                           ),
                           onPressed: () {
                             setState(() {
-                              selectedSpecialties = Set.from(tempSelected);
+                              selectedSpecialties = Set.from(tempSpecialties);
+                              selectedSkills = Set.from(tempSkills);
                             });
-                            Navigator.pop(context);
+                            Navigator.pop(sheetContext);
                           },
                           child: Text(
-                            tempSelected.isEmpty
-                                ? 'Hiển thị tất cả'
-                                : 'Áp dụng (${tempSelected.length})',
+                            total == 0 ? 'Hiển thị tất cả' : 'Áp dụng ($total)',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -267,6 +372,128 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
           },
         );
       },
+    );
+  }
+
+  // ===========================================================================
+  // GIAO DIỆN CHÍNH
+  // ===========================================================================
+  Widget _buildFilterButton() {
+    final bool active = _filterCount > 0;
+    return GestureDetector(
+      onTap: _showFilterSheet,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? _green : _green.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.filter_alt_outlined,
+              size: 16,
+              color: active ? Colors.white : _green,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              active ? 'Bộ lọc ($_filterCount)' : 'Bộ lọc',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: active ? Colors.white : _green,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortMenu() {
+    PopupMenuItem<String> item(String value, IconData icon, String text) {
+      final bool selected = currentSortOption == value;
+      return PopupMenuItem<String>(
+        value: value,
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: selected ? _green : Colors.grey),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                color: selected ? _green : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: _green.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.swap_vert_rounded, size: 18, color: _green),
+      ),
+      tooltip: 'Sắp xếp theo',
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (String result) => setState(() => currentSortOption = result),
+      itemBuilder: (BuildContext context) => [
+        item(
+          'cases',
+          Icons.medical_services_outlined,
+          'Sắp xếp theo số ca hỗ trợ',
+        ),
+        item('rating', Icons.star_outline_rounded, 'Sắp xếp theo đánh giá sao'),
+      ],
+    );
+  }
+
+  Widget _buildStateMessage({
+    required IconData icon,
+    required String title,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: onAction,
+                child: Text(
+                  actionLabel,
+                  style: const TextStyle(
+                    color: _green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -293,20 +520,16 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
       ),
       body: Column(
         children: [
-          // 1. Thanh chuyển đổi Tab thời gian
           TimeFilterTabsWidget(
             selectedTab: selectedTab,
             tabs: tabs,
             onTabSelected: _onTabChanged,
           ),
-
-          // 🌟 2. CỤM TIÊU ĐỀ + NÚT LỌC SẮP XẾP VÀ MỐC THỜI GIAN
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 🌟 HÀNG 1: TIÊU ĐỀ (TRÁI) + CỤM NÚT LỌC & SẮP XẾP (PHẢI) NẰM CHUNG 1 HÀNG
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -319,156 +542,16 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
                         letterSpacing: 0.5,
                       ),
                     ),
-
                     Row(
                       children: [
-                        // NÚT LỌC CHUYÊN NGÀNH
-                        FutureBuilder<List<RescuerLeaderboardItemModel>>(
-                          future: _leaderboardFuture,
-                          builder: (context, snapshot) {
-                            final rawList = snapshot.data ?? [];
-                            final availableSpecialties = rawList
-                                .map((e) => e.specialty)
-                                .where((s) => s.isNotEmpty)
-                                .toSet()
-                                .toList();
-
-                            return GestureDetector(
-                              onTap: () => _showSpecialtyFilterDialog(
-                                availableSpecialties,
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: selectedSpecialties.isNotEmpty
-                                      ? const Color(0xFF006A55)
-                                      : const Color(
-                                          0xFF006A55,
-                                        ).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.filter_alt_outlined,
-                                      size: 16,
-                                      color: selectedSpecialties.isNotEmpty
-                                          ? Colors.white
-                                          : const Color(0xFF006A55),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      selectedSpecialties.isEmpty
-                                          ? 'Chuyên ngành'
-                                          : '${selectedSpecialties.length} ngành',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: selectedSpecialties.isNotEmpty
-                                            ? Colors.white
-                                            : const Color(0xFF006A55),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-
+                        _buildFilterButton(),
                         const SizedBox(width: 6),
-
-                        // NÚT SẮP XẾP (Số ca / Đánh giá sao)
-                        PopupMenuButton<String>(
-                          icon: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF006A55).withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.swap_vert_rounded,
-                              size: 18,
-                              color: Color(0xFF006A55),
-                            ),
-                          ),
-                          tooltip: 'Sắp xếp theo',
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          onSelected: (String result) {
-                            setState(() {
-                              currentSortOption = result;
-                            });
-                          },
-                          itemBuilder: (BuildContext context) => [
-                            PopupMenuItem<String>(
-                              value: 'cases',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.medical_services_outlined,
-                                    size: 18,
-                                    color: currentSortOption == 'cases'
-                                        ? const Color(0xFF006A55)
-                                        : Colors.grey,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Sắp xếp theo số ca hỗ trợ',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: currentSortOption == 'cases'
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      color: currentSortOption == 'cases'
-                                          ? const Color(0xFF006A55)
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'rating',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.star_outline_rounded,
-                                    size: 18,
-                                    color: currentSortOption == 'rating'
-                                        ? const Color(0xFF006A55)
-                                        : Colors.grey,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Sắp xếp theo đánh giá sao',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: currentSortOption == 'rating'
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      color: currentSortOption == 'rating'
-                                          ? const Color(0xFF006A55)
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        _buildSortMenu(),
                       ],
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 4),
-
-                // 🌟 HÀNG 2: HIỂN THỊ MỐC THỜI GIAN NẰM RIÊNG BÊN DƯỚI (CHỮ XÁM, KHÔNG KHUNG)
                 Row(
                   children: [
                     Icon(
@@ -490,98 +573,87 @@ class _BangXepHangCuuHoState extends State<BangXepHangCuuHo> {
               ],
             ),
           ),
-
-          // 3. Hiển thị danh sách card sau khi Lọc & Sắp xếp
           Expanded(
             child: FutureBuilder<List<RescuerLeaderboardItemModel>>(
               future: _leaderboardFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF006A55)),
+                    child: CircularProgressIndicator(color: _green),
                   );
                 }
 
-                List<RescuerLeaderboardItemModel> list = List.from(
-                  snapshot.data ?? [],
-                );
-
-                if (selectedSpecialties.isNotEmpty) {
-                  list = list
-                      .where(
-                        (item) => selectedSpecialties.contains(item.specialty),
-                      )
-                      .toList();
+                // Lỗi tải: báo lỗi thật + nút thử lại (không giả vờ là "chưa có dữ liệu")
+                if (snapshot.hasError) {
+                  debugPrint('❌ Bảng xếp hạng: ${snapshot.error}');
+                  return _buildStateMessage(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Không tải được bảng xếp hạng',
+                    actionLabel: 'Thử lại',
+                    onAction: _reload,
+                  );
                 }
 
+                final all = snapshot.data ?? [];
+
+                List<RescuerLeaderboardItemModel> list =
+                    BangXepHangController.applyFilters(
+                      all,
+                      specialties: selectedSpecialties,
+                      skills: selectedSkills,
+                    );
+
                 if (list.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.filter_alt_off_outlined,
-                          size: 56,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          selectedSpecialties.isNotEmpty
-                              ? 'Không có kết quả cho chuyên ngành đã chọn'
-                              : 'Chưa có dữ liệu xếp hạng',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (selectedSpecialties.isNotEmpty) ...[
-                          const SizedBox(height: 10),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                selectedSpecialties.clear();
-                              });
-                            },
-                            child: const Text(
-                              'Bỏ lọc để xem tất cả',
-                              style: TextStyle(
-                                color: Color(0xFF006A55),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                  final bool dangLoc = _filterCount > 0;
+                  return _buildStateMessage(
+                    icon: dangLoc
+                        ? Icons.filter_alt_off_outlined
+                        : Icons.leaderboard_outlined,
+                    title: dangLoc
+                        ? 'Không có cứu hộ viên phù hợp với bộ lọc'
+                        : 'Chưa có dữ liệu xếp hạng',
+                    actionLabel: dangLoc ? 'Bỏ lọc để xem tất cả' : null,
+                    onAction: dangLoc
+                        ? () => setState(() {
+                            selectedSpecialties.clear();
+                            selectedSkills.clear();
+                          })
+                        : null,
                   );
                 }
 
                 if (currentSortOption == 'rating') {
-                  list.sort((a, b) => b.rating.compareTo(a.rating));
+                  list.sort((a, b) {
+                    final byRating = b.rating.compareTo(a.rating);
+                    return byRating != 0
+                        ? byRating
+                        : b.casesCount.compareTo(a.casesCount);
+                  });
                 } else {
-                  list.sort((a, b) => b.casesCount.compareTo(a.casesCount));
+                  list.sort((a, b) {
+                    final byCases = b.casesCount.compareTo(a.casesCount);
+                    return byCases != 0
+                        ? byCases
+                        : b.rating.compareTo(a.rating);
+                  });
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
+                return RefreshIndicator(
+                  color: _green,
+                  onRefresh: _reload,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    itemCount: list.length,
+                    itemBuilder: (context, index) {
+                      return RescuerCardItemWidget(
+                        item: list[index].copyWithRank(index + 1),
+                      );
+                    },
                   ),
-                  itemCount: list.length,
-                  itemBuilder: (context, index) {
-                    final item = list[index];
-                    final updatedItem = RescuerLeaderboardItemModel(
-                      rank: index + 1,
-                      user: item.user,
-                      casesCount: item.casesCount,
-                      specialty: item.specialty,
-                      organization: item.organization,
-                      rating: item.rating,
-                      reviewsCount: item.reviewsCount,
-                    );
-                    return RescuerCardItemWidget(item: updatedItem);
-                  },
                 );
               },
             ),

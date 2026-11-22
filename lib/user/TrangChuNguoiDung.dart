@@ -16,7 +16,8 @@ import 'package:cuhokhancap/user/MoTaTinhTrang.dart';
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
-import 'package:cuhokhancap/firebase/yeu_cau_guard.dart';import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
+import 'package:cuhokhancap/firebase/yeu_cau_guard.dart';
+import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
 import 'package:cuhokhancap/user/Design/chi_tiet_nguoi_cuu_ho_card.dart'; // Import file card vừa tạo
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart';
@@ -1008,66 +1009,75 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                                 onPressed: _coYeuCauDangHoatDong
                                     ? null
                                     : () async {
-                                  // Chặn lại lần nữa bằng dữ liệu server
-                                  if (!await _choPhepTaoYeuCau()) return;
-                                  if (!context.mounted) return;
+                                        // Chặn lại lần nữa bằng dữ liệu server
+                                        if (!await _choPhepTaoYeuCau()) return;
+                                        if (!context.mounted) return;
 
-                                  // Hiển thị loading
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (BuildContext context) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(),
-                                      );
-                                    },
-                                  );
+                                        // Hiển thị loading
+                                        showDialog(
+                                          context: context,
+                                          barrierDismissible: false,
+                                          builder: (BuildContext context) {
+                                            return const Center(
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            );
+                                          },
+                                        );
 
-                                  // Gọi hàm từ FirebaseService
-                                  // Thay vì nhận bool success, nay ta nhận String? maYeuCauMoi
-                                  String? maYeuCauMoi = await _firebaseService
-                                      .taoYeuCauTimBacSiTuDong(
-                                        maNguoiYeuCau: widget.maNguoiDung,
-                                        viDo: _currentPosition.latitude,
-                                        kinhDo: _currentPosition.longitude,
-                                        trieuChung: MoTaTamThoi.trieuChung,
-                                        moTaChiTiet: MoTaTamThoi.moTaChiTiet,
-                                        fileAnh: MoTaTamThoi.fileAnh,
-                                        fileGhiAm: MoTaTamThoi.fileGhiAm,
-                                      );
+                                        // Gọi hàm từ FirebaseService
+                                        // Thay vì nhận bool success, nay ta nhận String? maYeuCauMoi
+                                        String?
+                                        maYeuCauMoi = await _firebaseService
+                                            .taoYeuCauTimBacSiTuDong(
+                                              maNguoiYeuCau: widget.maNguoiDung,
+                                              viDo: _currentPosition.latitude,
+                                              kinhDo:
+                                                  _currentPosition.longitude,
+                                              trieuChung:
+                                                  MoTaTamThoi.trieuChung,
+                                              moTaChiTiet:
+                                                  MoTaTamThoi.moTaChiTiet,
+                                              fileAnh: MoTaTamThoi.fileAnh,
+                                              fileGhiAm: MoTaTamThoi.fileGhiAm,
+                                            );
 
-                                  // Tắt loading
-                                  Navigator.pop(context);
+                                        // Tắt loading
+                                        Navigator.pop(context);
 
-                                  if (maYeuCauMoi != null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Tạo yêu cầu tìm bác sĩ tự động thành công!',
-                                        ),
-                                      ),
-                                    );
-                                    // Xóa dữ liệu tạm sau khi gửi thành công
-                                    MoTaTamThoi.clear();
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            GiaoDienDangTimKiem(
-                                              maYeuCau: maYeuCauMoi,
+                                        if (maYeuCauMoi != null) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Tạo yêu cầu tìm bác sĩ tự động thành công!',
+                                              ),
                                             ),
-                                      ),
-                                    );
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại.',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
+                                          );
+                                          // Xóa dữ liệu tạm sau khi gửi thành công
+                                          MoTaTamThoi.clear();
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  GiaoDienDangTimKiem(
+                                                    maYeuCau: maYeuCauMoi,
+                                                  ),
+                                            ),
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Có lỗi xảy ra khi tạo yêu cầu. Vui lòng thử lại.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF004D40),
                                   disabledBackgroundColor: Colors.grey.shade400,
@@ -1116,15 +1126,16 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                                 onPressed: _coYeuCauDangHoatDong
                                     ? null
                                     : () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ChonBacSiTiepNhan(
-                                        banKinhQuet: _currentRadius,
-                                      ),
-                                    ),
-                                  );
-                                },
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                ChonBacSiTiepNhan(
+                                                  banKinhQuet: _currentRadius,
+                                                ),
+                                          ),
+                                        );
+                                      },
                                 style: TextButton.styleFrom(
                                   backgroundColor: const Color(0xFFF5F6F8),
                                   padding: const EdgeInsets.symmetric(
@@ -1213,29 +1224,35 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                 String? activeMaYeuCau =
                     await YeuCauStorageService.getActiveMaYeuCau();
 
+                if (!context.mounted) return;
+
+                // Nếu lần bấm trước đã mở màn khác rồi thì bỏ qua (chống bấm liên tiếp)
+                if (ModalRoute.of(context)?.isCurrent != true) return;
+
                 if (activeMaYeuCau != null && activeMaYeuCau.isNotEmpty) {
-                  if (context.mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        // 🌟 Sửa đúng tên class và truyền maYeuCau vào
-                        builder: (context) =>
-                            TheoDoiTinhTrangScreen(maYeuCau: activeMaYeuCau),
-                      ),
-                    );
-                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      // 🌟 Sửa đúng tên class và truyền maYeuCau vào
+                      builder: (context) =>
+                          TheoDoiTinhTrangScreen(maYeuCau: activeMaYeuCau),
+                    ),
+                  );
                 } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                  // Xóa thông báo đang hiện/đang xếp hàng rồi mới hiện cái mới, chỉ 1 giây
+                  ScaffoldMessenger.of(context)
+                    ..clearSnackBars()
+                    ..showSnackBar(
                       const SnackBar(
                         content: Text(
                           'Bạn hiện không có đơn cứu hộ nào đang hoạt động!',
                         ),
+                        duration: Duration(seconds: 1),
                       ),
                     );
-                  }
                 }
               },
+
               child: Container(
                 width: 56,
                 height: 56,

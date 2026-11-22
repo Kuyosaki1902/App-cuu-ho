@@ -324,7 +324,7 @@ class _VictimConditionSheetState extends State<VictimConditionSheet> {
                           ),
                           SizedBox(width: 4),
                           Text(
-                            "Chia sẻ trực tiếp tới 6 bác sĩ lân cận",
+                            "Chia sẻ trực tiếp tới các cứu hộ viên lân cận",
                             style: TextStyle(
                               color: Color(0xFF00695C),
                               fontSize: 12,

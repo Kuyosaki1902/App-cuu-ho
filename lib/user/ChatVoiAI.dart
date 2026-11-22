@@ -25,7 +25,7 @@ class _ChatVoiAIScreenState extends State<ChatVoiAIScreen> {
   // (Hoặc dán tạm vào đây để thử, nhưng KHÔNG commit lên GitHub)
   static const String _apiKey = String.fromEnvironment(
   'GEMINI_API_KEY',
-  defaultValue: 'AQ.Ab8RN6KDtJ5_KnZJ0FpVq9JsfJ0RChSwxVpIz7rDpzHmyuIuAQ',
+  defaultValue: 'AQ.Ab8RN6ISpOC5Docs4-Obd84gfWPiNFpKV7yZmBOw-PxQiMs5ww',
 );
 
   // Danh sách model theo thứ tự ưu tiên. Model đầu lỗi/quá tải sẽ tự chuyển

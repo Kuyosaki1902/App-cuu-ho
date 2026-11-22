@@ -79,7 +79,10 @@ class LichSuCuuHoController {
           validRescuerIds.isEmpty
               ? Future.value(<NguoiDungModel>[])
               : _firebaseService.getUsersByIds(validRescuerIds),
-          _firebaseService.getDanhGiaCuuHoVienTheoYeuCau(yc.maYeuCau),
+          _firebaseService.getDanhGiaCuuHoVienTheoYeuCau(
+            yc.maYeuCau,
+            rescuerIds: validRescuerIds,
+          ),
         ]);
 
         final moTa = results[0] as ChiTietMoTaHienTruongModel?;

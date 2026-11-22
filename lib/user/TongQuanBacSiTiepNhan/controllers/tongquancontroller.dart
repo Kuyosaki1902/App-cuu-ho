@@ -325,9 +325,10 @@ class RescuerOverviewController {
       _noRescuerTimer?.cancel();
       return;
     }
-    // Chờ 3s xác nhận để không kích hoạt nhầm vì snapshot chập chờn
+    // Chờ 1s xác nhận để không kích hoạt nhầm vì snapshot chập chờn.
+    // (Chỉ gỡ người khi bản ghi báo từ chối/hủy nên không cần chờ lâu.)
     _noRescuerTimer?.cancel();
-    _noRescuerTimer = Timer(const Duration(seconds: 3), () {
+    _noRescuerTimer = Timer(const Duration(seconds: 1), () {
       if (_latestPhanCongMap.isEmpty) _handleNoRescuerLeft();
     });
   }
@@ -337,51 +338,63 @@ class RescuerOverviewController {
     _noRescuerHandled = true;
     _phanCongSub?.cancel(); // tránh vòng lặp khi ta tự cập nhật trạng thái
 
+    // 🌟 Báo cho giao diện NGAY (trước đây phải chờ xong cả chục lệnh Firestore
+    // nên dialog hiện chậm vài giây). Việc dọn dẹp chạy nền bên dưới và KHÔNG
+    // phụ thuộc màn hình còn sống hay không.
+    onNoRescuerLeft?.call();
+
+    // Mỗi bước độc lập: một bước lỗi không làm hỏng các bước khác
+    Future<void> safe(Future<dynamic> Function() job) async {
+      try {
+        await job();
+      } catch (e) {
+        debugPrint('Lỗi dọn dẹp khi không còn người tiếp nhận: $e');
+      }
+    }
+
     try {
       final yc = await _fbService.getYeuCauCuuHoById(maYeuCau);
 
       // Những người còn đang "chờ tiếp nhận" = lời mời đã phát mà chưa ai nhận
       final pendingIds = <String>[
-        for (final e in (yc?.danhSachPhanCongVien ?? {}).entries)
+        for (final e in (yc?.danhSachPhanCongVien ?? <String, String>{}).entries)
           if (e.value == 'cuuho_trangthai_phancong_chotiepnhan') e.key,
       ];
-
-      await _fbService.cancelRemainingAssignments(maYeuCau);
-      for (final uid in pendingIds) {
-        await _fbService.updateDanhSachPhanCongVien(
-          maYeuCau: maYeuCau,
-          maNguoiCuuHo: uid,
-          trangThai: 'cuuho_trangthai_phancong_dahuy',
-        );
-        try {
-          await _fbService.updateUserOnlineStatus(
-            userId: uid,
-            isOnline: true,
-            nhanCaCuuHo: false,
-          );
-        } catch (_) {}
-      }
-
-      await FirebaseFirestore.instance
-          .collection('YeuCauCuuHo')
-          .doc(maYeuCau)
-          .update({'soNguoiCuuHo': 0});
-      await _fbService.updateTinhTrangYeuCau(
-        maYeuCau,
-        'user_tinhtrang_quahandieuphoi',
-      );
-      await _fbService.removeRequestFromRealtimeDB(maYeuCau);
-
       final maNanNhan = yc?.maNguoiYeuCau;
-      if (maNanNhan != null && maNanNhan.isNotEmpty) {
-        await _fbService.removeEmergencyNotification(maNanNhan: maNanNhan);
-      }
-      await YeuCauStorageService.clearActiveRequest();
+
+      await Future.wait([
+        safe(() => _fbService.cancelRemainingAssignments(maYeuCau)),
+        safe(
+          () => FirebaseFirestore.instance
+              .collection('YeuCauCuuHo')
+              .doc(maYeuCau)
+              .update({'soNguoiCuuHo': 0}),
+        ),
+        safe(
+          () => _fbService.updateTinhTrangYeuCau(maYeuCau, 'user_tinhtrang_dahuy'),
+        ),
+        safe(() => _fbService.removeRequestFromRealtimeDB(maYeuCau)),
+        if (maNanNhan != null && maNanNhan.isNotEmpty)
+          safe(() => _fbService.removeEmergencyNotification(maNanNhan: maNanNhan)),
+        safe(() => YeuCauStorageService.clearActiveRequest()),
+        // Giải phóng những người bị thu hồi lời mời (chạy song song, không tuần tự)
+        for (final uid in pendingIds)
+          safe(() async {
+            await _fbService.updateDanhSachPhanCongVien(
+              maYeuCau: maYeuCau,
+              maNguoiCuuHo: uid,
+              trangThai: 'cuuho_trangthai_phancong_dahuy',
+            );
+            await _fbService.updateUserOnlineStatus(
+              userId: uid,
+              isOnline: true,
+              nhanCaCuuHo: false,
+            );
+          }),
+      ]);
     } catch (e) {
       debugPrint('Lỗi xử lý không còn người tiếp nhận: $e');
     }
-
-    if (!_disposed) onNoRescuerLeft?.call();
   }
 
   // ---------------- TIỆN ÍCH ----------------

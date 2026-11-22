@@ -1,4 +1,5 @@
 // lib/user/TongQuanBacSiTiepNhan/TongQuanBacSiTiepNhan.dart
+import 'package:cuhokhancap/user/ChatVoiAI.dart';
 import 'package:cuhokhancap/user/ChiTietDuongDiBacSi.dart/ChiTietDuongDi.dart';
 import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/controllers/tongquancontroller.dart';
 import 'package:cuhokhancap/user/TongQuanBacSiTiepNhan/Models/tracking_rescuer_model.dart';
@@ -81,7 +82,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Đơn không còn người tiếp nhận'),
+        title: const Text('Đơn Không Còn Người Tiếp Nhận'),
         content: const Text(
           'Đơn cứu hộ hiện không còn ai tiếp nhận. '
           'Các lời mời đã phát sẽ được thu hồi.',
@@ -192,7 +193,6 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
   }
 
   void _openRescuerRouteDetail(TrackingRescuerModel res) {
-    // 🌟 KHÓA KHÔNG CHO VÀO XEM CHI TIẾT KHI CỨU HỘ VIÊN ĐÃ HOÀN THÀNH
     if (res.phanCong.maTrangThaiTiepNhan ==
         'cuuho_trangthai_phancong_hoanthanh') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -229,6 +229,7 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
           victimLng: widget.victimLng,
           tenBacSi: res.nguoiDung.hoTen,
           maYeuCau: widget.maYeuCau,
+          soDienThoai: res.nguoiDung.soDienThoai,
         ),
       ),
     );
@@ -422,7 +423,14 @@ class _TongQuanBacSiTiepNhanState extends State<TongQuanBacSiTiepNhan> {
                         ? movingCount
                         : trackingList.length,
                     onBack: () => Navigator.pop(context),
-                    onSosPressed: () {},
+                    onChatAIPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChatVoiAIScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
 

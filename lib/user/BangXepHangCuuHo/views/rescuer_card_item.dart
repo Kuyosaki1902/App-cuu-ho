@@ -1,5 +1,6 @@
-// lib/BangXepHangCuuHo/views/rescuer_card_item.dart
+// lib/user/BangXepHangCuuHo/views/rescuer_card_item.dart
 
+import 'dart:convert';
 import 'package:cuhokhancap/user/BangXepHangCuuHo/controllers/bang_xep_hang_controller.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,22 @@ class RescuerCardItemWidget extends StatelessWidget {
   final RescuerLeaderboardItemModel item;
 
   const RescuerCardItemWidget({super.key, required this.item});
+
+  ImageProvider? _resolveAvatar(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final cleaned = raw.trim();
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+      return NetworkImage(cleaned);
+    }
+    try {
+      final base64Str = cleaned.contains(',')
+          ? cleaned.split(',').last.trim()
+          : cleaned;
+      return MemoryImage(base64Decode(base64Str));
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +42,8 @@ class RescuerCardItemWidget extends StatelessWidget {
     } else {
       cardBgColor = Colors.white;
     }
+
+    final avatarProvider = _resolveAvatar(item.avatarRaw);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -102,9 +121,28 @@ class RescuerCardItemWidget extends StatelessWidget {
                     width: 2,
                   ),
                 ),
-                child: const CircleAvatar(
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, color: Colors.white, size: 32),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFF006A55),
+                  backgroundImage: avatarProvider,
+                  child: avatarProvider == null
+                      ? (item.user.hoTen.trim().isNotEmpty
+                            ? Text(
+                                item.user.hoTen
+                                    .trim()
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 30,
+                              ))
+                      : null,
                 ),
               ),
               Positioned(

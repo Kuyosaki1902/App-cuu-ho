@@ -33,6 +33,12 @@ class ChiTietDuongDiController {
   final double victimLng;
   final String tenBacSi;
   final String maYeuCau;
+  String soDienThoai;
+
+  /// Callback báo ra UI khi cứu hộ viên không còn ở trạng thái 'tiepnhan'
+  /// (vd: đã đến nơi / đang cứu hộ / đã hoàn thành / hủy)
+  final void Function(String newStatus)? onStatusChangedFromAccepted;
+
   final FirebaseService _fbService = FirebaseService();
   GoogleMapController? mapController;
   StreamSubscription? _locationSub;
@@ -44,6 +50,7 @@ class ChiTietDuongDiController {
   double khoangCachBanDau_OSRM = 0.0;
   double progressValue = 0.05;
   bool _isAlreadyArrived = false;
+  bool _hasNotifiedStatusChange = false;
 
   bool isAutoTracking = true;
   Function()? _uiUpdateCallback;
@@ -66,6 +73,8 @@ class ChiTietDuongDiController {
     required this.victimLng,
     required this.tenBacSi,
     required this.maYeuCau,
+    this.soDienThoai = '',
+    this.onStatusChangedFromAccepted,
   }) {
     currentCurLat = startLat;
     currentCurLng = startLng;
@@ -76,19 +85,39 @@ class ChiTietDuongDiController {
     await _initVictimMarker();
     _uiUpdateCallback?.call();
 
+    // Dự phòng nếu chưa truyền số điện thoại thì tự lấy 1 lần
+    if (soDienThoai.trim().isEmpty) {
+      final user = await _fbService.getUserById(maNguoiCuuHo);
+      if (user != null && user.soDienThoai.trim().isNotEmpty) {
+        soDienThoai = user.soDienThoai.trim();
+      }
+    }
+
     khoangCachBanDau_OSRM = await _fetchOSRMRoute(startLat, startLng);
 
     _phanCongSub = _fbService.streamPhanCongByYeuCau(maYeuCau).listen((list) {
       for (final pc in list) {
-        if (pc.maNguoiCuuHo != maNguoiCuuHo) continue; // đúng người, đúng đơn
+        if (pc.maNguoiCuuHo != maNguoiCuuHo) continue;
         final t = pc.maTrangThaiTiepNhan;
+
         if (t == 'cuuho_trangthai_phancong_daden' ||
-            t == 'cuuho_trangthai_phancong_dangcuuho') {
+            t == 'cuuho_trangthai_phancong_dangcuuho' ||
+            t == 'cuuho_trangthai_phancong_hoanthanh') {
           _isAlreadyArrived = true;
           progressValue = 1.0;
-          trangthaiText = "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI";
+          trangthaiText = t == 'cuuho_trangthai_phancong_hoanthanh'
+              ? "ĐÃ HOÀN THÀNH CỨU HỘ"
+              : (t == 'cuuho_trangthai_phancong_dangcuuho'
+                    ? "ĐANG TIẾN HÀNH CỨU HỘ"
+                    : "CỨU HỘ VIÊN ĐÃ ĐẾN NƠI");
           estimatedTime = "0 phút";
           _uiUpdateCallback?.call();
+        }
+
+        if (t != 'cuuho_trangthai_phancong_tiepnhan' &&
+            !_hasNotifiedStatusChange) {
+          _hasNotifiedStatusChange = true;
+          onStatusChangedFromAccepted?.call(t);
         }
       }
     });
@@ -103,6 +132,13 @@ class ChiTietDuongDiController {
                 (docSnap.data()?['viDo'] as num?)?.toDouble() ?? startLat;
             double curLng =
                 (docSnap.data()?['kinhDo'] as num?)?.toDouble() ?? startLng;
+
+            if (soDienThoai.trim().isEmpty) {
+              final phone = (docSnap.data()?['soDienThoai'] ?? '')
+                  .toString()
+                  .trim();
+              if (phone.isNotEmpty) soDienThoai = phone;
+            }
 
             double bearing = _calculateBearing(
               currentCurLat,
@@ -131,7 +167,6 @@ class ChiTietDuongDiController {
         });
   }
 
-  // Marker nạn nhân đồng bộ giao diện (Avatar đỏ + mũi tên + nhãn Vị trí của bạn)
   Future<void> _initVictimMarker() async {
     Widget victimMarkerWidget = Directionality(
       textDirection: TextDirection.ltr,

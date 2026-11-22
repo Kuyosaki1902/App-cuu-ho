@@ -61,9 +61,7 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-      },
+      onPopInvokedWithResult: (didPop, result) {},
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F7F9),
         appBar: AppBar(
@@ -91,6 +89,10 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
               );
             }
 
+            if (data['isError'] == true) {
+              return _buildLoadErrorState();
+            }
+
             if (data['isEmpty'] == true) {
               return _buildErrorState(context);
             }
@@ -105,6 +107,12 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
             bool choTiepNhan = st == 'user_tinhtrang_chotiepnhan';
             bool daPhanCong = st == 'user_tinhtrang_daphancong';
             bool daHoanThanh = st == 'user_tinhtrang_hoanthanh';
+
+            // Chỉ true khi có ít nhất 1 cứu hộ viên đã hoàn thành
+            bool hasCompletedRescuer = listCuuHo.any(
+              (item) =>
+                  item['trangThai'] == 'cuuho_trangthai_phancong_hoanthanh',
+            );
 
             return Column(
               children: [
@@ -138,6 +146,7 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                   choTiepNhan,
                   daPhanCong,
                   daHoanThanh,
+                  hasCompletedRescuer,
                 ),
               ],
             );
@@ -218,8 +227,12 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
           _buildInfoRow('Thời gian tạo', _formatTime(yeuCau.thoiGianTao)),
           _buildInfoRow(
             'Mức độ khẩn cấp',
-            yeuCau.mucDoKhanCap == 1 ? 'SOS (Rất nguy kịch)' : 'Hỗ trợ y tế',
-            valueColor: yeuCau.mucDoKhanCap == 1 ? Colors.red : Colors.orange,
+            yeuCau.maLoaiYeuCau == 'loaiyeucau_sos'
+                ? 'SOS (Rất nguy kịch)'
+                : 'Hỗ trợ y tế',
+            valueColor: yeuCau.maLoaiYeuCau == 'loaiyeucau_sos'
+                ? Colors.red
+                : Colors.orange,
           ),
         ],
       ),
@@ -236,8 +249,11 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
     String ghiChuThem = "Không có";
 
     if (moTa != null && moTa.ghiChuText is Map) {
-      trieuChung = List<String>.from(moTa.ghiChuText['trieuChung'] ?? []);
-      ghiChuThem = moTa.ghiChuText['moTaChiTiet'] ?? "Không có";
+      final rawTc = moTa.ghiChuText['trieuChung'];
+      trieuChung = rawTc is List
+          ? rawTc.map((e) => e.toString()).toList()
+          : <String>[];
+      ghiChuThem = (moTa.ghiChuText['moTaChiTiet'] ?? "Không có").toString();
 
       if (ghiChuThem.isEmpty) {
         ghiChuThem = "Không có";
@@ -391,11 +407,13 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
   }
 
   // UI: Cụm nút hành động cố định ở đáy
+  // UI: Cụm nút hành động cố định ở đáy
   Widget _buildBottomActions(
     YeuCauCuuHoModel yeuCau,
     bool choTiepNhan,
     bool daPhanCong,
     bool daHoanThanh,
+    bool hasCompletedRescuer,
   ) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -475,25 +493,27 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.check_circle_outline,
-                      label: 'Hoàn thành cứu hộ',
-                      color: Colors.blueAccent,
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => HoanThanhDonCuuHoScreen(
-                              maYeuCau: yeuCau.maYeuCau,
-                              currentUserId: yeuCau.maNguoiYeuCau,
+                  if (hasCompletedRescuer) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildActionButton(
+                        icon: Icons.check_circle_outline,
+                        label: 'Hoàn thành cứu hộ',
+                        color: Colors.blueAccent,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => HoanThanhDonCuuHoScreen(
+                                maYeuCau: yeuCau.maYeuCau,
+                                currentUserId: yeuCau.maNguoiYeuCau,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               )
             else if (daHoanThanh)
@@ -567,6 +587,31 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         onPressed: onPressed,
+      ),
+    );
+  }
+
+  Widget _buildLoadErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 60, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text(
+            'Không tải được thông tin đơn cứu hộ.',
+            style: TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: _controller.restart,
+            child: const Text('Thử lại'),
+          ),
+        ],
       ),
     );
   }

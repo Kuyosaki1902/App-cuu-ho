@@ -1,4 +1,3 @@
-// lib/user/ThongTInHoanThanhCuuHo/HoanThanhCuuHo.dart
 import 'dart:convert';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
@@ -31,11 +30,9 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
   late final HoanThanhDonController _controller;
   final FirebaseService _fbService = FirebaseService();
 
-  // Lưu điểm sao và nội dung góp ý tạm thời của từng cứu hộ viên trước khi bấm Gửi
   final Map<String, int> _selectedRatings = {};
   final Map<String, String> _draftComments = {};
 
-  // Cache thông tin chi tiết đơn & hồ sơ cứu hộ viên để không gọi lại API khi setState
   late final Future<Map<String, dynamic>> _orderHeaderFuture;
   final Map<String, Future<Map<String, dynamic>>> _rescuerDetailFutures = {};
 
@@ -181,12 +178,8 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. THẺ THÔNG TIN CHI TIẾT ĐƠN CỨU HỘ
               _buildThongTinDonWidget(),
-
               const SizedBox(height: 22),
-
-              // 2. TIÊU ĐỀ ĐỘI NGŨ ỨNG CỨU
               ValueListenableBuilder<List<Map<String, dynamic>>>(
                 valueListenable: _controller.danhSachPhanCongNotifier,
                 builder: (context, danhSach, _) {
@@ -224,8 +217,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 },
               ),
               const SizedBox(height: 12),
-
-              // 3. DANH SÁCH THẺ CỨU HỘ VIÊN
               ValueListenableBuilder<bool>(
                 valueListenable: _controller.isLoadingNotifier,
                 builder: (context, isLoading, _) {
@@ -270,8 +261,8 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                                     (dg) => dg.maNguoiCuuHo == maNguoiCuuHo,
                                   )
                                   .toList();
-                              bool isEvaluated = danhGiaCaNhan.isNotEmpty;
-                              DanhGiaModel? dGia = isEvaluated
+                              bool isSubmitted = danhGiaCaNhan.isNotEmpty;
+                              DanhGiaModel? dGia = isSubmitted
                                   ? danhGiaCaNhan.first
                                   : null;
 
@@ -303,9 +294,9 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                                       isDone:
                                           trangThaiTuyen ==
                                           'cuuho_trangthai_phancong_hoanthanh',
-                                      isEvaluated: isEvaluated,
-                                      ratingStars: dGia?.diemDanhGia ?? 0,
-                                      comment: dGia?.nhanXet ?? '',
+                                      isSubmitted: isSubmitted,
+                                      submittedStars: dGia?.diemDanhGia ?? 0,
+                                      submittedComment: dGia?.nhanXet ?? '',
                                     ),
                                   );
                                 },
@@ -318,10 +309,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                   );
                 },
               ),
-
               const SizedBox(height: 16),
-
-              // 4. NÚT XÁC NHẬN HOÀN THÀNH ĐƠN CỨU HỘ Ở DƯỚI CÙNG
               ValueListenableBuilder<bool>(
                 valueListenable: _controller.isButtonEnabledNotifier,
                 builder: (context, isEnabled, child) {
@@ -364,7 +352,10 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                               );
 
                               bool success = await _controller
-                                  .hoanThanhChuyenDi();
+                                  .hoanThanhVaGuiTatCaDanhGia(
+                                    selectedRatings: _selectedRatings,
+                                    draftComments: _draftComments,
+                                  );
 
                               if (context.mounted) {
                                 Navigator.pop(context);
@@ -372,7 +363,9 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                                   await YeuCauStorageService.clearActiveRequest();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Chuyến đi đã hoàn tất!'),
+                                      content: Text(
+                                        'Đã hoàn tất đơn cứu hộ và gửi đánh giá!',
+                                      ),
                                     ),
                                   );
                                   Navigator.popUntil(
@@ -403,9 +396,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
     );
   }
 
-  // ===========================================================================
-  // WIDGET 1: THẺ THÔNG TIN ĐƠN CỨU HỘ (KHỚP 100% VỚI YeuCauCuuHoModel)
-  // ===========================================================================
   Widget _buildThongTinDonWidget() {
     return FutureBuilder<Map<String, dynamic>>(
       future: _orderHeaderFuture,
@@ -422,7 +412,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
             : '#${widget.maYeuCau.toUpperCase()}';
 
         final String loaiCapCuu = _formatLoaiYeuCau(yeuCau?.maLoaiYeuCau ?? '');
-
         final String mucDoUuTien = 'Ưu tiên ${yeuCau?.mucDoKhanCap ?? 1}';
         final String tenNanNhan = nanNhan?.hoTen ?? 'Nạn nhân';
 
@@ -453,7 +442,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Dòng trên cùng: Badge mã yêu cầu + Loại yêu cầu
               Row(
                 children: [
                   Container(
@@ -487,10 +475,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // Hộp xám nhạt ở giữa: Địa chỉ + Badge ưu tiên + Nạn nhân + Thời gian tạo
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -619,10 +604,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              // Dòng dưới cùng: Tổng thời gian can thiệp
               Row(
                 children: [
                   Icon(
@@ -653,9 +635,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
     );
   }
 
-  // ===========================================================================
-  // WIDGET 2: THẺ THÀNH VIÊN ỨNG CỨU (TRƯỞNG KÍP / CỨU HỘ PHỤ + ĐÁNH GIÁ SAO & GÓP Ý)
-  // ===========================================================================
   Widget _buildMemberCard(
     BuildContext context, {
     required bool isLeader,
@@ -665,14 +644,17 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
     required String phone,
     String? avatarRaw,
     required bool isDone,
-    required bool isEvaluated,
-    int ratingStars = 0,
-    String comment = '',
+    required bool isSubmitted,
+    int submittedStars = 0,
+    String submittedComment = '',
   }) {
     final avatarProvider = _decodeAvatar(avatarRaw);
-    final int currentStars = isEvaluated
-        ? ratingStars
+    final int currentStars = isSubmitted
+        ? submittedStars
         : (_selectedRatings[maNguoiCuuHo] ?? 5);
+    final String displayComment = isSubmitted
+        ? submittedComment
+        : (_draftComments[maNguoiCuuHo] ?? '');
     final String timeNowStr = DateFormat('HH:mm').format(DateTime.now());
 
     return Container(
@@ -691,7 +673,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hàng thông tin cơ bản: Avatar + Tên + Chuyên môn + Badge Cứu hộ phụ
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -759,10 +740,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          // Nếu là Trưởng kíp: hiển thị hộp xanh nhạt có badge "Trưởng kíp cấp cứu" + "Xong: HH:mm"
           if (isLeader)
             Container(
               width: double.infinity,
@@ -830,8 +808,6 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 ],
               ),
             ),
-
-          // Hàng Số điện thoại + Trạng thái hoàn thành (với cứu hộ phụ) / Nút Góp ý
           Row(
             children: [
               Icon(Icons.phone_outlined, size: 15, color: primaryColor),
@@ -867,20 +843,29 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                   ],
                 )
               else
-                _buildGopYButton(context, maNguoiCuuHo, name, isEvaluated),
+                _buildDanhGiaButton(
+                  context,
+                  maNguoiCuuHo: maNguoiCuuHo,
+                  name: name,
+                  hasDraftComment: displayComment.isNotEmpty,
+                  isSubmitted: isSubmitted,
+                ),
             ],
           ),
-
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
             child: Divider(height: 1, color: Color(0xFFF1F5F9)),
           ),
-
-          // Hàng dưới cùng: Góp ý / Đánh giá chất lượng + 5 ngôi sao
           Row(
             children: [
               if (!isLeader)
-                _buildGopYButton(context, maNguoiCuuHo, name, isEvaluated)
+                _buildDanhGiaButton(
+                  context,
+                  maNguoiCuuHo: maNguoiCuuHo,
+                  name: name,
+                  hasDraftComment: displayComment.isNotEmpty,
+                  isSubmitted: isSubmitted,
+                )
               else
                 const Text(
                   'Đánh giá chất lượng',
@@ -894,27 +879,12 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
               Row(
                 children: List.generate(5, (i) {
                   return GestureDetector(
-                    onTap: isEvaluated
+                    onTap: isSubmitted
                         ? null
-                        : () async {
+                        : () {
                             setState(() {
                               _selectedRatings[maNguoiCuuHo] = i + 1;
                             });
-                            bool ok = await _controller.submitDanhGia(
-                              maNguoiCuuHo,
-                              i + 1,
-                              _draftComments[maNguoiCuuHo] ?? '',
-                            );
-                            if (ok && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Đã đánh giá ${i + 1} sao cho $name',
-                                  ),
-                                  duration: const Duration(seconds: 1),
-                                ),
-                              );
-                            }
                           },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2.5),
@@ -931,13 +901,11 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
               ),
             ],
           ),
-
-          // Hiển thị nội dung nhận xét nếu đã gửi
-          if (isEvaluated && comment.isNotEmpty)
+          if (displayComment.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '“$comment”',
+                '“$displayComment”',
                 style: TextStyle(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
@@ -950,37 +918,51 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
     );
   }
 
-  Widget _buildGopYButton(
-    BuildContext context,
-    String maNguoiCuuHo,
-    String name,
-    bool isEvaluated,
-  ) {
+  Widget _buildDanhGiaButton(
+    BuildContext context, {
+    required String maNguoiCuuHo,
+    required String name,
+    required bool hasDraftComment,
+    required bool isSubmitted,
+  }) {
+    final bool isActive = hasDraftComment || isSubmitted;
     return InkWell(
-      onTap: () => _showGopYDialog(context, maNguoiCuuHo, name),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.flag_outlined,
-            size: 16,
-            color: isEvaluated ? primaryColor : Colors.black87,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            isEvaluated ? 'Đã góp ý' : 'Góp ý',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: isEvaluated ? primaryColor : Colors.black87,
+      onTap: isSubmitted
+          ? null
+          : () => _showDanhGiaDialog(context, maNguoiCuuHo, name),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.rate_review_outlined,
+              size: 16,
+              color: isActive ? primaryColor : Colors.black87,
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            Text(
+              isSubmitted
+                  ? 'Đã đánh giá'
+                  : (hasDraftComment ? 'Đánh giá (Đã nhập)' : 'Đánh giá'),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isActive ? primaryColor : Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _showGopYDialog(BuildContext context, String maNguoiCuuHo, String name) {
+  void _showDanhGiaDialog(
+    BuildContext context,
+    String maNguoiCuuHo,
+    String name,
+  ) {
     int tempStars = _selectedRatings[maNguoiCuuHo] ?? 5;
     final TextEditingController textCtrl = TextEditingController(
       text: _draftComments[maNguoiCuuHo] ?? '',
@@ -996,7 +978,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               title: Text(
-                'Đánh giá & Góp ý\n$name',
+                'Đánh giá cứu hộ viên\n$name',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -1044,26 +1026,15 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primaryColor,
                   ),
-                  onPressed: () async {
-                    _selectedRatings[maNguoiCuuHo] = tempStars;
-                    _draftComments[maNguoiCuuHo] = textCtrl.text.trim();
+                  onPressed: () {
+                    setState(() {
+                      _selectedRatings[maNguoiCuuHo] = tempStars;
+                      _draftComments[maNguoiCuuHo] = textCtrl.text.trim();
+                    });
                     Navigator.pop(ctx);
-
-                    bool ok = await _controller.submitDanhGia(
-                      maNguoiCuuHo,
-                      tempStars,
-                      textCtrl.text.trim(),
-                    );
-                    if (ok && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã gửi đánh giá & góp ý thành công!'),
-                        ),
-                      );
-                    }
                   },
                   child: const Text(
-                    'Gửi đánh giá',
+                    'Lưu đánh giá',
                     style: TextStyle(color: Colors.white),
                   ),
                 ),

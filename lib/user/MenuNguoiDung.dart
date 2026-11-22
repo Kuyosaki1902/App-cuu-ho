@@ -9,7 +9,7 @@ import 'package:cuhokhancap/firebase/anh_dai_dien_service.dart';
 import 'package:cuhokhancap/user/LichSuCuuHo/LichSuCuuHoScreen.dart';
 import 'package:cuhokhancap/user/BangXepHangCuuHo/BangXepHangCuuHo.dart';
 import 'package:cuhokhancap/user/HuongDanCuuHo/HuongDanCuuHoScreen.dart';
-
+import 'package:cuhokhancap/user/huong_dan_tai_app_screen.dart';
 
 class MenuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -21,10 +21,8 @@ class MenuNguoiDung extends StatefulWidget {
 }
 
 class _MenuNguoiDungState extends State<MenuNguoiDung> {
-  bool _isExpanded = false;
   final FirebaseService _firebaseService = FirebaseService();
   late Stream<NguoiDungModel?> _userStream;
-  final AnhDaiDienService _anhDaiDienService = AnhDaiDienService();
 
   @override
   void initState() {
@@ -34,22 +32,12 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
     );
   }
 
-  String _getInitials(String name) {
-    if (name.trim().isEmpty) return "ND";
-    List<String> parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length == 1) {
-      return parts[0][0].toUpperCase();
-    }
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
   String _maskPhoneNumber(String phone) {
     if (phone.length < 6) return phone;
     return '${phone.substring(0, 4)} ••• ${phone.substring(phone.length - 3)}';
   }
 
   /// Tạm thời báo "đang phát triển" cho các mục chưa có màn hình.
-  /// Khi có màn hình, thay thế bằng Navigator.push(...) tương ứng.
   void _chuaCoManHinh(String ten) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Tính năng "$ten" đang được phát triển')),
@@ -89,7 +77,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Header: CẤP CỨU 24/7 & Nút đóng
+                        // 1. Header: CẤP CỨU 24/7 & Nút đóng
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -137,7 +125,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Profile User
+                        // 2. Profile User
                         Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFFF5F7FA),
@@ -224,124 +212,11 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         ),
                         const SizedBox(height: 16),
 
-                        // 2. KHUNG ĐĂNG KÝ NGƯỜI CỨU HỘ GIỮ NGUYÊN 2 NÚT NHƯ CŨ
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFB2DFDB)),
-                          ),
-                          child: Column(
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF004D40),
-                                  borderRadius: BorderRadius.vertical(
-                                    top: const Radius.circular(14),
-                                    bottom: Radius.circular(
-                                      _isExpanded ? 0 : 14,
-                                    ),
-                                  ),
-                                ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        _isExpanded = !_isExpanded;
-                                      });
-                                    },
-                                    borderRadius: BorderRadius.vertical(
-                                      top: const Radius.circular(14),
-                                      bottom: Radius.circular(
-                                        _isExpanded ? 0 : 14,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 12,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.favorite,
-                                            color: Colors.white70,
-                                            size: 18,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          const Expanded(
-                                            child: Text(
-                                              "Đăng ký người cứu hộ",
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            _isExpanded
-                                                ? Icons.keyboard_arrow_up
-                                                : Icons.keyboard_arrow_down,
-                                            color: Colors.white,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              AnimatedCrossFade(
-                                firstChild: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: _buildHorizontalButton(
-                                          icon: Icons.verified_user_outlined,
-                                          title: "Người có\nchuyên môn",
-                                          tag: "Chứng chỉ",
-                                          onTap: () => _chuaCoManHinh(
-                                            "Đăng ký người có chuyên môn",
-                                          ), // TODO: Navigator.push màn hình đăng ký có chứng chỉ
-                                          primaryColor: const Color(0xFF00695C),
-                                          bgColor: const Color(0xFFE0F2F1),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _buildHorizontalButton(
-                                          icon: Icons.medical_services_outlined,
-                                          title: "Người thiếu\nchuyên môn",
-                                          tag: "Cộng đồng",
-                                          onTap: () => _chuaCoManHinh(
-                                            "Đăng ký người thiếu chuyên môn",
-                                          ), // TODO: Navigator.push màn hình đăng ký cộng đồng
-                                          primaryColor: const Color(0xFF2E7D32),
-                                          bgColor: const Color(0xFFE8F8E9),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                secondChild: const SizedBox(
-                                  width: double.infinity,
-                                  height: 0,
-                                ),
-                                crossFadeState: _isExpanded
-                                    ? CrossFadeState.showFirst
-                                    : CrossFadeState.showSecond,
-                                duration: const Duration(milliseconds: 300),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        // 3. NÚT HƯỚNG DẪN TẢI VÀ ĐĂNG KÝ CỨU HỘ VIÊN (THIẾT KẾ MỚI)
+                        _buildRescuerGuideBanner(context),
+                        const SizedBox(height: 18),
 
-                        // Menu Items
+                        // 4. Menu Items
                         _buildMenuItem(
                           icon: Icons.history,
                           title: "Lịch sử yêu cầu",
@@ -399,9 +274,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         _buildMenuItem(
                           icon: Icons.settings_outlined,
                           title: "Cài đặt ứng dụng",
-                          onTap: () => _chuaCoManHinh(
-                            "Cài đặt ứng dụng",
-                          ), // TODO: Navigator.push màn hình cài đặt
+                          onTap: () => _chuaCoManHinh("Cài đặt ứng dụng"),
                           isSimple: true,
                         ),
                       ],
@@ -409,7 +282,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                   ),
                 ),
 
-                // 3. BOTTOM PANEL: THAY NÚT GẠT BẰNG NÚT ĐĂNG XUẤT (ONPRESSED ĐỂ TRỐNG)
+                // 5. BOTTOM PANEL: NÚT ĐĂNG XUẤT
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -419,22 +292,17 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         child: ElevatedButton.icon(
                           onPressed: () async {
                             try {
-                              // 1. Cập nhật trạng thái Offline (Giới hạn tối đa 3s tránh nghẽn mạng)
                               await _firebaseService
                                   .capNhatTrangThaiOnline(
                                     widget.maNguoiDung,
                                     false,
                                   )
                                   .timeout(const Duration(seconds: 3));
-                            } catch (_) {
-                              // Bỏ qua lỗi nếu hết 3s để tiếp tục luồng đăng xuất
-                            }
+                            } catch (_) {}
 
-                            // 2. Xóa thông tin mã người dùng đã lưu trong máy
                             final prefs = await SharedPreferences.getInstance();
                             await prefs.remove('maNguoiDung_daLuu');
 
-                            // 3. Chuyển hướng về màn hình Đăng Nhập
                             if (context.mounted) {
                               Navigator.pushAndRemoveUntil(
                                 context,
@@ -508,76 +376,113 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
     );
   }
 
-  Widget _buildHorizontalButton({
-    required IconData icon,
-    required String title,
-    required String tag,
-    required Color primaryColor,
-    required Color bgColor,
-    required VoidCallback onTap,
-  }) {
+  /// Widget nút bấm nổi bật dẫn tới 2 màn hình Hướng dẫn tải & đăng ký cứu hộ viên
+  Widget _buildRescuerGuideBanner(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: primaryColor.withValues(alpha: 0.4)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF004D40), Color(0xFF00796B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: primaryColor.withValues(alpha: 0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+            color: const Color(0xFF004D40).withValues(alpha: 0.28),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const HuongDanTaiAppScreen(),
+              ),
+            );
+          },
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+            padding: const EdgeInsets.all(14),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: primaryColor, size: 24),
+                // Hàng trên: Badge + Mũi tên tròn
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.amberAccent.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.volunteer_activism_rounded,
+                            color: Colors.amberAccent,
+                            size: 13,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            "CẨM NANG CỨU HỘ 115",
+                            style: TextStyle(
+                              color: Colors.amberAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
+
+                // Tiêu đề chính rõ ràng theo đúng yêu cầu
+                const Text(
+                  "Hướng dẫn tải và đăng ký cứu hộ viên",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: Colors.black87,
                     height: 1.3,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: primaryColor.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Text(
-                    tag,
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
+                const SizedBox(height: 5),
+
+                // Mô tả phụ ngắn gọn
+                const Text(
+                  "Xem cách cài đặt app & quy trình duyệt hồ sơ chuyên môn / cộng đồng",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11.5,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -601,47 +506,50 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF5F7FA),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.black54, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: isSimple ? FontWeight.normal : FontWeight.w500,
-                color: isSimple ? Colors.grey.shade700 : Colors.black87,
-              ),
-            ),
-          ),
-          if (trailingText != null && trailingColor != null)
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: trailingColor,
-                borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F7FA),
+                shape: BoxShape.circle,
               ),
+              child: Icon(icon, color: Colors.black54, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Text(
-                trailingText,
+                title,
                 style: TextStyle(
-                  color: trailingTextColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  fontWeight: isSimple ? FontWeight.normal : FontWeight.w500,
+                  color: isSimple ? Colors.grey.shade700 : Colors.black87,
                 ),
               ),
             ),
-        ],
+            if (trailingText != null && trailingColor != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: trailingColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  trailingText,
+                  style: TextStyle(
+                    color: trailingTextColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

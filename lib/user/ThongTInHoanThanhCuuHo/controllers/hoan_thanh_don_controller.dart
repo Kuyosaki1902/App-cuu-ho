@@ -1,4 +1,3 @@
-// lib/user/ThongTInHoanThanhCuuHo/controllers/hoan_thanh_don_controller.dart
 import 'dart:async';
 import 'package:cuhokhancap/firebase/firebase_service.dart';
 import 'package:cuhokhancap/user/Models/danhgiamodel.dart';
@@ -10,10 +9,13 @@ class HoanThanhDonController {
   final FirebaseService _service = FirebaseService();
 
   final ValueNotifier<List<Map<String, dynamic>>> danhSachPhanCongNotifier =
-      ValueNotifier([]);
-  final ValueNotifier<List<DanhGiaModel>> danhGiaNotifier = ValueNotifier([]);
-  final ValueNotifier<bool> isButtonEnabledNotifier = ValueNotifier(false);
-  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(true);
+      ValueNotifier<List<Map<String, dynamic>>>([]);
+  final ValueNotifier<List<DanhGiaModel>> danhGiaNotifier =
+      ValueNotifier<List<DanhGiaModel>>([]);
+  final ValueNotifier<bool> isButtonEnabledNotifier = ValueNotifier<bool>(
+    false,
+  );
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(true);
 
   StreamSubscription? _phanCongSub;
   StreamSubscription? _danhGiaSub;
@@ -23,14 +25,12 @@ class HoanThanhDonController {
   void init() {
     isLoadingNotifier.value = true;
 
-    // 1. Lắng nghe danh sách cứu hộ viên từ YeuCauCuuHo
     _phanCongSub = _service.langNgheDanhSachCuuHo(maYeuCau).listen((danhSach) {
       danhSachPhanCongNotifier.value = danhSach;
       _kiemTraDieuKienHoanThanh(danhSach);
       isLoadingNotifier.value = false;
     });
 
-    // 2. Lắng nghe đánh giá
     _danhGiaSub = _service.langNgheDanhGia(maYeuCau).listen((danhGia) {
       danhGiaNotifier.value = danhGia;
     });
@@ -42,7 +42,6 @@ class HoanThanhDonController {
       return;
     }
 
-    // Đồng bộ với màn hình Tổng quan: có ít nhất 1 cứu hộ viên hoàn thành là mở nút xác nhận
     bool daHoanThanh = danhSach.any((phien) {
       final status = (phien['maTrangThaiTiepNhan'] ?? '').toString();
       return status == 'cuuho_trangthai_phancong_hoanthanh' ||
@@ -52,21 +51,37 @@ class HoanThanhDonController {
     isButtonEnabledNotifier.value = daHoanThanh;
   }
 
-  Future<bool> submitDanhGia(
-    String maNguoiCuuHo,
-    int diem,
-    String nhanXet,
-  ) async {
-    final danhGiaMoi = DanhGiaModel(
-      maDanhGia: maNguoiCuuHo,
+  Future<bool> hoanThanhVaGuiTatCaDanhGia({
+    required Map<String, int> selectedRatings,
+    required Map<String, String> draftComments,
+  }) async {
+    final danhSachThanhVien = danhSachPhanCongNotifier.value;
+    final List<DanhGiaModel> listDanhGia = [];
+
+    for (final tv in danhSachThanhVien) {
+      final String maNguoiCuuHo = (tv['maNguoiCuuHo'] ?? '').toString();
+      if (maNguoiCuuHo.isEmpty) continue;
+
+      final int sao = selectedRatings[maNguoiCuuHo] ?? 5;
+      final String nhanXet = (draftComments[maNguoiCuuHo] ?? '').trim();
+
+      listDanhGia.add(
+        DanhGiaModel(
+          maDanhGia: maYeuCau,
+          maYeuCau: maYeuCau,
+          maNguoiDanhGia: currentUserId,
+          maNguoiCuuHo: maNguoiCuuHo,
+          diemDanhGia: sao,
+          nhanXet: nhanXet,
+          ngayTao: DateTime.now(),
+        ),
+      );
+    }
+
+    return await _service.xacNhanHoanThanhVaGuiDanhGia(
       maYeuCau: maYeuCau,
-      maNguoiDanhGia: currentUserId,
-      maNguoiCuuHo: maNguoiCuuHo,
-      diemDanhGia: diem,
-      nhanXet: nhanXet,
-      ngayTao: DateTime.now(),
+      danhSachDanhGia: listDanhGia,
     );
-    return await _service.guiDanhGiaCuuHoVien(danhGiaMoi);
   }
 
   Future<bool> hoanThanhChuyenDi() async {
