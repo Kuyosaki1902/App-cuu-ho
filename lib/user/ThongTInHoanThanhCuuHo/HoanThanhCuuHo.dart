@@ -183,6 +183,14 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
               ValueListenableBuilder<List<Map<String, dynamic>>>(
                 valueListenable: _controller.danhSachPhanCongNotifier,
                 builder: (context, danhSach, _) {
+                  final bool coNguoiHoanThanh = danhSach.any((p) {
+                    final st = (p['maTrangThaiTiepNhan'] ?? '')
+                        .toString()
+                        .trim();
+                    return st == 'cuuho_trangthai_phancong_hoanthanh' ||
+                        st == 'hoanthanh';
+                  });
+
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -204,14 +212,15 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                           ),
                         ],
                       ),
-                      Text(
-                        'Đánh giá từng thành viên',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
+                      if (coNguoiHoanThanh)
+                        Text(
+                          'Đánh giá từng thành viên',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
                     ],
                   );
                 },
@@ -254,7 +263,9 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                               String maNguoiCuuHo =
                                   thanhVien['maNguoiCuuHo'] ?? '';
                               String trangThaiTuyen =
-                                  thanhVien['maTrangThaiTiepNhan'] ?? '';
+                                  (thanhVien['maTrangThaiTiepNhan'] ?? '')
+                                      .toString()
+                                      .trim();
 
                               var danhGiaCaNhan = danhSachDanhGia
                                   .where(
@@ -293,7 +304,8 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                                       avatarRaw: avatarRaw,
                                       isDone:
                                           trangThaiTuyen ==
-                                          'cuuho_trangthai_phancong_hoanthanh',
+                                              'cuuho_trangthai_phancong_hoanthanh' ||
+                                          trangThaiTuyen == 'hoanthanh',
                                       isSubmitted: isSubmitted,
                                       submittedStars: dGia?.diemDanhGia ?? 0,
                                       submittedComment: dGia?.nhanXet ?? '',
@@ -310,81 +322,104 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              ValueListenableBuilder<bool>(
-                valueListenable: _controller.isButtonEnabledNotifier,
-                builder: (context, isEnabled, child) {
-                  return SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isEnabled
-                            ? primaryColor
-                            : Colors.grey.shade400,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: const Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      label: Text(
-                        isEnabled
-                            ? 'Xác nhận hoàn thành đơn cứu hộ'
-                            : 'Chờ cứu hộ xác nhận hoàn thành...',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      onPressed: isEnabled
-                          ? () async {
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (_) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
+              ValueListenableBuilder<List<Map<String, dynamic>>>(
+                valueListenable: _controller.danhSachPhanCongNotifier,
+                builder: (context, danhSach, _) {
+                  final int tongNguoi = danhSach.length;
+                  final int soNguoiDaXong = danhSach.where((p) {
+                    final st = (p['maTrangThaiTiepNhan'] ?? '')
+                        .toString()
+                        .trim();
+                    return st == 'cuuho_trangthai_phancong_hoanthanh' ||
+                        st == 'hoanthanh';
+                  }).length;
 
-                              bool success = await _controller
-                                  .hoanThanhVaGuiTatCaDanhGia(
-                                    selectedRatings: _selectedRatings,
-                                    draftComments: _draftComments,
-                                  );
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: _controller.isButtonEnabledNotifier,
+                    builder: (context, isEnabled, child) {
+                      final String buttonLabel = isEnabled
+                          ? 'Xác nhận hoàn thành đơn cứu hộ'
+                          : (tongNguoi > 0
+                                ? 'Chờ tất cả cứu hộ hoàn thành ($soNguoiDaXong/$tongNguoi)...'
+                                : 'Chờ cứu hộ xác nhận hoàn thành...');
 
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                if (success) {
-                                  await YeuCauStorageService.clearActiveRequest();
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Đã hoàn tất đơn cứu hộ và gửi đánh giá!',
-                                      ),
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isEnabled
+                                ? primaryColor
+                                : Colors.grey.shade400,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.check_circle_outline_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          label: Text(
+                            buttonLabel,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          onPressed: isEnabled
+                              ? () async {
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (_) => const Center(
+                                      child: CircularProgressIndicator(),
                                     ),
                                   );
-                                  Navigator.popUntil(
-                                    context,
-                                    (route) => route.isFirst,
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Lỗi khi hoàn thành chuyến đi!',
-                                      ),
-                                    ),
-                                  );
+
+                                  bool success = await _controller
+                                      .hoanThanhVaGuiTatCaDanhGia(
+                                        selectedRatings: _selectedRatings,
+                                        draftComments: _draftComments,
+                                      );
+
+                                  if (context.mounted) {
+                                    Navigator.pop(context);
+                                    if (success) {
+                                      await YeuCauStorageService.clearActiveRequest();
+                                      ScaffoldMessenger.of(context)
+                                        ..clearSnackBars()
+                                        ..showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Đã hoàn tất đơn cứu hộ và gửi đánh giá!',
+                                            ),
+                                            duration: Duration(seconds: 1),
+                                          ),
+                                        );
+                                      Navigator.popUntil(
+                                        context,
+                                        (route) => route.isFirst,
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Vẫn còn cứu hộ viên chưa hoàn thành nhiệm vụ!',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
                                 }
-                              }
-                            }
-                          : null,
-                    ),
+                              : null,
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -842,7 +877,7 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                     ),
                   ],
                 )
-              else
+              else if (isDone)
                 _buildDanhGiaButton(
                   context,
                   maNguoiCuuHo: maNguoiCuuHo,
@@ -852,67 +887,70 @@ class _HoanThanhDonCuuHoScreenState extends State<HoanThanhDonCuuHoScreen> {
                 ),
             ],
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(height: 1, color: Color(0xFFF1F5F9)),
-          ),
-          Row(
-            children: [
-              if (!isLeader)
-                _buildDanhGiaButton(
-                  context,
-                  maNguoiCuuHo: maNguoiCuuHo,
-                  name: name,
-                  hasDraftComment: displayComment.isNotEmpty,
-                  isSubmitted: isSubmitted,
-                )
-              else
-                const Text(
-                  'Đánh giá chất lượng',
+          // 🌟 Chỉ hiển thị phần đánh giá khi cứu hộ viên này đã hoàn thành nhiệm vụ
+          if (isDone) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+            ),
+            Row(
+              children: [
+                if (!isLeader)
+                  _buildDanhGiaButton(
+                    context,
+                    maNguoiCuuHo: maNguoiCuuHo,
+                    name: name,
+                    hasDraftComment: displayComment.isNotEmpty,
+                    isSubmitted: isSubmitted,
+                  )
+                else
+                  const Text(
+                    'Đánh giá chất lượng',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                const Spacer(),
+                Row(
+                  children: List.generate(5, (i) {
+                    return GestureDetector(
+                      onTap: isSubmitted
+                          ? null
+                          : () {
+                              setState(() {
+                                _selectedRatings[maNguoiCuuHo] = i + 1;
+                              });
+                            },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                        child: Icon(
+                          Icons.star_rounded,
+                          color: i < currentStars
+                              ? primaryColor
+                              : Colors.grey.shade300,
+                          size: 24,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ),
+            if (displayComment.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '“$displayComment”',
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey.shade700,
                   ),
                 ),
-              const Spacer(),
-              Row(
-                children: List.generate(5, (i) {
-                  return GestureDetector(
-                    onTap: isSubmitted
-                        ? null
-                        : () {
-                            setState(() {
-                              _selectedRatings[maNguoiCuuHo] = i + 1;
-                            });
-                          },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2.5),
-                      child: Icon(
-                        Icons.star_rounded,
-                        color: i < currentStars
-                            ? primaryColor
-                            : Colors.grey.shade300,
-                        size: 24,
-                      ),
-                    ),
-                  );
-                }),
               ),
-            ],
-          ),
-          if (displayComment.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                '“$displayComment”',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-            ),
+          ],
         ],
       ),
     );

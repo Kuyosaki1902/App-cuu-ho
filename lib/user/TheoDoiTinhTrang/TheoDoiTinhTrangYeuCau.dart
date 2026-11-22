@@ -1,5 +1,6 @@
 // lib/user/TheoDoiTinhTrang/TheoDoiTinhTrangYeuCau.dart
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:cuhokhancap/user/TheoDoiTinhTrang/controllers/theo_doi_tinh_trang_controller.dart';
 import 'package:cuhokhancap/user/ThongTInHoanThanhCuuHo/HoanThanhCuuHo.dart';
@@ -479,7 +480,7 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                       label: 'Xem chi tiết',
                       color: primaryColor,
                       onPressed: () {
-                        Navigator.push(
+                        Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
                             builder: (_) => TongQuanBacSiTiepNhan(
@@ -501,7 +502,7 @@ class _TheoDoiTinhTrangScreenState extends State<TheoDoiTinhTrangScreen> {
                         label: 'Hoàn thành cứu hộ',
                         color: Colors.blueAccent,
                         onPressed: () {
-                          Navigator.push(
+                          Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
                               builder: (_) => HoanThanhDonCuuHoScreen(

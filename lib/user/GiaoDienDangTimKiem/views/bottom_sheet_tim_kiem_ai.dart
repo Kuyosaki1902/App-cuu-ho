@@ -7,7 +7,6 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
   final Color primaryColor;
   final TimKiemCuuHoController controller;
 
-  // 🌟 Nhận trạng thái và hàm trigger từ ngoài truyền vào
   final bool isExpanded;
   final Function(bool) onToggleExpanded;
 
@@ -44,13 +43,18 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
 
     double currentRadiusKm =
         controller.scanRadii[controller.currentScanStep] / 1000;
-    int rescuerCount = controller.rescuerList.length;
+    int totalRescuerCount = controller.rescuerList.length;
+    int aiFoundCount = controller.aiFoundCount;
     bool isMaxScanReached =
         controller.currentScanStep == controller.scanRadii.length - 1;
 
     bool isManualSelect =
         controller.yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien';
     int elapsed = controller.elapsedSeconds;
+    bool isWaitingManual = isManualSelect && elapsed <= 60;
+
+    // Số cứu hộ viên tìm được dùng cho các tiến trình quét AI
+    int scanFoundCount = isManualSelect ? aiFoundCount : totalRescuerCount;
 
     String mainStatusText = '';
     String headerBadgeText = 'PHỐI HỢP CẤP TỐC AI';
@@ -60,21 +64,22 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
       if (elapsed <= 60) {
         int targetCount = controller.manualSelectedCount > 0
             ? controller.manualSelectedCount
-            : (controller.assignedRescuerIds.isNotEmpty
-                  ? controller.assignedRescuerIds.length
+            : (controller.manualSelectedIds.isNotEmpty
+                  ? controller.manualSelectedIds.length
                   : 1);
         mainStatusText = 'Đang chờ $targetCount cứu hộ viên tiếp nhận';
       } else if (elapsed > 60 && elapsed <= 120) {
-        mainStatusText =
-            'Đang tìm kiếm cứu hộ viên bổ sung. Đã tìm được $rescuerCount bác sĩ';
+        mainStatusText = aiFoundCount == 0
+            ? 'Đang tìm kiếm cứu hộ viên bổ sung...'
+            : 'Đang tìm kiếm cứu hộ viên bổ sung. Đã tìm được $aiFoundCount bác sĩ';
       } else {
         mainStatusText = 'Không tìm được, đang liên hệ admin';
       }
     } else {
       if (elapsed <= 60) {
-        mainStatusText = rescuerCount == 0
+        mainStatusText = totalRescuerCount == 0
             ? 'Đang tìm kiếm cứu hộ viên...'
-            : 'Đã tìm thấy $rescuerCount người cứu hộ';
+            : 'Đã tìm thấy $totalRescuerCount người cứu hộ';
       } else {
         mainStatusText = 'Không tìm được, đang liên hệ admin';
       }
@@ -83,12 +88,11 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
     return Align(
       alignment: Alignment.bottomCenter,
       child: GestureDetector(
-        // Vuốt lên/xuống để đổi trạng thái
         onVerticalDragEnd: (details) {
           if (details.primaryVelocity! > 0 && isExpanded) {
-            onToggleExpanded(false); // Vuốt xuống -> Thu gọn
+            onToggleExpanded(false);
           } else if (details.primaryVelocity! < 0 && !isExpanded) {
-            onToggleExpanded(true); // Vuốt lên -> Mở rộng
+            onToggleExpanded(true);
           }
         },
         child: AnimatedContainer(
@@ -106,13 +110,13 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Thanh kéo (Nhấn để bật/tắt)
+              // Thanh kéo
               GestureDetector(
                 onTap: () {
                   onToggleExpanded(!isExpanded);
                 },
                 child: Container(
-                  color: Colors.transparent, // Vùng bấm rộng hơn
+                  color: Colors.transparent,
                   child: Center(
                     child: Container(
                       width: 40,
@@ -200,9 +204,9 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                 ],
               ),
 
-              // 🌟 Ẩn/Hiện nội dung bên dưới khi thu gọn
+              // Ẩn/Hiện nội dung bên dưới khi thu gọn
               AnimatedCrossFade(
-                firstChild: const SizedBox(height: 0), // Trạng thái đóng
+                firstChild: const SizedBox(height: 0),
                 secondChild: Column(
                   children: [
                     const SizedBox(height: 16),
@@ -274,20 +278,24 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
 
-                    // 3. Tiến trình Quét bán kính
+                    // 3. Tiến trình Quét bán kính (hoặc Trạng thái chờ người được chọn trong 60s đầu)
                     Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: rescuerCount > 0
+                            color: (!isWaitingManual && scanFoundCount > 0)
                                 ? const Color(0xFFE8F5E9)
                                 : Colors.orange.shade50,
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            rescuerCount > 0 ? Icons.check : Icons.search,
-                            color: rescuerCount > 0
+                            isWaitingManual
+                                ? Icons.schedule
+                                : (scanFoundCount > 0
+                                      ? Icons.check
+                                      : Icons.search),
+                            color: (!isWaitingManual && scanFoundCount > 0)
                                 ? Colors.green
                                 : Colors.orange,
                             size: 16,
@@ -299,16 +307,20 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Quét trong bán kính ${currentRadiusKm.toStringAsFixed(1)}km',
+                                isWaitingManual
+                                    ? 'Chờ cứu hộ viên bạn chọn phản hồi'
+                                    : 'Quét trong bán kính ${currentRadiusKm.toStringAsFixed(1)}km',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),
                               ),
                               Text(
-                                rescuerCount == 0
-                                    ? 'Đang mở rộng vùng quét tìm kiếm...'
-                                    : 'Đã tìm thấy $rescuerCount cứu hộ viên gần nhất',
+                                isWaitingManual
+                                    ? 'Nếu chưa ai nhận sau 1 phút, hệ thống sẽ quét thêm'
+                                    : (scanFoundCount == 0
+                                          ? 'Đang mở rộng vùng quét tìm kiếm...'
+                                          : 'Đã tìm thấy $scanFoundCount cứu hộ viên gần nhất'),
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 12,
@@ -318,13 +330,17 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          (rescuerCount >= 5 || isMaxScanReached)
-                              ? 'Đã xong'
-                              : 'Đang quét...',
+                          isWaitingManual
+                              ? 'Đang chờ'
+                              : ((scanFoundCount >= 5 || isMaxScanReached)
+                                    ? 'Đã xong'
+                                    : 'Đang quét...'),
                           style: TextStyle(
-                            color: (rescuerCount >= 5 || isMaxScanReached)
-                                ? Colors.green
-                                : Colors.orange,
+                            color: isWaitingManual
+                                ? Colors.orange
+                                : ((scanFoundCount >= 5 || isMaxScanReached)
+                                      ? Colors.green
+                                      : Colors.orange),
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -339,14 +355,16 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: rescuerCount > 0
+                            color: totalRescuerCount > 0
                                 ? Colors.blue.shade50
                                 : Colors.grey.shade100,
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             Icons.hourglass_empty,
-                            color: rescuerCount > 0 ? Colors.blue : Colors.grey,
+                            color: totalRescuerCount > 0
+                                ? Colors.blue
+                                : Colors.grey,
                             size: 16,
                           ),
                         ),
@@ -364,8 +382,8 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                rescuerCount > 0
-                                    ? 'Đã gửi thông báo đến $rescuerCount cứu hộ'
+                                totalRescuerCount > 0
+                                    ? 'Đã gửi thông báo đến $totalRescuerCount cứu hộ'
                                     : 'Chờ kết nối cứu hộ viên chấp nhận',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
@@ -376,9 +394,11 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          rescuerCount > 0 ? 'Chờ xác nhận.' : 'Chờ ghép..',
+                          totalRescuerCount > 0
+                              ? 'Chờ xác nhận.'
+                              : 'Chờ ghép..',
                           style: TextStyle(
-                            color: rescuerCount > 0
+                            color: totalRescuerCount > 0
                                 ? Colors.blue
                                 : Colors.grey.shade500,
                             fontWeight: FontWeight.bold,
@@ -397,7 +417,7 @@ class BottomSheetTimKiemAIWidget extends StatelessWidget {
 
               const SizedBox(height: 20),
 
-              // 5. Nút thao tác (Luôn hiển thị)
+              // 5. Nút thao tác
               Row(
                 children: [
                   Expanded(

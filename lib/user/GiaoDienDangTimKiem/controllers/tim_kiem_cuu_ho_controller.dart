@@ -14,8 +14,8 @@ import 'package:cuhokhancap/user/Models/chitietmotahientruongmodel.dart';
 import 'package:cuhokhancap/user/Models/luuanhmodel.dart';
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/Models/yeucaucuuhomodel.dart';
-// Dùng hàm bỏ dấu tiếng Việt để so khớp chuyên ngành/kỹ năng không phụ thuộc dấu
-import 'package:cuhokhancap/user/Models/videohuongdanmodel.dart' show boDauTiengViet;
+import 'package:cuhokhancap/user/Models/videohuongdanmodel.dart'
+    show boDauTiengViet;
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
 
 class _ArrowClipper extends CustomClipper<Path> {
@@ -67,7 +67,7 @@ class TimKiemCuuHoController {
 
   // 🌟 Bộ đếm duy nhất: mọi thứ (đồng hồ, bán kính, quét, quá hạn) đều bám vào elapsedSeconds
   final Stopwatch _stopwatch = Stopwatch();
-  int _baseSeconds = 0; // số giây đã chạy từ phiên trước (khi mở lại app)
+  int _baseSeconds = 0;
   int _aiStartSecond =
       0; // 0 = quét ngay; 60 = chờ nhóm chỉ định 60s rồi mới quét
   bool _setupDone = false;
@@ -80,11 +80,16 @@ class TimKiemCuuHoController {
   List<Map<String, dynamic>> rescuerList = [];
   List<String> acceptedRescuerIds = [];
   Set<String> assignedRescuerIds = {};
+
+  // 🌟 Tách riêng người chọn tay và người do AI quét thêm
+  Set<String> manualSelectedIds = {};
+  Set<String> aiFoundRescuerIds = {};
+  int get aiFoundCount => aiFoundRescuerIds.length;
+
   bool _isOverdueHandled = false;
 
   Map<String, dynamic>? aiAnalysisResult;
 
-  // Cache để không đọc lại Firestore mỗi 3 giây cho cùng một cứu hộ viên
   final Map<String, _RescuerScoreInfo> _scoreInfoCache = {};
   _Catalogs? _catalogCache;
 
@@ -99,10 +104,7 @@ class TimKiemCuuHoController {
 
   bool _hasNavigated = false;
   int get limitCans => yeuCauCuuHo?.soNguoiCanCuuHo ?? 3;
-  // ---------------------------------------------------------------------------
-  // Danh mục hợp lệ (kỹ năng + chuyên ngành) để Gemini CHỈ được chọn trong đó,
-  // nhờ vậy kết quả khớp chính xác với dữ liệu cứu hộ viên khi chấm điểm.
-  // ---------------------------------------------------------------------------
+
   Future<_Catalogs> _loadCatalogs() async {
     if (_catalogCache != null) return _catalogCache!;
 
@@ -144,7 +146,6 @@ class TimKiemCuuHoController {
           .timeout(const Duration(seconds: 6));
       danhSachAnhBase64 = anh;
 
-      // Chạy nền nên có thể chờ lâu hơn; GeminiService tự giới hạn ~18s
       final result = await _geminiService
           .analyzeSceneAndSuggestSkills(
             moTa: moTa,
@@ -156,8 +157,6 @@ class TimKiemCuuHoController {
 
       if (_disposed || _isOverdueHandled) return;
 
-      // Gemini lỗi/không ra kết quả thì trả về danh sách rỗng -> KHÔNG được ghi đè
-      // kết quả cục bộ đã có. Mỗi danh sách rỗng sẽ giữ lại bản cục bộ.
       final geminiCn = _asStringList(result['chuyenNganhYeuCau']);
       final geminiKn = _asStringList(result['kyNangYeuCau']);
       final local = aiAnalysisResult;
@@ -175,10 +174,8 @@ class TimKiemCuuHoController {
     }
   }
 
-  // Kết quả tạm tính ngay trên máy (không cần mạng). Trả về ĐÚNG mã kỹ năng
-  // trong CSDL (kn_cpr, kn_bang_bo, kn_co_dinh, kn_bong, kn_di_vat, kn_duoi_nuoc).
   Map<String, dynamic> _localAnalyze(String text) {
-    final t = boDauTiengViet(text); // bỏ dấu: "chảy máu" và "chay mau" đều khớp
+    final t = boDauTiengViet(text);
     final chuyenNganh = <String>{};
     final kyNang = <String>{};
 
@@ -208,7 +205,10 @@ class TimKiemCuuHoController {
       cn: ['chấn thương chỉnh hình', 'ngoại khoa'],
       kn: ['kn_co_dinh', 'kn_bang_bo'],
     );
-    match(['bi bong', 'bong lua', 'bong nuoc', 'bong hoa chat'], kn: ['kn_bong']);
+    match(
+      ['bi bong', 'bong lua', 'bong nuoc', 'bong hoa chat'],
+      kn: ['kn_bong'],
+    );
     match(
       ['hoc di vat', 'nghen', 'sac nuoc', 'sac thuc an', 'mac xuong'],
       cn: ['hồi sức'],
@@ -243,6 +243,9 @@ class TimKiemCuuHoController {
     _isOverdueHandled = false;
 
     assignedRescuerIds.clear();
+    manualSelectedIds.clear();
+    aiFoundRescuerIds.clear();
+    manualSelectedCount = 0;
     initialRescuerLocations.clear();
     acceptedRescuerIds.clear();
     rescuerList.clear();
@@ -259,11 +262,43 @@ class TimKiemCuuHoController {
     onUpdate();
 
     try {
-      // 🌟 1. Lưu mã yêu cầu vào bộ nhớ máy (Đã có sẵn)
+      // 1. Lưu mã yêu cầu vào bộ nhớ máy
       await YeuCauStorageService.saveActiveRequest(maYeuCau);
       yeuCauCuuHo = await _firebaseService.getYeuCauCuuHoById(maYeuCau);
 
-      // ================= THÊM ĐOẠN CODE PHỤC HỒI NÀY VÀO ĐÂY =================
+      // Lấy tọa độ nạn nhân từ đơn trước để tính khoảng cách khôi phục chính xác
+      if (yeuCauCuuHo != null &&
+          yeuCauCuuHo!.viDo != null &&
+          yeuCauCuuHo!.kinhDo != null) {
+        currentDeviceLocation = LatLng(
+          yeuCauCuuHo!.viDo!,
+          yeuCauCuuHo!.kinhDo!,
+        );
+      }
+
+      moveToCurrentLocation();
+
+      // 2. Xác định danh sách người được chọn thủ công gốc:
+      // - Nếu có truyền danhSachChiDinh (lần đầu từ màn Chọn cứu hộ viên) -> lưu vào cache.
+      // - Nếu không truyền (mọi lần vào lại sau) -> đọc từ cache.
+      List<String> savedManualIds =
+          await YeuCauStorageService.getManualSelectedIds(maYeuCau);
+      final bool isFirstManualAssign =
+          savedManualIds.isEmpty &&
+          danhSachChiDinh != null &&
+          danhSachChiDinh.isNotEmpty;
+
+      if (isFirstManualAssign) {
+        savedManualIds = List<String>.from(danhSachChiDinh);
+        await YeuCauStorageService.saveManualSelectedIds(
+          maYeuCau,
+          savedManualIds,
+        );
+      }
+      manualSelectedIds = savedManualIds.toSet();
+      manualSelectedCount = manualSelectedIds.length;
+
+      // 3. Phục hồi danh sách đã phân công từ Firestore (nếu có)
       if (yeuCauCuuHo != null && yeuCauCuuHo!.danhSachPhanCongVien.isNotEmpty) {
         List<String> assignedIds = yeuCauCuuHo!.danhSachPhanCongVien.keys
             .toList();
@@ -271,26 +306,29 @@ class TimKiemCuuHoController {
             .getUsersByIds(assignedIds);
 
         for (var user in existingUsers) {
-          String status = yeuCauCuuHo!.danhSachPhanCongVien[user.maNguoiDung]!;
+          final uid = user.maNguoiDung;
+          if (uid == null) continue;
+          String status = yeuCauCuuHo!.danhSachPhanCongVien[uid]!;
 
           // Bỏ qua người đã từ chối hoặc bị hủy
           if (status != 'cuuho_trangthai_phancong_tuchoi' &&
               status != 'cuuho_trangthai_phancong_dahuy') {
-            assignedRescuerIds.add(user.maNguoiDung!);
+            assignedRescuerIds.add(uid);
+
+            // Ai không nằm trong danh sách chọn tay gốc -> chính là người AI đã quét được
+            if (!manualSelectedIds.contains(uid)) {
+              aiFoundRescuerIds.add(uid);
+            }
 
             if (status == 'cuuho_trangthai_phancong_tiepnhan' ||
                 status == 'cuuho_trangthai_phancong_daden' ||
                 status == 'cuuho_trangthai_phancong_dangcuuho' ||
                 status == 'cuuho_trangthai_phancong_hoanthanh') {
-              // 👈 Thêm dòng này
-              acceptedRescuerIds.add(user.maNguoiDung!);
+              acceptedRescuerIds.add(uid);
             }
 
             if (user.viDo != null && user.kinhDo != null) {
-              initialRescuerLocations[user.maNguoiDung!] = LatLng(
-                user.viDo!,
-                user.kinhDo!,
-              );
+              initialRescuerLocations[uid] = LatLng(user.viDo!, user.kinhDo!);
               double distanceMeters = Geolocator.distanceBetween(
                 currentDeviceLocation.latitude,
                 currentDeviceLocation.longitude,
@@ -309,7 +347,7 @@ class TimKiemCuuHoController {
         onUpdate();
       }
 
-      // 🌟 2. Phục hồi thời gian đã quét từ trước (Nếu app bị đóng mở lại)
+      // 4. Phục hồi thời gian đã quét từ trước (Nếu app bị đóng mở lại / quay lại từ màn Theo dõi)
       int? savedSeconds = await YeuCauStorageService.getElapsedSeconds(
         maYeuCau,
       );
@@ -319,17 +357,6 @@ class TimKiemCuuHoController {
         debugPrint('🔄 Phục hồi phiên tìm kiếm cũ: $elapsedSeconds s');
       }
 
-      if (yeuCauCuuHo != null &&
-          yeuCauCuuHo!.viDo != null &&
-          yeuCauCuuHo!.kinhDo != null) {
-        currentDeviceLocation = LatLng(
-          yeuCauCuuHo!.viDo!,
-          yeuCauCuuHo!.kinhDo!,
-        );
-      }
-
-      moveToCurrentLocation();
-
       if (yeuCauCuuHo != null) {
         await _firebaseService.notifyConnectedRelatives(
           maNguoiYeuCau: yeuCauCuuHo!.maNguoiYeuCau,
@@ -338,35 +365,25 @@ class TimKiemCuuHoController {
           kinhDo: currentDeviceLocation.longitude,
         );
       }
+
       chiTietMoTa = await _firebaseService.getMoTaHienTruongById(maYeuCau);
       if (chiTietMoTa != null &&
           yeuCauCuuHo?.maLoaiYeuCau != 'loaiyeucau_sos') {
-        // Có kết quả tạm ngay lập tức, không cần mạng
         final g = chiTietMoTa!.ghiChuText;
         final text = g is Map
             ? '${(g['trieuChung'] ?? []).join(' ')} ${g['moTaChiTiet'] ?? ''}'
             : (g?.toString() ?? '');
         aiAnalysisResult = _localAnalyze(text);
-        // Gemini chạy nền, không chặn tìm kiếm
         _runGeminiInBackground(maYeuCau);
       }
 
-      // 🌟 3. Lắng nghe và kiểm tra Firebase
-      await updateMapOverlays();
-      _listenToPhanCongChanges(maYeuCau, onUpdate, onRescuerAccepted);
-
-      // Thay thế khối if (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' ...) ở dòng 165:
+      // 5. Xử lý chế độ chọn cứu hộ viên (chỉ phân công lần đầu, vào lại chỉ khôi phục)
       if (yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien') {
-        // 1. Lấy danh sách chỉ định từ tham số truyền vào, nếu null thì lấy từ Firestore đã lưu
-        List<String> effectiveChiDinh =
-            (danhSachChiDinh != null && danhSachChiDinh.isNotEmpty)
-            ? danhSachChiDinh
-            : assignedRescuerIds.toList();
+        _aiStartSecond = 60;
 
-        if (effectiveChiDinh.isNotEmpty) {
-          manualSelectedCount = effectiveChiDinh.length;
+        if (manualSelectedIds.isNotEmpty) {
           List<NguoiDungModel> targetUsers = await _firebaseService
-              .getUsersByIds(effectiveChiDinh);
+              .getUsersByIds(manualSelectedIds.toList());
           double maxDistanceMeters = 1000.0;
 
           for (var user in targetUsers) {
@@ -383,7 +400,9 @@ class TimKiemCuuHoController {
             }
           }
 
-          if (maxDistanceMeters <= 1000) {
+          if (elapsedSeconds >= _aiStartSecond) {
+            currentScanStep = _stepForElapsed(elapsedSeconds);
+          } else if (maxDistanceMeters <= 1000) {
             currentScanStep = 0;
           } else if (maxDistanceMeters <= 3000) {
             currentScanStep = 1;
@@ -391,21 +410,20 @@ class TimKiemCuuHoController {
             currentScanStep = 2;
           }
 
-          await updateMapOverlays();
-
-          // Chỉ tạo bản ghi phân công mới nếu là lần đầu (truyền danhSachChiDinh từ màn hình chọn)
-          if (danhSachChiDinh != null && danhSachChiDinh.isNotEmpty) {
+          if (isFirstManualAssign) {
             await _assignToSpecificRescuers(
               maYeuCau,
-              danhSachChiDinh,
+              manualSelectedIds.toList(),
               onUpdate,
             );
           }
-
-          // Chờ nhóm chỉ định 60s rồi mới quét AI (do _onTick điều khiển)
-          _aiStartSecond = 60;
         }
+      } else {
+        currentScanStep = _stepForElapsed(elapsedSeconds);
       }
+
+      await updateMapOverlays();
+      _listenToPhanCongChanges(maYeuCau, onUpdate, onRescuerAccepted);
     } catch (e) {
       debugPrint('Lỗi khởi tạo tìm kiếm cứu hộ: $e');
     } finally {
@@ -431,6 +449,7 @@ class TimKiemCuuHoController {
     for (var user in targetUsers) {
       if (user.viDo == null || user.kinhDo == null) continue;
       if (user.nhanCaCuuHo == true) continue;
+      if (assignedRescuerIds.contains(user.maNguoiDung)) continue;
 
       double distanceMeters = Geolocator.distanceBetween(
         currentDeviceLocation.latitude,
@@ -449,7 +468,7 @@ class TimKiemCuuHoController {
         'distanceKm': (distanceMeters / 1000).toStringAsFixed(1),
       });
 
-      _addRescuerMarker(user, distanceMeters);
+      await _addRescuerMarker(user, distanceMeters);
       await _createAssignmentRecord(maYeuCau, user.maNguoiDung!);
       hasNewAssignment = true;
     }
@@ -556,7 +575,6 @@ class TimKiemCuuHoController {
   int get _maxSeconds =>
       yeuCauCuuHo?.maLoaiYeuCau == 'loaiyeucau_choncuuhovien' ? 120 : 60;
 
-  // 🌟 Bán kính phụ thuộc DUY NHẤT vào thời gian quét: 0s=1000m, 15s=3000m, 30s=5000m
   int _stepForElapsed(int sec) {
     final t = sec - _aiStartSecond;
     if (t >= 30) return 2; // 5000m
@@ -592,14 +610,13 @@ class TimKiemCuuHoController {
   }
 
   Future<void> _onTick(String maYeuCau, Function() onUpdate) async {
-    if (acceptedRescuerIds.isNotEmpty)
-      return; // đã có người nhận -> màn Tổng quan lo
+    if (acceptedRescuerIds.isNotEmpty) return;
 
     if (elapsedSeconds >= _maxSeconds) {
       await _handleOverdue(maYeuCau);
       return;
     }
-    if (elapsedSeconds < _aiStartSecond) return; // đang chờ nhóm chỉ định
+    if (elapsedSeconds < _aiStartSecond) return;
 
     if (!_switchedToAI) {
       _switchedToAI = true;
@@ -618,7 +635,6 @@ class TimKiemCuuHoController {
       currentScanStep = step;
       await updateMapOverlays();
     }
-    // Quét ngay khi vừa mở rộng bán kính, còn lại quét mỗi 3s
     if (stepChanged || (elapsedSeconds - _aiStartSecond) % 3 == 0) {
       await _scanSafely(maYeuCau, onUpdate);
     }
@@ -637,12 +653,10 @@ class TimKiemCuuHoController {
   Future<void> _handleOverdue(String maYeuCau) async {
     if (_isOverdueHandled) return;
     _isOverdueHandled = true;
-    // 🌟 KHÔNG dừng bộ đếm: đồng hồ vẫn chạy tiếp sau khi quá hạn.
-    // Ticker chỉ còn cập nhật giao diện; việc quét / phân công đã bị chặn bởi
-    // cờ _isOverdueHandled trong _startTicker.
-    debugPrint('⏳ Đã quá $_maxSeconds s, chuyển sang QUÁ HẠN (đồng hồ vẫn chạy)!');
+    debugPrint(
+      '⏳ Đã quá $_maxSeconds s, chuyển sang QUÁ HẠN (đồng hồ vẫn chạy)!',
+    );
 
-    // Mỗi bước độc lập: một bước lỗi không làm bỏ qua các bước còn lại
     Future<void> safe(String label, Future<dynamic> Function() job) async {
       try {
         await job();
@@ -651,7 +665,6 @@ class TimKiemCuuHoController {
       }
     }
 
-    // Quan trọng nhất: đổi trạng thái đơn trước
     await safe(
       'trangThai',
       () => _firebaseService.updateTinhTrangYeuCau(
@@ -664,35 +677,6 @@ class TimKiemCuuHoController {
     );
 
     await safe('xoaGhiNhoMay', () => YeuCauStorageService.clearActiveRequest());
-
-    // Thu hồi các lời mời đã phát mà chưa ai nhận
-    await safe(
-      'thuHoiLoiMoi',
-      () => _firebaseService.cancelRemainingAssignments(maYeuCau),
-    );
-    await safe(
-      'realtimeDB',
-      () => _firebaseService.removeRequestFromRealtimeDB(maYeuCau),
-    );
-
-    final maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;
-    if (maNanNhan != null) {
-      await safe(
-        'thongBaoNguoiThan',
-        () => _firebaseService.removeEmergencyNotification(maNanNhan: maNanNhan),
-      );
-    }
-
-    for (final maCuuHo in assignedRescuerIds) {
-      await safe(
-        'moKhoa_$maCuuHo',
-        () => _firebaseService.updateUserOnlineStatus(
-          userId: maCuuHo,
-          isOnline: true,
-          nhanCaCuuHo: false,
-        ),
-      );
-    }
   }
 
   Future<void> _executeAIScanAndAssign(
@@ -761,6 +745,8 @@ class TimKiemCuuHoController {
       double distanceKm = (item['distanceMeters'] as double) / 1000;
 
       assignedRescuerIds.add(maNguoiCuuHo);
+      // 🌟 Chỉ ghi nhận vào danh sách AI quét được
+      aiFoundRescuerIds.add(maNguoiCuuHo);
       initialRescuerLocations[maNguoiCuuHo] = LatLng(user.viDo!, user.kinhDo!);
       rescuerList.add({
         'user': user,
@@ -788,7 +774,6 @@ class TimKiemCuuHoController {
   List<String> _asStringList(dynamic v) =>
       v is List ? v.map((e) => e.toString()).toList() : <String>[];
 
-  // Đọc chuyên ngành + kỹ năng của cứu hộ viên 1 lần rồi dùng lại (cache)
   Future<_RescuerScoreInfo> _getRescuerInfo(String uid) async {
     final cached = _scoreInfoCache[uid];
     if (cached != null) return cached;
@@ -816,7 +801,6 @@ class TimKiemCuuHoController {
 
     final info = await _getRescuerInfo(user.maNguoiDung!);
 
-    // Chuyên ngành: so khớp không phân biệt dấu, hai chiều
     final cn = boDauTiengViet(info.chuyenNganh).trim();
     if (cn.isNotEmpty) {
       for (final req in reqChuyenNganh) {
@@ -826,7 +810,6 @@ class TimKiemCuuHoController {
       }
     }
 
-    // Kỹ năng: mỗi kỹ năng của cứu hộ viên chỉ được cộng 1 lần
     for (final skId in info.skillIds) {
       final s = boDauTiengViet(skId).trim();
       if (s.isEmpty) continue;
@@ -1040,7 +1023,6 @@ class TimKiemCuuHoController {
       ),
     );
 
-    // Chờ 150ms để Image.memory decode xong bytes ảnh trước khi chụp ra BitmapDescriptor
     BitmapDescriptor customIcon = await rescuerMarkerWidget.toBitmapDescriptor(
       waitToRender: const Duration(milliseconds: 150),
     );
@@ -1184,7 +1166,6 @@ class TimKiemCuuHoController {
     _stopwatch.stop();
   }
 
-  // Thêm hàm này vào cuối class TimKiemCuuHoController
   void stopSearchWithoutCanceling() {
     _stopAllTimers();
     _phanCongSubscription?.cancel();
@@ -1204,7 +1185,6 @@ class TimKiemCuuHoController {
       _stopAllTimers();
       _phanCongSubscription?.cancel();
 
-      // Hủy tìm kiếm thì xóa bộ nhớ
       await YeuCauStorageService.clearActiveRequest();
 
       String? maNanNhan = yeuCauCuuHo?.maNguoiYeuCau;

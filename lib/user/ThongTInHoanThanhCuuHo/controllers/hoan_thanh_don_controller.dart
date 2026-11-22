@@ -36,19 +36,21 @@ class HoanThanhDonController {
     });
   }
 
+  bool _laPhienDaHoanThanh(Map<String, dynamic> phien) {
+    final status = (phien['maTrangThaiTiepNhan'] ?? '').toString().trim();
+    return status == 'cuuho_trangthai_phancong_hoanthanh' ||
+        status == 'hoanthanh';
+  }
+
   void _kiemTraDieuKienHoanThanh(List<Map<String, dynamic>> danhSach) {
     if (danhSach.isEmpty) {
       isButtonEnabledNotifier.value = false;
       return;
     }
 
-    bool daHoanThanh = danhSach.any((phien) {
-      final status = (phien['maTrangThaiTiepNhan'] ?? '').toString();
-      return status == 'cuuho_trangthai_phancong_hoanthanh' ||
-          status == 'hoanthanh';
-    });
-
-    isButtonEnabledNotifier.value = daHoanThanh;
+    // Chỉ cho phép hoàn thành đơn khi TẤT CẢ cứu hộ viên trong danh sách đều đã hoàn thành
+    final bool tatCaDaHoanThanh = danhSach.every(_laPhienDaHoanThanh);
+    isButtonEnabledNotifier.value = tatCaDaHoanThanh;
   }
 
   Future<bool> hoanThanhVaGuiTatCaDanhGia({
@@ -56,6 +58,13 @@ class HoanThanhDonController {
     required Map<String, String> draftComments,
   }) async {
     final danhSachThanhVien = danhSachPhanCongNotifier.value;
+
+    // Chặn tuyệt đối nếu còn ít nhất 1 người chưa hoàn thành
+    if (danhSachThanhVien.isEmpty ||
+        !danhSachThanhVien.every(_laPhienDaHoanThanh)) {
+      return false;
+    }
+
     final List<DanhGiaModel> listDanhGia = [];
 
     for (final tv in danhSachThanhVien) {
@@ -85,6 +94,11 @@ class HoanThanhDonController {
   }
 
   Future<bool> hoanThanhChuyenDi() async {
+    final danhSachThanhVien = danhSachPhanCongNotifier.value;
+    if (danhSachThanhVien.isEmpty ||
+        !danhSachThanhVien.every(_laPhienDaHoanThanh)) {
+      return false;
+    }
     return await _service.xacNhanHoanThanhYeuCau(maYeuCau);
   }
 
