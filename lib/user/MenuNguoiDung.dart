@@ -6,6 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'DangNhap.dart';
 import 'package:cuhokhancap/user/Design/anh_dai_dien_widget.dart';
 import 'package:cuhokhancap/firebase/anh_dai_dien_service.dart';
+import 'package:cuhokhancap/user/LichSuCuuHo/LichSuCuuHoScreen.dart';
+import 'package:cuhokhancap/user/BangXepHangCuuHo/BangXepHangCuuHo.dart';
+import 'package:cuhokhancap/user/HuongDanCuuHo/HuongDanCuuHoScreen.dart';
+
 
 class MenuNguoiDung extends StatefulWidget {
   final String maNguoiDung;
@@ -42,6 +46,14 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
   String _maskPhoneNumber(String phone) {
     if (phone.length < 6) return phone;
     return '${phone.substring(0, 4)} ••• ${phone.substring(phone.length - 3)}';
+  }
+
+  /// Tạm thời báo "đang phát triển" cho các mục chưa có màn hình.
+  /// Khi có màn hình, thay thế bằng Navigator.push(...) tương ứng.
+  void _chuaCoManHinh(String ten) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Tính năng "$ten" đang được phát triển')),
+    );
   }
 
   @override
@@ -292,6 +304,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                           icon: Icons.verified_user_outlined,
                                           title: "Người có\nchuyên môn",
                                           tag: "Chứng chỉ",
+                                          onTap: () => _chuaCoManHinh(
+                                            "Đăng ký người có chuyên môn",
+                                          ), // TODO: Navigator.push màn hình đăng ký có chứng chỉ
                                           primaryColor: const Color(0xFF00695C),
                                           bgColor: const Color(0xFFE0F2F1),
                                         ),
@@ -302,6 +317,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                                           icon: Icons.medical_services_outlined,
                                           title: "Người thiếu\nchuyên môn",
                                           tag: "Cộng đồng",
+                                          onTap: () => _chuaCoManHinh(
+                                            "Đăng ký người thiếu chuyên môn",
+                                          ), // TODO: Navigator.push màn hình đăng ký cộng đồng
                                           primaryColor: const Color(0xFF2E7D32),
                                           bgColor: const Color(0xFFE8F8E9),
                                         ),
@@ -327,6 +345,14 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         _buildMenuItem(
                           icon: Icons.history,
                           title: "Lịch sử yêu cầu",
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LichSuCuuHoScreen(
+                                currentUserId: widget.maNguoiDung,
+                              ),
+                            ),
+                          ),
                           trailingText: "3 lượt",
                           trailingColor: const Color(0xFFE0F2F1),
                           trailingTextColor: const Color(0xFF00695C),
@@ -334,20 +360,25 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         _buildMenuItem(
                           icon: Icons.medical_services,
                           title: "Hướng dẫn sơ cứu",
-                          trailingText: "OFFLINE",
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const HuongDanCuuHoScreen(),
+                            ),
+                          ),
+                          trailingText: "ONLINE",
                           trailingColor: const Color(0xFFFFEBEE),
                           trailingTextColor: Colors.red,
                         ),
                         _buildMenuItem(
-                          icon: Icons.support_agent,
-                          title: "Hỗ trợ & Trợ giúp",
-                          trailingText: "Online",
-                          trailingColor: const Color(0xFFE8F5E9),
-                          trailingTextColor: const Color(0xFF2E7D32),
-                        ),
-                        _buildMenuItem(
                           icon: Icons.leaderboard,
                           title: "Bảng xếp hạng cứu hộ viên",
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const BangXepHangCuuHo(),
+                            ),
+                          ),
                           trailingText: "Mới",
                           trailingColor: const Color.fromARGB(
                             255,
@@ -368,6 +399,9 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
                         _buildMenuItem(
                           icon: Icons.settings_outlined,
                           title: "Cài đặt ứng dụng",
+                          onTap: () => _chuaCoManHinh(
+                            "Cài đặt ứng dụng",
+                          ), // TODO: Navigator.push màn hình cài đặt
                           isSimple: true,
                         ),
                       ],
@@ -480,6 +514,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
     required String tag,
     required Color primaryColor,
     required Color bgColor,
+    required VoidCallback onTap,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -497,7 +532,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
@@ -560,8 +595,12 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
     Color? trailingColor,
     Color? trailingTextColor,
     bool isSimple = false,
+    required VoidCallback onTap,
   }) {
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
@@ -602,6 +641,7 @@ class _MenuNguoiDungState extends State<MenuNguoiDung> {
             ),
         ],
       ),
+    ),
     );
   }
 }

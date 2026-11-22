@@ -19,9 +19,9 @@ xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
-        android:label="cuhokhancap"
+        android:label="Sơ cứu khẩn cấp"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
         <service
         android:name="id.flutter.flutter_background_service.BackgroundService"
         android:foregroundServiceType="specialUse"

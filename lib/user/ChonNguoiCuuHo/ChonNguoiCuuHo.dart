@@ -6,6 +6,7 @@ import 'package:cuhokhancap/user/ChonNguoiCuuHo/controllers/chon_nguoi_cuu_ho_co
 import 'package:cuhokhancap/user/ChonNguoiCuuHo/views/card_nguoi_cuu_ho.dart';
 import 'package:cuhokhancap/user/ChonNguoiCuuHo/views/chuyen_nganh_filter.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/GiaoDienDangTimKiem.dart';
+import 'package:cuhokhancap/firebase/yeu_cau_guard.dart';
 import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -569,6 +570,24 @@ class _ChonBacSiTiepNhanState extends State<ChonBacSiTiepNhan> {
                   ),
                   onPressed: selectedRescuerIds.isNotEmpty
                       ? () async {
+                          // Chặn nếu đang có yêu cầu còn khả dụng
+                          final bool biChan =
+                              await YeuCauGuard.kiemTraTuServer(
+                                maNguoiDungHienTai,
+                              );
+                          if (!context.mounted) return;
+                          if (biChan) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text(
+                                  'Bạn đang có một yêu cầu cứu hộ còn hiệu lực. Hãy hủy yêu cầu đó trước khi tạo yêu cầu mới.',
+                                ),
+                                backgroundColor: Colors.orange.shade800,
+                              ),
+                            );
+                            return;
+                          }
+
                           showDialog(
                             context: context,
                             barrierDismissible: false,

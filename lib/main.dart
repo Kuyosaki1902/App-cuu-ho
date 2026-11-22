@@ -1,18 +1,27 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:shared_preferences/shared_preferences.dart'; 
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'user/DangNhap.dart';
-import 'user/TrangChuNguoiDung.dart'; 
+import 'user/TrangChuNguoiDung.dart';
 import 'firebase/firebase_options.dart';
 import 'firebase/background_service.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 1. Khởi tạo Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // App Check (bắt buộc cho Firebase AI Logic):
+  // - Debug: dùng debug provider (phải đăng ký debug token trong Firebase Console)
+  // - Release: dùng Play Integrity (phải đăng ký app + SHA-256 trong App Check)
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: kDebugMode
+        ? AndroidProvider.debug
+        : AndroidProvider.playIntegrity,
   );
 
   // 2. Kiểm tra xem người dùng đã chọn "Ghi nhớ đăng nhập" từ trước chưa
@@ -37,7 +46,7 @@ class MyApp extends StatelessWidget {
     String maThietBiMoi = DateTime.now().millisecondsSinceEpoch.toString();
 
     return MaterialApp(
-      debugShowCheckedModeBanner: false, 
+      debugShowCheckedModeBanner: false,
       title: 'Cứu Hộ Khẩn Cấp',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -46,7 +55,8 @@ class MyApp extends StatelessWidget {
       home: (maNguoiDungDaLuu != null && maNguoiDungDaLuu!.isNotEmpty)
           ? TrangChuNguoiDung(
               maNguoiDung: maNguoiDungDaLuu!,
-              maThietBi: maThietBiMoi, // SỬA LỖI TẠI ĐÂY: Truyền mã thiết bị vào
+              maThietBi:
+                  maThietBiMoi, // SỬA LỖI TẠI ĐÂY: Truyền mã thiết bị vào
             )
           : const DangNhap(),
     );

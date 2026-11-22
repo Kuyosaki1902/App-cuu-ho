@@ -16,7 +16,7 @@ import 'package:cuhokhancap/user/MoTaTinhTrang.dart';
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:cuhokhancap/user/ChatVoiAI.dart';
 import 'package:cuhokhancap/user/GiaoDienDangTimKiem/service/yeu_cau_storage_service.dart';
-import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
+import 'package:cuhokhancap/firebase/yeu_cau_guard.dart';import 'package:cuhokhancap/firebase/nguoi_cuu_ho_service.dart';
 import 'package:cuhokhancap/user/Design/chi_tiet_nguoi_cuu_ho_card.dart'; // Import file card vừa tạo
 import 'package:cuhokhancap/user/Models/nguoidungmodel.dart';
 import 'package:cuhokhancap/user/Models/mo_ta_tam_thoi.dart';
@@ -74,6 +74,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
   NguoiDungModel? _selectedRescuer;
   String _selectedRescuerDistance = '';
 
+  // TRẠNG THÁI YÊU CẦU: true => đang có yêu cầu còn khả dụng => chặn tạo mới
+  bool _coYeuCauDangHoatDong = false;
+  StreamSubscription<bool>? _yeuCauSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +96,45 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     );
 
     _langNgheCanhBaoKhanCap();
+    _langNgheTrangThaiYeuCau();
+  }
+
+  /// Lắng nghe realtime các yêu cầu của người dùng để khóa/mở các nút gọi cứu hộ.
+  void _langNgheTrangThaiYeuCau() {
+    _yeuCauSubscription = YeuCauGuard.theoDoi(widget.maNguoiDung).listen((
+      dangHoatDong,
+    ) {
+      if (mounted && dangHoatDong != _coYeuCauDangHoatDong) {
+        setState(() => _coYeuCauDangHoatDong = dangHoatDong);
+      }
+    });
+  }
+
+  void _thongBaoDangCoYeuCau() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Bạn đang có một yêu cầu cứu hộ còn hiệu lực. Hãy hủy yêu cầu đó trước khi tạo yêu cầu mới.',
+        ),
+        backgroundColor: Colors.orange.shade800,
+      ),
+    );
+  }
+
+  /// Kiểm tra lại từ server ngay lúc bấm. Trả về true nếu ĐƯỢC PHÉP tạo yêu cầu.
+  Future<bool> _choPhepTaoYeuCau() async {
+    if (_coYeuCauDangHoatDong) {
+      _thongBaoDangCoYeuCau();
+      return false;
+    }
+    final bool biChan = await YeuCauGuard.kiemTraTuServer(widget.maNguoiDung);
+    if (biChan) {
+      if (mounted) setState(() => _coYeuCauDangHoatDong = true);
+      _thongBaoDangCoYeuCau();
+      return false;
+    }
+    return mounted;
   }
 
   Future<void> _yeuCauQuyenThongBaoVaKhoiChayService() async {
@@ -258,6 +301,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
     _serviceStatusStreamSubscription?.cancel();
     _kickOutSubscription?.cancel();
     _cuuHoSubscription?.cancel();
+    _yeuCauSubscription?.cancel();
 
     if (!_isKickedOut) {
       _firebaseService.capNhatTrangThaiOnline(widget.maNguoiDung, false);
@@ -555,6 +599,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                     return;
                   }
 
+                  // Chặn nếu đang có yêu cầu còn khả dụng
+                  if (!await _choPhepTaoYeuCau()) return;
+                  if (!context.mounted) return;
+
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -672,6 +720,10 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                   duration: const Duration(milliseconds: 300),
                   child: GestureDetector(
                     onTap: () async {
+                      // Chặn nếu đang có yêu cầu còn khả dụng
+                      if (!await _choPhepTaoYeuCau()) return;
+                      if (!context.mounted) return;
+
                       showDialog(
                         context: context,
                         barrierDismissible: false,
@@ -730,16 +782,20 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                       height: 80,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: const RadialGradient(
-                          colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
+                        gradient: RadialGradient(
+                          colors: _coYeuCauDangHoatDong
+                              ? [Colors.grey.shade500, Colors.grey.shade700]
+                              : const [Color(0xFFE53935), Color(0xFFB71C1C)],
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withValues(alpha: 0.6),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
+                        boxShadow: _coYeuCauDangHoatDong
+                            ? []
+                            : [
+                                BoxShadow(
+                                  color: Colors.red.withValues(alpha: 0.6),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                ),
+                              ],
                       ),
                       child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -949,7 +1005,13 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                               ),
                               const SizedBox(height: 16),
                               ElevatedButton(
-                                onPressed: () async {
+                                onPressed: _coYeuCauDangHoatDong
+                                    ? null
+                                    : () async {
+                                  // Chặn lại lần nữa bằng dữ liệu server
+                                  if (!await _choPhepTaoYeuCau()) return;
+                                  if (!context.mounted) return;
+
                                   // Hiển thị loading
                                   showDialog(
                                     context: context,
@@ -1008,6 +1070,7 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF004D40),
+                                  disabledBackgroundColor: Colors.grey.shade400,
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
                                   ),
@@ -1050,7 +1113,9 @@ class _TrangChuNguoiDungState extends State<TrangChuNguoiDung>
                               ),
                               const SizedBox(height: 12),
                               TextButton(
-                                onPressed: () {
+                                onPressed: _coYeuCauDangHoatDong
+                                    ? null
+                                    : () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
