@@ -1,0 +1,350 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function admin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/Admin/$(request.auth.uid))
+          .data.trangThai == 'hoat_dong';
+    }
+
+    function target(uid) {
+      return admin()
+        && uid != request.auth.uid
+        && !exists(/databases/$(database)/documents/Admin/$(uid));
+    }
+
+    function revision(key) {
+      return request.resource.data[key] is int
+        && request.resource.data[key] == resource.data.get(key, 0) + 1;
+    }
+
+    function reason(value) {
+      return value is string && value.size() >= 5 && value.size() <= 500;
+    }
+
+    function pending(value) {
+      return value in [
+        'cho_duyet',
+        'CHO_DUYET',
+        'cuuho_trangthai_hoso_tiepnhan',
+        'cuuho_trangthai_hoso_canbosung',
+        'can_bo_sung',
+        'cuuho_trangthai_tiepnhan',
+        'cuuho_trangthai_canbosung'
+      ];
+    }
+
+    match /Admin/{uid} {
+      allow get: if request.auth != null
+        && (request.auth.uid == uid || admin());
+      allow list: if admin() && request.query.limit <= 20;
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['hoTen','soDienThoai'])
+        && request.resource.data.hoTen is string
+        && request.resource.data.hoTen.size() >= 1 && request.resource.data.hoTen.size() <= 80
+        && request.resource.data.soDienThoai is string
+        && request.resource.data.soDienThoai.matches('^([+]?[0-9]{8,15})?$');
+      match /ThietBi/{id} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if admin() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'nenTang', 'ngayCapNhat'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.token.size() <= 1024
+          && request.resource.data.nenTang == 'android'
+          && request.resource.data.ngayCapNhat == request.time;
+        allow delete: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    match /NguoiDung/{uid} {
+      allow read: if admin();
+      match /NhatKyQuanTri/{id} {
+        allow read: if admin();
+        allow create: if target(uid)
+          && request.resource.data.keys().hasOnly([
+            'hanhDong', 'maAdmin', 'lyDo', 'thoiGian',
+            'trangThai', 'thayDoi', 'phienBan', 'phamVi'
+          ])
+          && request.resource.data.maAdmin == request.auth.uid
+          && request.resource.data.thoiGian == request.time
+          && reason(request.resource.data.lyDo)
+          && request.resource.data.hanhDong in [
+            'khoa', 'mo_khoa', 'tam_ngung', 'khoi_phuc'
+          ]
+          && request.resource.data.phienBan == getAfter(
+            /databases/$(database)/documents/HanCheNguoiDung/$(uid)
+          ).data.phienBan;
+      }
+    }
+
+    match /ChiTietKyNang/{uid}/DanhSachKyNang/{id} {
+      allow read: if admin();
+      allow write: if false;
+    }
+
+    match /HanCheNguoiDung/{uid} {
+      allow read: if admin();
+      function validRestriction() {
+        return target(uid)
+          && exists(/databases/$(database)/documents/NguoiDung/$(uid))
+          && request.resource.data.keys().hasOnly([
+            'khoa', 'tamNgungHoTro', 'phienBan', 'ngayCapNhat', 'maAdmin', 'lyDo'
+          ])
+          && request.resource.data.khoa is bool
+          && request.resource.data.tamNgungHoTro is bool
+          && request.resource.data.phienBan is int
+          && request.resource.data.maAdmin == request.auth.uid
+          && request.resource.data.ngayCapNhat == request.time
+          && reason(request.resource.data.lyDo);
+      }
+      allow create: if validRestriction()
+        && request.resource.data.phienBan == 1;
+      allow update: if validRestriction() && revision('phienBan');
+      allow delete: if false;
+    }
+
+    match /{collection}/{uid} {
+      allow read: if admin() && collection in [
+        'LoaiYeuCau', 'VaiTro', 'GioiTinh', 'HoSoCuuHoCoCCHN', 'HoSoCuuHoKhongCCHN',
+        'ChiTietMoTaHienTruong', 'YeuCauCuuHo', 'LuuAnh', 'PhanLoaiAnh',
+        'DanhGia', 'PhanAnh', 'HoSoKyLuat', 'LichSuXacMinhHoSo',
+        'KyNangCuuHo', 'ChiTietKyNangCuuHo', 'ThongBao'
+      ];
+
+      allow update: if collection in ['HoSoCuuHoCoCCHN', 'HoSoCuuHoKhongCCHN']
+        && target(uid)
+        && exists(/databases/$(database)/documents/NguoiDung/$(uid))
+        && pending(resource.data.maTrangThaiHoSo)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['maTrangThaiHoSo'])
+        && request.resource.data.maTrangThaiHoSo in [
+          'cuuho_trangthai_hoso_daduyet',
+          'cuuho_trangthai_tuchoi',
+          'cuuho_trangthai_hoso_canbosung'
+        ];
+    }
+
+    match /{path=**}/DanhSachPhanCong/{ca} {
+      allow read: if admin();
+    }
+
+    match /YeuCauCuuHo/{id} {
+      function selectedAssignment(assignmentId, log) {
+        let uid = log.maNguoiCuuHo;
+        let day = log.ngayPhanCong;
+        let a = get(/databases/$(database)/documents/ChiTietPhanCongCuuHo/$(uid)/DanhSachNgay/$(day)/DanhSachPhanCong/$(id)).data;
+        return a.maPhanCong == assignmentId && a.maNguoiCuuHo == uid && a.maYeuCau == id && a.maTrangThaiTiepNhan in [
+          'duoc_chon', 'cuuho_trangthai_phancong_daphancong',
+          'da_dong_y', 'cuuho_trangthai_phancong_tiepnhan'
+        ];
+      }
+      function checkNote(outcome, note) {
+        return outcome in ['tiep_tuc', 'can_thay_nguoi']
+          && note is string && note.size() <= 500
+          && (outcome != 'can_thay_nguoi' || note.size() >= 10);
+      }
+      allow update: if admin()
+        && resource.data.maTinhTrangYeuCau in [
+          'da_phan_cong', 'dang_cuu_ho',
+          'user_tinhtrang_daphancong', 'user_tinhtrang_dangcuuho'
+        ]
+        && (resource.data.get('maAdminDieuPhoi', null) in [null, '', request.auth.uid])
+        && revision('phienBanKiemTra')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'ketQuaKiemTra', 'ghiChuKiemTra', 'maAdminKiemTra', 'ngayKiemTra',
+          'maPhanCongKiemTra', 'maNhatKyKiemTra', 'phienBanKiemTra',
+          'canKiemTra', 'canBoSungNhanLuc'
+        ])
+        && request.resource.data.maAdminKiemTra == request.auth.uid
+        && request.resource.data.ngayKiemTra == request.time
+        && request.resource.data.canKiemTra == false
+        && request.resource.data.canBoSungNhanLuc ==
+          (request.resource.data.ketQuaKiemTra == 'can_thay_nguoi'
+            || resource.data.get('canBoSungNhanLuc', false) == true)
+        && checkNote(request.resource.data.ketQuaKiemTra, request.resource.data.ghiChuKiemTra)
+        && selectedAssignment(request.resource.data.maPhanCongKiemTra, getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)/NhatKyKiemTra/$(request.resource.data.maNhatKyKiemTra)).data)
+        && !exists(/databases/$(database)/documents/YeuCauCuuHo/$(id)/NhatKyKiemTra/$(request.resource.data.maNhatKyKiemTra))
+        && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)/NhatKyKiemTra/$(request.resource.data.maNhatKyKiemTra)).data.phienBan
+          == request.resource.data.phienBanKiemTra;
+
+      match /NhatKyKiemTra/{logId} {
+        allow read: if admin();
+        allow create: if admin()
+          && request.resource.data.keys().hasAll([
+            'maAdmin', 'maPhanCong', 'maNguoiCuuHo', 'ngayPhanCong', 'ketQua', 'ghiChu', 'thoiGian', 'phienBan'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'maAdmin', 'maPhanCong', 'maNguoiCuuHo', 'ngayPhanCong', 'ketQua', 'ghiChu', 'thoiGian', 'phienBan'
+          ])
+          && request.resource.data.maAdmin == request.auth.uid
+          && request.resource.data.thoiGian == request.time
+          && checkNote(request.resource.data.ketQua, request.resource.data.ghiChu)
+          && selectedAssignment(request.resource.data.maPhanCong, request.resource.data)
+          && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.maNhatKyKiemTra == logId
+          && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.maPhanCongKiemTra == request.resource.data.maPhanCong
+          && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.ketQuaKiemTra == request.resource.data.ketQua
+          && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.ghiChuKiemTra == request.resource.data.ghiChu
+          && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.phienBanKiemTra == request.resource.data.phienBan
+          && request.resource.data.phienBan ==
+            get(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data.get('phienBanKiemTra', 0) + 1;
+        allow update, delete: if false;
+      }
+    }
+
+    match /LuuAnh/{id} {
+      allow read: if admin();
+      allow create: if target(request.resource.data.maNguoiDung)
+        && exists(
+          /databases/$(database)/documents/NguoiDung/$(request.resource.data.maNguoiDung)
+        )
+        && request.resource.data.anhURL is string
+        && request.resource.data.anhURL.size() > 0;
+
+      allow update: if target(resource.data.maNguoiDung)
+        && request.resource.data.maNguoiDung == resource.data.maNguoiDung
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'anhURL', 'trangThaiXacThuc', 'maAdminXacThuc', 'ngayXacThuc'
+        ])
+        && request.resource.data.anhURL is string
+        && request.resource.data.anhURL.size() > 0
+        && request.resource.data.trangThaiXacThuc in [
+          'da_xac_thuc', 'chua_xac_thuc', 'khong_hop_le'
+        ]
+        && request.resource.data.maAdminXacThuc == request.auth.uid
+        && request.resource.data.ngayXacThuc == request.time;
+
+      allow delete: if false;
+    }
+    match /DanhGia/{id} {
+      allow update: if admin() && resource.data.diemDanhGia in [1, '1']
+        && request.resource.data.maAdminXuLy == request.auth.uid
+        && request.resource.data.ngayCapNhatXuLy == request.time
+        && (
+          (resource.data.get('trangThaiXuLy', 'chua_xu_ly') == 'chua_xu_ly'
+            && request.resource.data.trangThaiXuLy == 'dang_xu_ly'
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['trangThaiXuLy', 'maAdminXuLy', 'ngayCapNhatXuLy']))
+          || (resource.data.get('trangThaiXuLy', '') == 'dang_xu_ly'
+            && resource.data.maAdminXuLy == request.auth.uid
+            && request.resource.data.trangThaiXuLy == 'da_xu_ly'
+            && request.resource.data.ketQuaXuLy is string
+            && request.resource.data.ketQuaXuLy.size() >= 5
+            && request.resource.data.ketQuaXuLy.size() <= 500
+            && request.resource.data.ketQuaXuLy.matches('(?s).*\\S.*')
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['trangThaiXuLy', 'ketQuaXuLy', 'ngayCapNhatXuLy']))
+        );
+    }
+
+    match /ThongBao/{id} {
+      allow update: if admin() && resource.data.maNguoiDung == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['daDoc'])
+        && request.resource.data.daDoc == true;
+    }
+    function dispatchState(d) {
+      return d.maTinhTrangYeuCau in ['cho_tiep_nhan','qua_han_dieu_phoi','da_phan_cong','dang_cuu_ho',
+        'user_tinhtrang_chotiepnhan','user_tinhtrang_quahandieuphoi','user_tinhtrang_daphancong','user_tinhtrang_dangcuuho'];
+    }
+    function available(uid) {
+      let u = get(/databases/$(database)/documents/NguoiDung/$(uid)).data;
+      let r = /databases/$(database)/documents/HanCheNguoiDung/$(uid);
+      return target(uid)
+        && u.maVaiTro in ['vaitro_cuuhococc', 'vaitro_cuuhochuacocc']
+        && (!exists(r) || (get(r).data.get('khoa',false) == false && get(r).data.get('tamNgungHoTro',false) == false));
+    }
+    function dispatchLinked(id) {
+      let before = get(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data;
+      let after = getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(id)).data;
+      return admin() && dispatchState(before) && before.maAdminDieuPhoi == request.auth.uid
+        && after.maAdminDieuPhoi == request.auth.uid
+        && after.phienBanDieuPhoi == before.get('phienBanDieuPhoi',0)+1
+        && after.ngayDieuPhoi == request.time;
+    }
+    match /ChiTietPhanCongCuuHo/{uid}/DanhSachNgay/{day}/DanhSachPhanCong/{ca} {
+      function newInvite() {
+        let d = request.resource.data;
+        let r = getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(ca)).data;
+        return dispatchLinked(ca) && available(uid)
+          && d.keys().hasOnly(['maPhanCong','maYeuCau','maNguoiCuuHo','maTrangThaiTiepNhan',
+            'maLoaiPhanCong','loaiPhanCong','maAdmin','boSung','thoiGianGui','hanPhanHoi','lichSuLoiMoi'])
+          && d.maPhanCong is string && d.maPhanCong.size() > 0
+          && d.maYeuCau == ca && d.maNguoiCuuHo == uid && d.maAdmin == request.auth.uid
+          && d.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_chotiepnhan'
+          && d.maLoaiPhanCong == 'phancong_thucong' && d.boSung is bool
+          && d.thoiGianGui == request.time && d.hanPhanHoi > request.time
+          && d.hanPhanHoi <= request.time + duration.value(3,'m')
+          && ((exists(/databases/$(database)/documents/HoSoCuuHoCoCCHN/$(uid))
+                && get(/databases/$(database)/documents/HoSoCuuHoCoCCHN/$(uid)).data.maTrangThaiHoSo in ['cuuho_trangthai_daduyet','cuuho_trangthai_hoso_daduyet'])
+            || (exists(/databases/$(database)/documents/HoSoCuuHoKhongCCHN/$(uid))
+                && get(/databases/$(database)/documents/HoSoCuuHoKhongCCHN/$(uid)).data.maTrangThaiHoSo in ['cuuho_trangthai_daduyet','cuuho_trangthai_hoso_daduyet']))
+          && r.maLoiMoiDieuPhoi == d.maPhanCong && r.nguoiDuocMoi == uid && r.ngayGuiLoiMoi == day;
+      }
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && resource.data.maNguoiCuuHo == uid && resource.data.maYeuCau == ca
+        && resource.data.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_chotiepnhan'
+        && resource.data.hanPhanHoi > request.time
+        && get(/databases/$(database)/documents/YeuCauCuuHo/$(ca)).data.maLoiMoiDieuPhoi == resource.data.maPhanCong
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['maTrangThaiTiepNhan','thoiGianPhanHoi'])
+        && request.resource.data.maTrangThaiTiepNhan in ['cuuho_trangthai_phancong_tiepnhan','cuuho_trangthai_phancong_tuchoi']
+        && (!('thoiGianPhanHoi' in request.resource.data) || request.resource.data.thoiGianPhanHoi == request.time);
+      allow create: if newInvite() && !('lichSuLoiMoi' in request.resource.data);
+      allow update: if resource.data.maTrangThaiTiepNhan in ['tu_choi','da_huy','hoan_thanh',
+        'cuuho_trangthai_phancong_tuchoi','cuuho_trangthai_phancong_dahuy','cuuho_trangthai_phancong_hoanthanh']
+        && request.resource.data.maPhanCong != resource.data.maPhanCong && newInvite()
+        && request.resource.data.lichSuLoiMoi == resource.data.get('lichSuLoiMoi', []).concat([{
+          'maPhanCong': resource.data.get('maPhanCong',null),
+          'maTrangThaiTiepNhan': resource.data.maTrangThaiTiepNhan,
+          'thoiGianGui': resource.data.get('thoiGianGui',null),
+          'thoiGianPhanHoi': resource.data.get('thoiGianPhanHoi',null)
+        }]);
+      allow update: if dispatchLinked(ca)
+        && get(/databases/$(database)/documents/YeuCauCuuHo/$(ca)).data.maLoiMoiDieuPhoi == resource.data.maPhanCong
+        && getAfter(/databases/$(database)/documents/YeuCauCuuHo/$(ca)).data.maLoiMoiDieuPhoi == null
+        && resource.data.maTrangThaiTiepNhan in ['da_gui_thong_bao','cuuho_trangthai_chophanhoi','cuuho_trangthai_phancong_chotiepnhan']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['maTrangThaiTiepNhan','thoiGianPhanHoi'])
+        && request.resource.data.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_dahuy'
+        && request.resource.data.thoiGianPhanHoi == request.time;
+    }
+    match /YeuCauCuuHo/{requestId} {
+      function linkedDailyChange() {
+        let d = request.resource.data;
+        let path = /databases/$(database)/documents/ChiTietPhanCongCuuHo/$(d.nguoiDuocMoi)/DanhSachNgay/$(d.ngayGuiLoiMoi)/DanhSachPhanCong/$(requestId);
+        let row = getAfter(path).data;
+        let old = resource.data.get('maLoiMoiDieuPhoi',null);
+        return row.maYeuCau == requestId && row.maNguoiCuuHo == d.nguoiDuocMoi
+          && ((d.maLoiMoiDieuPhoi != null && row.maPhanCong == d.maLoiMoiDieuPhoi && old != row.maPhanCong
+            && row.thoiGianGui == request.time && row.maAdmin == request.auth.uid
+            && row.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_chotiepnhan'
+            && (old == null || old == '' || !('ngayGuiLoiMoi' in resource.data)
+              || get(/databases/$(database)/documents/ChiTietPhanCongCuuHo/$(resource.data.nguoiDuocMoi)/DanhSachNgay/$(resource.data.ngayGuiLoiMoi)/DanhSachPhanCong/$(requestId)).data.maTrangThaiTiepNhan
+                != 'cuuho_trangthai_phancong_chotiepnhan'))
+          || (d.maLoiMoiDieuPhoi == null && old == row.maPhanCong
+            && row.maTrangThaiTiepNhan == 'cuuho_trangthai_phancong_dahuy' && row.thoiGianPhanHoi == request.time));
+      }
+      allow update: if admin() && (dispatchState(resource.data) || resource.data.maTinhTrangYeuCau == 'cho_dong')
+        && revision('phienBanDieuPhoi') && request.resource.data.ngayDieuPhoi == request.time
+        && resource.data.get('maAdminDieuPhoi', null) in [null, '', request.auth.uid]
+        && request.resource.data.maAdminHoanThanh == request.auth.uid
+            && resource.data.get('maLoiMoiDieuPhoi',null) in [null,'']
+            && request.resource.data.maTinhTrangYeuCau == 'user_tinhtrang_hoanthanh'
+            && request.resource.data.thoiGianHoanThanh == request.time
+            && request.resource.data.canBoSungNhanLuc == false && request.resource.data.canKiemTra == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['maTinhTrangYeuCau','maAdminHoanThanh','thoiGianHoanThanh','canBoSungNhanLuc','canKiemTra','phienBanDieuPhoi','ngayDieuPhoi']);
+      allow update: if admin() && dispatchState(resource.data)
+        && resource.data.get('maAdminDieuPhoi',null) in [null,'',request.auth.uid]
+        && request.resource.data.maAdminDieuPhoi == request.auth.uid
+        && revision('phienBanDieuPhoi') && request.resource.data.ngayDieuPhoi == request.time
+        && (
+          (resource.data.get('maAdminDieuPhoi',null) in [null,'']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['maAdminDieuPhoi','phienBanDieuPhoi','ngayDieuPhoi']))
+          || (resource.data.maAdminDieuPhoi == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['maLoiMoiDieuPhoi','nguoiDuocMoi','ngayGuiLoiMoi','phienBanDieuPhoi','ngayDieuPhoi'])
+            && linkedDailyChange())
+        );
+    }
+  }
+}

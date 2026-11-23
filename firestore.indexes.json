@@ -1,0 +1,190 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ThongBao",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "maNguoiDung",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ngayTao",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "YeuCauCuuHo",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "maTinhTrangYeuCau",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "thoiGianTao",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "YeuCauCuuHo",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "maTinhTrangYeuCau",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hanTimNguoi",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "maYeuCau",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "maTrangThaiTiepNhan",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "maNguoiCuuHo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "maTrangThaiTiepNhan",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "maTrangThaiTiepNhan",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "hanPhanHoi",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhGia",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "maNguoiCuuHo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "diemDanhGia",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "maYeuCau",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "maNguoiCuuHo",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "fieldPath": "maYeuCau",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "fieldPath": "maNguoiCuuHo",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "fieldPath": "maPhanCong",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DanhSachPhanCong",
+      "fieldPath": "maTrangThaiTiepNhan",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    }
+  ]
+}
